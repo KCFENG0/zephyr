@@ -226,6 +226,8 @@ rsource "Kconfig.xmc4xxx"
 
 rsource "Kconfig.lpc11u6x"
 
+rsource "Kconfig.npcm"
+
 rsource "Kconfig.npcx"
 
 rsource "Kconfig.apbuart"
