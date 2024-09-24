@@ -1,0 +1,12 @@
+# Copyright (c) 2024 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+description: Nuvoton, NPCM System Configuration (Pinmux, 1.8V support and so on) node
+
+compatible: "nuvoton,npcm-scfg"
+
+include: [base.yaml]
+
+properties:
+  reg:
+    required: true

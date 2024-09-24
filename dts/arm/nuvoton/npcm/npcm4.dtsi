@@ -9,6 +9,23 @@
 #include <freq.h>
 
 / {
+	def-gpio {
+		/* Default GPIOs */
+		def-gpio-list = <&alt5c_psin
+					&alt5c_psout
+					&alt5c_pson
+					&alt5d_rstout0
+					&alt5d_rstout1
+					&alt5d_rstout2
+					&alt5d_sktocc
+					&alt5d_caseopen
+					&alt5e_dpwrok
+					&alt5e_rsmrst
+					&alt5e_deep_s5
+					&alt5e_pwrok0
+					&alt5e_3vsbsw>;
+	};
+
 	soc {
 
 		mdc: mdc@4000c000 {

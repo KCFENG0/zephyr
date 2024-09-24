@@ -1,0 +1,239 @@
+/*
+ * Copyright (c) 2024 Nuvoton Technology Corporation.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+&pinctrl {
+	/* Prebuild nodes for GPIOs by default */
+	alt5c_psin: alt5c0-inv {
+		pinmux = <NPCM_PINCTRL_ALT5C_0_ACPI_GPIO51_SEL 1>;
+	};
+
+	alt5c_psout: alt5c1-inv {
+		pinmux = <NPCM_PINCTRL_ALT5C_1_ACPI_GPIO50_SEL 1>;
+	};
+
+	alt5c_pson: alt5c2-inv {
+		pinmux = <NPCM_PINCTRL_ALT5C_2_ACPI_GPIO52_SEL 1>;
+	};
+
+	alt5d_rstout0: alt5d0-inv {
+		pinmux = <NPCM_PINCTRL_ALT5D_0_ACPI_GPIO62_SEL 1>;
+	};
+
+	alt5d_rstout1: alt5d1-inv {
+		pinmux = <NPCM_PINCTRL_ALT5D_1_ACPI_GPIO61_SEL 1>;
+	};
+
+	alt5d_rstout2: alt5d2-inv {
+		pinmux = <NPCM_PINCTRL_ALT5D_2_ACPI_GPIO60_SEL 1>;
+	};
+
+	alt5d_sktocc: alt5d4-inv {
+		pinmux = <NPCM_PINCTRL_ALT5D_4_ACPI_GPIOE6_SEL 1>;
+	};
+
+	alt5d_caseopen: alt5d5-inv {
+		pinmux = <NPCM_PINCTRL_ALT5D_5_ACPI_GPIOE4_SEL 1>;
+	};
+
+	alt5e_dpwrok: alt5e0-inv {
+		pinmux = <NPCM_PINCTRL_ALT5E_0_ACPI_GPIOE1_SEL 1>;
+	};
+
+	alt5e_rsmrst: alt5e1-inv {
+		pinmux = <NPCM_PINCTRL_ALT5E_1_ACPI_GPIOE5_SEL 1>;
+	};
+
+	alt5e_deep_s5: alt5e2-inv {
+		pinmux = <NPCM_PINCTRL_ALT5E_2_ACPI_GPIOE0_DEEP_S5_SEL 1>;
+	};
+
+	alt5e_pwrok0: alt5e3-inv {
+		pinmux = <NPCM_PINCTRL_ALT5E_3_ACPI_GPIOE2_SEL 1>;
+	};
+
+	alt5e_3vsbsw: alt5e5-inv {
+		pinmux = <NPCM_PINCTRL_ALT5E_5_ACPI_GPIOE0_SEL 1>;
+	};
+
+	/* Prebuild nodes for peripheral device's pin-muxing and pad properties */
+	/* Flash Interface Unit (FIU) */
+	/omit-if-no-ref/ fiu0_shd_cs_io0_io1_clk_gp44_45_46_47: periph-fiu0-shd {
+		dev-ctl = <0x0 6 1 0x00>;
+		pinmux = <NPCM_PINCTRL_ALT0C_3_SHD_SPI 0>;
+	};
+
+	/omit-if-no-ref/ fiu0_shd_quad_io2_io3_clk_gp55_56: periph-fiu0-shd-quad {
+		pinmux = <NPCM_PINCTRL_ALT0C_2_SHD_SPI_QUAD 0>;
+	};
+
+	/* PSPI Intefaces */
+	/omit-if-no-ref/ pspi1_clk_io0_io1_io2_io3_cs_gp66_67_70_73_76_77: periph-pspi1 {
+		pinmux = <NPCM_PINCTRL_ALT0C_1_SPIP1 0>;
+	};
+
+	/* I2C peripheral interfaces */
+	/omit-if-no-ref/ i2c1a_scl_sda_gp60_61: periph-i2c1a {
+		pinmux = <NPCM_PINCTRL_ALT0A_0_SMB1A_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c1b_scl_sda_gp26_25: periph-i2c1b {
+		pinmux = <NPCM_PINCTRL_ALT0A_5_SMB1B_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c2a_scl_sda_gp11_13: periph-i2c2a {
+		pinmux = <NPCM_PINCTRL_ALT0E_5_SMB2A_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c3a_scl_sda_gpa7_a2: periph-i2c3a {
+		pinmux = <NPCM_PINCTRL_ALT0A_1_SMB3A_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c4a_scl_sda_gp36_37: periph-i2c4a {
+		pinmux = <NPCM_PINCTRL_ALT0A_2_SMB4A_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c4b_scl_sda_gpf0_f1: periph-i2c4b {
+		pinmux = <NPCM_PINCTRL_ALT6D_6_SMB4B_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c5a_scl_sda_gp34_35: periph-i2c5a {
+		pinmux = <NPCM_PINCTRL_ALT0A_3_SMB5A_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c6a_scl_gp96: periph-i2c6a-scl-inv {
+		pinmux = <NPCM_PINCTRL_ALT07_3_GP96_SL 1>;
+	};
+
+	/omit-if-no-ref/ i2c6a_sda_gp97: periph-i2c6a-sda-inv {
+		pinmux = <NPCM_PINCTRL_ALT07_4_GP97_SL 1>;
+	};
+
+	/omit-if-no-ref/ i2c6b_scl_sda_gp16_17: periph-i2c6b {
+		pinmux = <NPCM_PINCTRL_ALT6D_7_SMB6B_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c7a_scl_sda_gpc2_c3: periph-i2c7a {
+		pinmux = <NPCM_PINCTRL_ALT6D_0_SMB7A_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c8a_scl_sda_gpc6_c7: periph-i2c8a {
+		pinmux = <NPCM_PINCTRL_ALT6D_1_SMB8A_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c9a_scl_sda_gp32_33: periph-i2c9a {
+		pinmux = <NPCM_PINCTRL_ALT6D_2_SMB9A_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c10a_scl_sda_gpd2_d3: periph-i2c10a {
+		pinmux = <NPCM_PINCTRL_ALT6D_3_SMB10A_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c11a_scl_sda_gpd4_d5: periph-i2c11a {
+		pinmux = <NPCM_PINCTRL_ALT6D_4_SMB11A_SL 0>;
+	};
+
+	/omit-if-no-ref/ i2c12a_scl_sda_gpd6_d7: periph-i2c12a {
+		pinmux = <NPCM_PINCTRL_ALT6D_5_SMB12A_SL 0>;
+	};
+
+	/* I3C peripheral interfaces  */
+	/omit-if-no-ref/ i3c1_scl_sda_gp21_22: periph-i3c1 {
+		pinmux = <NPCM_PINCTRL_ALT10_6_I3C1_SL 0>;
+	};
+
+	/omit-if-no-ref/ i3c2_scl_sda_gp23_24: periph-i3c2 {
+		pinmux = <NPCM_PINCTRL_ALT10_1_I3C2_SL 0>;
+	};
+
+	/omit-if-no-ref/ i3c3_scl_sda_gp26_25: periph-i3c3 {
+		pinmux = <NPCM_PINCTRL_ALT10_2_I3C3_SL 0>;
+	};
+
+	/omit-if-no-ref/ i3c4_scl_sda_gpd0_d1: periph-i3c4 {
+		pinmux = <NPCM_PINCTRL_ALT10_3_I3C4_SL 0>;
+	};
+
+	/omit-if-no-ref/ i3c5_scl_sda_gp82_83: periph-i3c5 {
+		pinmux = <NPCM_PINCTRL_ALT0A_4_I3C5_SL 0>;
+	};
+
+	/omit-if-no-ref/ i3c6_scl_sda_gp96_97: periph-i3c6 {
+		pinmux = <NPCM_PINCTRL_ALT07_2_I3C6_SL 0>;
+	};
+
+	/* UART peripheral interfaces */
+	/omit-if-no-ref/ cr_uart1_sin_gp14: periph-cr-uart1-in {
+		pinmux = <NPCM_PINCTRL_ALT0C_6_URTI1_SL 0>;
+	};
+
+	/omit-if-no-ref/ cr_uart1_sout_gp15: periph-cr-uart1-out {
+		pinmux = <NPCM_PINCTRL_ALT0A_7_URTO2_SL 0>;
+	};
+
+	/omit-if-no-ref/ cr_uart2_sin_gp30: periph-cr-uart2-in {
+		pinmux = <NPCM_PINCTRL_ALT31_4_URTI2_SL 0>;
+	};
+
+	/omit-if-no-ref/ cr_uart2_sout_gp31: periph-cr-uart2-out {
+		pinmux = <NPCM_PINCTRL_ALT31_5_URTO3_SL 0>;
+	};
+
+	/* ADC peripheral interfaces */
+	/omit-if-no-ref/ adc_vin1_gp93: periph-adc-vin1 {
+		pinmux = <NPCM_PINCTRL_ALT01_1_VIN1_SL 0>;
+	};
+
+	/omit-if-no-ref/ adc_vin2_gp94: periph-adc-vin2 {
+		pinmux = <NPCM_PINCTRL_ALT01_2_VIN2_SL 0>;
+	};
+
+	/omit-if-no-ref/ adc_vin3_gp95: periph-adc-vin3 {
+		pinmux = <NPCM_PINCTRL_ALT01_3_VIN3_SL 0>;
+	};
+
+	/omit-if-no-ref/ adc_vin5_gp87: periph-adc-vin5 {
+		pinmux = <NPCM_PINCTRL_ALT01_5_VIN5_SL 0>;
+	};
+
+	/omit-if-no-ref/ adc_vin7_gp86: periph-adc-vin7 {
+		pinmux = <NPCM_PINCTRL_ALT01_7_VIN7_SL 0>;
+	};
+
+	/omit-if-no-ref/ adc_vin14_gp92: periph-adc-vin14 {
+		pinmux = <NPCM_PINCTRL_ALT02_0_VIN14_SL 0>;
+	};
+
+	/omit-if-no-ref/ adc_vin15_gp91: periph-adc-vin15 {
+		pinmux = <NPCM_PINCTRL_ALT02_1_VIN15_SL 0>;
+	};
+
+	/omit-if-no-ref/ adc_vin16_gp91: periph-adc-vin16 {
+		pinmux = <NPCM_PINCTRL_ALT02_2_VIN16_SL 0>;
+	};
+
+	/* SGPIO peripheral interfaces */
+	/omit-if-no-ref/ iox1_ldsh_dout_din_sclk_gp74_75_f2_f3: periph-siox1 {
+		pinmux = <NPCM_PINCTRL_ALT6A_0_SIOX1_SL 0>;
+	};
+
+	/omit-if-no-ref/ iox2_ldsh_dout_din_sclk_gpa0_a1_a3_a4: periph-siox2 {
+		pinmux = <NPCM_PINCTRL_ALT6A_1_SIOX2_SL 0>;
+	};
+
+	/* PECI peripheral interfaces */
+	/omit-if-no-ref/ peci0_gp97: periph-peci0 {
+		pinmux = <NPCM_PINCTRL_ALT05_4_PECI_EN 0>;
+	};
+
+	/* USB peripheral interfaces */
+	/omit-if-no-ref/ usbdphy_en: periph-usbd-phy-en {
+		pinmux = <NPCM_PINCTRL_ALT2E_4_USBDPHY_EN 0>;
+	};
+
+	/omit-if-no-ref/ usbdphy_clk_external: periph-usbd-phy-clk-sel {
+		pinmux = <NPCM_PINCTRL_ALT2E_6_USBDPHY_CLKSEL 0>;
+	};
+};
