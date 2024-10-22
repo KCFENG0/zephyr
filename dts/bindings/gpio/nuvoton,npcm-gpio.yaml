@@ -1,0 +1,27 @@
+# Copyright (c) 2024 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+description: Nuvoton, NPCM-GPIO node
+
+compatible: "nuvoton,npcm-gpio"
+
+include: [gpio-controller.yaml, base.yaml]
+
+properties:
+  reg:
+    required: true
+
+  ngpios:
+    description: number of pins for gpio entry
+
+  index:
+    type: int
+    required: true
+    description: index of gpio device
+
+  "#gpio-cells":
+    const: 2
+
+gpio-cells:
+  - pin
+  - flags
