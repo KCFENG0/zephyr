@@ -1,0 +1,77 @@
+# Copyright (c) 2024 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  The Nuvoton pin controller is a singleton node responsible for controlling
+  pin function selection and pin properties. For example, you can use these
+  nodes to select peripheral pin functions.
+
+  Here is a list of supported standard pin properties:
+    - bias-pull-down: Enable pull-down resistor.
+    - bias-pull-up: Enable pull-up resistor.
+
+  Custom pin properties for npcm series are available also:
+    - pinmux-gpio: Inverse pinmux back to gpio
+
+  An example for NPCM4 family, include the chip level pinctrl DTSI file in the
+  board level DTS:
+
+    #include <nuvoton/npcm/npcm4/npcm4-pinctrl.dtsi>
+
+  We want to use the I2C0_0 port of the NPCM400F controller and enable the
+  internal 3.3V pull-up if its i2c frequency won't exceed 400kHz.
+
+  To change a pin's pinctrl default properties, add a reference to the pin in
+  the board's DTS file and set the properties in child node of pinctrl as below:
+
+    i2c1a_scl_sda_gpio60_61: periph-i2c1a {
+      pupd {
+        bias-pull-up; /* Enable internal pull-up for i2c0_0 */
+        periph-pupd = <NPCM_PINCTRL_DEVPU0_0_SMB1A_PUE>; /* Pull-up config for i2c0_0 */
+      };
+      scl {
+        pinmux = <GPIO60__RSTOUT2__SCL1A 2>;
+      };
+      sda {
+        pinmux = <GPIO61__RSTOUT1__SDA1A 2>;
+      };
+    };
+
+    &i2c0_0 {
+      pinctrl-0 = <&i2c1a_scl_sda_gpio60_61>;
+      pinctrl-names = "default";
+    }
+
+compatible: "nuvoton,npcm-pinctrl"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+child-binding:
+  description: |
+    NPCM pin controller pin configuration nodes.
+  child-binding:
+    description: |
+      NPCM pin controller pin configuration group.
+
+    include:
+      - name: pincfg-node.yaml
+        property-allowlist:
+          - bias-pull-down
+          - bias-pull-up
+
+    properties:
+      pinmux:
+        type: array
+        description: Configurations of alt pin selection.
+      dev-ctl:
+        type: array
+        description: Configurations of device control such as tri-state, io type and so on.
+      periph-pupd:
+        type: array
+        description: |
+          A map to PUPD_ENn register/bit that enable pull-up/down of NPCM peripheral devices.
+          Please don't overwrite this property in the board-level DT driver.
