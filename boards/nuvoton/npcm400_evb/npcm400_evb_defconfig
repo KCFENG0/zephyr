@@ -11,6 +11,9 @@ CONFIG_XIP=y
 # Pin Controller Driver
 CONFIG_PINCTRL=y
 
+# GPIO Driver
+CONFIG_GPIO=y
+
 # UART Driver
 CONFIG_SERIAL=n
 
