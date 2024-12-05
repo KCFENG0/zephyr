@@ -5,10 +5,6 @@
 
 zephyr_include_directories(.)
 
-zephyr_sources(
-  scfg.c
-)
-
 set(NPCM_BIN_NAME ${CONFIG_KERNEL_BIN_NAME}_signed.bin)
 string(TOUPPER "${SOC_NAME}" soc_name_upper)
 

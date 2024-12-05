@@ -306,7 +306,7 @@
  *
  * @return base address of system configuration module.
  */
-#define NPCM_SCFG_REG_ADDR DT_REG_ADDR_BY_NAME(DT_NODELABEL(scfg), scfg)
+#define NPCM_SCFG_REG_ADDR DT_REG_ADDR_BY_NAME(DT_NODELABEL(pinctrl), scfg)
 
 /**
  * @brief Helper macro to get address of system glue module which is
@@ -314,7 +314,7 @@
  *
  * @return base address of system glue module.
  */
-#define NPCM_GLUE_REG_ADDR DT_REG_ADDR_BY_NAME(DT_NODELABEL(scfg), glue)
+#define NPCM_GLUE_REG_ADDR DT_REG_ADDR_BY_NAME(DT_NODELABEL(pinctrl), glue)
 
 /**
  * @brief Helper macro to get address of system pmc module which is
