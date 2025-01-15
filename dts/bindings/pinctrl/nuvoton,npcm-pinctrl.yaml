@@ -191,3 +191,29 @@ child-binding:
           Configurations of the low-voltage controller. Supports normal 3.3V or low-voltage 1.8V.
           Be aware that not every IO supports output at low-voltage level, only set this property to
           low-voltage supported pins.
+      nuvoton,init-on-reset-cause:
+        type: int
+        default: 0
+        description: |
+          The pin configuration property.
+          Configurations of the pin initialization on reset cause. The value is a bitmask of the
+          reset cause. This value is used to determine if the pin needs to be configured on reset
+          with the supported reset cause before the APPLICATION initialization levels. Set to 0 to
+          force the pin initialization on reset.
+
+          Use the definition in include/zephyr/drivers/hwinfo.h:
+            RESET_PIN            = BIT(0)
+            RESET_SOFTWARE       = BIT(1)
+            RESET_BROWNOUT       = BIT(2)
+            RESET_POR            = BIT(3)
+            RESET_WATCHDOG       = BIT(4)
+            RESET_DEBUG          = BIT(5)
+            RESET_SECURITY       = BIT(6)
+            RESET_LOW_POWER_WAKE = BIT(7)
+            RESET_CPU_LOCKUP     = BIT(8)
+            RESET_PARITY         = BIT(9)
+            RESET_PLL            = BIT(10)
+            RESET_CLOCK          = BIT(11)
+            RESET_HARDWARE       = BIT(12)
+            RESET_USER           = BIT(13)
+            RESET_TEMPERATURE    = BIT(14)

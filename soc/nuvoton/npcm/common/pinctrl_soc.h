@@ -54,8 +54,7 @@ struct npcm_lvol {
 } __packed;
 
 /**
- * @brief Type for NPCM pin configuration. Please make sure the size of this
- *        structure is 4 bytes in case the impact of ROM usage.
+ * @brief Type for NPCM pin configuration
  */
 struct npcm_pinctrl {
 	union {
@@ -67,13 +66,15 @@ struct npcm_pinctrl {
 
 	struct {
 		/** Indicates the current pin cfg type. */
-		uint16_t type: 2;
+		uint32_t type: 2;
 		/** Pin number. */
-		uint16_t id: 7;
+		uint32_t id: 7;
 		/** The pin group selection. */
-		uint16_t group: 3;
+		uint32_t group: 3;
+		/** Reset cause flag. */
+		uint32_t flag: 15;
 		/** Reserved field. */
-		uint16_t reserved: 4;
+		uint32_t reserved: 5;
 	} props;
 } __packed;
 
@@ -107,6 +108,8 @@ typedef struct npcm_pinctrl pinctrl_soc_pin_t;
 #define Z_PINCTRL_NPCM_PIN_ID(node_id)    DT_PROP_BY_IDX(node_id, pinmux, 0)
 #define Z_PINCTRL_NPCM_PIN_GROUP(node_id) DT_PROP_BY_IDX(node_id, pinmux, 1)
 
+#define Z_PINCTRL_NPCM_PIN_STAGE(node_id) DT_PROP(node_id, nuvoton_init_on_reset_cause)
+
 /**
  * @brief Utility macro to initialize a peripheral pinmux configuration.
  *
@@ -117,6 +120,7 @@ typedef struct npcm_pinctrl pinctrl_soc_pin_t;
 		.props.type = NPCM_PINCTRL_TYPE_PERIPH_PINMUX,                                     \
 		.props.id = Z_PINCTRL_NPCM_PIN_ID(node_id),                                        \
 		.props.group = Z_PINCTRL_NPCM_PIN_GROUP(node_id),                                  \
+		.props.flag = Z_PINCTRL_NPCM_PIN_STAGE(node_id),                                  \
 		.cfg.cfg_word = 0,                                                                 \
 	},
 
@@ -131,6 +135,7 @@ typedef struct npcm_pinctrl pinctrl_soc_pin_t;
 		.props.type = NPCM_PINCTRL_TYPE_LVOL,                                              \
 		.props.id = Z_PINCTRL_NPCM_PIN_ID(node_id),                                        \
 		.props.group = Z_PINCTRL_NPCM_PIN_GROUP(node_id),                                  \
+		.props.flag = Z_PINCTRL_NPCM_PIN_STAGE(node_id),                                  \
 		.cfg.lvol.level = DT_PROP(node_id, prop),                                          \
 	},
 
@@ -145,6 +150,7 @@ typedef struct npcm_pinctrl pinctrl_soc_pin_t;
 		.props.type = NPCM_PINCTRL_TYPE_DEVICE_CTRL,                                       \
 		.props.id = Z_PINCTRL_NPCM_PIN_ID(node_id),                                        \
 		.props.group = Z_PINCTRL_NPCM_PIN_GROUP(node_id),                                  \
+		.props.flag = Z_PINCTRL_NPCM_PIN_STAGE(node_id),                                  \
 		.cfg.dev_ctl.reg_id = DT_PROP_BY_IDX(node_id, prop, 0),                            \
 		.cfg.dev_ctl.is_set = DT_PROP_BY_IDX(node_id, prop, 1),                            \
 	},
@@ -159,6 +165,7 @@ typedef struct npcm_pinctrl pinctrl_soc_pin_t;
 		.props.type = NPCM_PINCTRL_TYPE_PERIPH_PUPD,                                       \
 		.props.id = Z_PINCTRL_NPCM_PIN_ID(node_id),                                        \
 		.props.group = Z_PINCTRL_NPCM_PIN_GROUP(node_id),                                  \
+		.props.flag = Z_PINCTRL_NPCM_PIN_STAGE(node_id),                                  \
 		.cfg.pupd.io_bias_type = Z_PINCTRL_NPCM_BIAS_TYPE(node_id),                        \
 	},
 

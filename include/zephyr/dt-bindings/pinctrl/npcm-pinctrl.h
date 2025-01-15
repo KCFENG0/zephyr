@@ -510,4 +510,26 @@
 #define NPCM_PINCTRL_LV_CTL3_6_SDA4B_LV  NPCM_PINCTRL_IDX(0x2D, 6)
 #define NPCM_PINCTRL_LV_CTL3_7_SDA6B_LV  NPCM_PINCTRL_IDX(0x2D, 7)
 
+/**
+ * Reset cause for the stage to initialize pin.
+ *
+ * The reset cause here must be the same as the one in
+ *  include/zephyr/drivers/hwinfo.h
+ */
+#define NPCM_RESET_PIN            (1 << 0)
+#define NPCM_RESET_SOFTWARE       (1 << 1)
+#define NPCM_RESET_BROWNOUT       (1 << 2)
+#define NPCM_RESET_POR            (1 << 3)
+#define NPCM_RESET_WATCHDOG       (1 << 4)
+#define NPCM_RESET_DEBUG          (1 << 5)
+#define NPCM_RESET_SECURITY       (1 << 6)
+#define NPCM_RESET_LOW_POWER_WAKE (1 << 7)
+#define NPCM_RESET_CPU_LOCKUP     (1 << 8)
+#define NPCM_RESET_PARITY         (1 << 9)
+#define NPCM_RESET_PLL            (1 << 10)
+#define NPCM_RESET_CLOCK          (1 << 11)
+#define NPCM_RESET_HARDWARE       (1 << 12)
+#define NPCM_RESET_USER           (1 << 13)
+#define NPCM_RESET_TEMPERATURE    (1 << 14)
+
 #endif /* ZEPHYR_INCLUDE_DT_BINDINGS_PINCTRL_NPCM_PINCTRL_H_ */

@@ -12,6 +12,7 @@
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/dt-bindings/pinctrl/npcm-pinctrl.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/hwinfo.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(pinctrl_npcm, CONFIG_PINCTRL_LOG_LEVEL);
@@ -43,14 +44,18 @@ struct npcm_pinmux_config {
 	},
 
 #define NPCM_PINMUX_ID(node_id, prop) DT_PROP_BY_IDX(node_id, prop, 0)
-#define NPCM_PINMUX_PIN_REG(node_id, prop)                                                         \
-	{DT_PROP_BY_IDX(node_id, prop, 4), DT_PROP_BY_IDX(node_id, prop, 3),                       \
-	 DT_PROP_BY_IDX(node_id, prop, 2), DT_PROP_BY_IDX(node_id, prop, 1),                       \
-	 DT_PROP_BY_IDX(node_id, prop, 0)}
+#define NPCM_PINMUX_PIN_REG(node_id, prop) \
+	{                                                                                          \
+		DT_PROP_BY_IDX(node_id, prop, 4), DT_PROP_BY_IDX(node_id, prop, 3),                \
+			DT_PROP_BY_IDX(node_id, prop, 2), DT_PROP_BY_IDX(node_id, prop, 1),        \
+			DT_PROP_BY_IDX(node_id, prop, 0)                                           \
+	}
 #define NPCM_PINMUX_ALT(node_id, prop)                                                             \
-	{DT_PROP_BY_IDX(node_id, prop, 0), DT_PROP_BY_IDX(node_id, prop, 1),                       \
-	 DT_PROP_BY_IDX(node_id, prop, 2), DT_PROP_BY_IDX(node_id, prop, 3),                       \
-	 DT_PROP_BY_IDX(node_id, prop, 4), DT_PROP_BY_IDX(node_id, prop, 5)}
+	{                                                                                          \
+		DT_PROP_BY_IDX(node_id, prop, 0), DT_PROP_BY_IDX(node_id, prop, 1),                \
+			DT_PROP_BY_IDX(node_id, prop, 2), DT_PROP_BY_IDX(node_id, prop, 3),        \
+			DT_PROP_BY_IDX(node_id, prop, 4), DT_PROP_BY_IDX(node_id, prop, 5)         \
+	}
 
 #define NPCM_PINMUX_INIT(node_id, prop)                                                            \
 	IF_ENABLED( \
@@ -363,38 +368,80 @@ static int npcm_volt_level_configure(const struct npcm_pinctrl *pin)
 	return 0;
 }
 
+bool npcm_pinctrl_pin_needs_cfg(const pinctrl_soc_pin_t *pin)
+{
+	uint32_t reset_cause;
+	ssize_t ret;
+
+	/* Force set the pin */
+	if (pin->props.flag == 0) {
+		return true;
+	}
+
+	/* Get reset cause */
+	ret = hwinfo_get_reset_cause(&reset_cause);
+	if (ret == -ENOSYS) {
+		return false;
+	}
+
+	LOG_DBG("reset cause %x (pin flag=%x)\n", reset_cause, pin->props.flag);
+
+	return !!(pin->props.flag & reset_cause);
+}
+
+int pinctrl_configure_pin(const pinctrl_soc_pin_t *pin)
+{
+	int ret = 0;
+
+	/* Configure all peripheral devices' properties here. */
+	switch (pin->props.type) {
+	case NPCM_PINCTRL_TYPE_PERIPH_PINMUX:
+		/* Configure peripheral device's pinmux functionality */
+		ret = npcm_periph_pinmux_configure(pin);
+		break;
+
+	case NPCM_PINCTRL_TYPE_PERIPH_PUPD:
+		/* Configure peripheral device's internal PU/PD */
+		ret = npcm_periph_pupd_configure(pin);
+		break;
+
+	case NPCM_PINCTRL_TYPE_DEVICE_CTRL:
+		/* Configure device's IO characteristics */
+		ret = npcm_device_control_configure(pin);
+		break;
+
+	case NPCM_PINCTRL_TYPE_LVOL:
+		/* Configure device's IO level */
+		ret = npcm_volt_level_configure(pin);
+		break;
+
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
 /* Pinctrl API implementation */
 int pinctrl_configure_pins(const pinctrl_soc_pin_t *pins, uint8_t pin_cnt, uintptr_t reg)
 {
 	ARG_UNUSED(reg);
 	uint8_t i;
 	int ret = 0;
+	bool is_post_kernel = npcm_is_post_kernel();
 
-	/* Configure all peripheral devices' properties here. */
+	LOG_DBG("is_post_kernel: %d\n", is_post_kernel);
+
+	/* Configure all pins */
 	for (i = 0; i < pin_cnt; i++) {
-		switch (pins[i].props.type) {
-		case NPCM_PINCTRL_TYPE_PERIPH_PINMUX:
-			/* Configure peripheral device's pinmux functionality */
-			ret = npcm_periph_pinmux_configure(&pins[i]);
-			break;
+		/* Skip if the pin does not need configuration before application stage */
+		if (is_post_kernel && !npcm_pinctrl_pin_needs_cfg(&pins[i])) {
+			continue;
+		}
 
-		case NPCM_PINCTRL_TYPE_PERIPH_PUPD:
-			/* Configure peripheral device's internal PU/PD */
-			ret = npcm_periph_pupd_configure(&pins[i]);
-			break;
-
-		case NPCM_PINCTRL_TYPE_DEVICE_CTRL:
-			/* Configure device's IO characteristics */
-			ret = npcm_device_control_configure(&pins[i]);
-			break;
-
-		case NPCM_PINCTRL_TYPE_LVOL:
-			/* Configure device's IO level */
-			ret = npcm_volt_level_configure(&pins[i]);
-			break;
-
-		default:
-			ret = -EINVAL;
+		ret = pinctrl_configure_pin(&pins[i]);
+		if (ret < 0) {
 			break;
 		}
 	}
