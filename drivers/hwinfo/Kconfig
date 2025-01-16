@@ -211,4 +211,11 @@ config HWINFO_AMBIQ
 	help
 	  Enable AMBIQ hwinfo driver
 
+config HWINFO_NPCM
+	bool "NPCM hwinfo"
+	default y
+	depends on SOC_FAMILY_NPCM
+	help
+	  Enable Nuvoton NPCM hwinfo driver.
+
 endif

@@ -40,6 +40,11 @@
 			reg-names = "pmc", "cdcg";
 		};
 
+		rstc: rstc@100c7f00 {
+			compatible = "nuvoton,npcm-rstc";
+			reg = <0x100c7f00 0x84>;
+		};
+
 		pinctrl: pinctrl@400c3000 {
 			compatible = "nuvoton,npcm-pinctrl";
 			/* First reg region is System Configuration Device */
