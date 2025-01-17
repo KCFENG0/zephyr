@@ -7,6 +7,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/init.h>
+#include <zephyr/linker/sections.h>
 #include <soc.h>
 #include <zephyr/logging/log.h>
 
@@ -23,6 +24,17 @@ void z_arm_platform_init(void)
 	inst_scfg->DEVALT10 = NPCM_DEVALT10_CRGPIO_SELECT_SL_CORE;
 #endif
 }
+
+#if CONFIG_SOC_LATE_INIT_HOOK
+__pinned_bss bool npcm_sys_application;
+
+/* Hook at the end of the kernel initialization */
+void soc_late_init_hook(void)
+{
+	/* Set the flag to indicate the system is in application stage */
+	npcm_sys_application = true;
+}
+#endif
 
 static int soc_npcm5_init(void)
 {

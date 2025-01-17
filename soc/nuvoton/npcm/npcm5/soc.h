@@ -25,4 +25,21 @@
 
 #define SCFG_BASE_ADDR (0x400C3000)
 
+/**
+ * @brief Check if the post kernel stage is done
+ *
+ * @return true if invoked before application initialization
+ * @return false if invoked during/after application initialization
+ */
+static inline bool npcm_is_post_kernel(void)
+{
+#if CONFIG_SOC_LATE_INIT_HOOK
+	extern bool npcm_sys_application;
+
+	return !npcm_sys_application;
+#else
+	return false;
+#endif
+}
+
 #endif /* _NUVOTON_NPCM_SOC_H_ */

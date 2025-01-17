@@ -10,5 +10,7 @@ config SOC_SERIES_NPCM5
 	select SOC_FAMILY_NPCM
 	select CPU_HAS_ARM_MPU
 	select CPU_HAS_FPU
+	select CLOCK_CONTROL
+	select SOC_LATE_INIT_HOOK
 	help
 	  Enable support for Nuvoton NPCM5 series
