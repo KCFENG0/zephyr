@@ -38,6 +38,7 @@ class EsiostArgs:
     help = False
     verbose = DEFAULT_VERBOSE
     input = None
+    input_elf = None
     output = None
     args_file = None
     chip_name = DEFAULT_CHIP
@@ -48,6 +49,10 @@ class EsiostArgs:
     firmware_load_address = None
     firmware_entry_point = None
     firmware_length = None
+    rom_hook1 = None
+    rom_hook2 = None
+    rom_hook3 = None
+    rom_hook4 = None
 
     def __init__(self):
 
@@ -81,6 +86,9 @@ def _populate_args(self, argument_list):
         if (arg == "input") & (argument_list.input is not None):
             self.input = argument_list.input
 
+        elif (arg == "input_elf") & (argument_list.input_elf is not None):
+            self.input_elf = argument_list.input_elf
+
         elif (arg == "output") & (argument_list.output is not None):
             self.output = argument_list.output
 
@@ -100,6 +108,7 @@ def _create_parser(arg_list):
 
     parser = argparse.ArgumentParser(conflict_handler='resolve', allow_abbrev=False)
     parser.add_argument("-i", nargs='?', dest="input")
+    parser.add_argument("-elf", nargs='?', dest="input_elf")
     parser.add_argument("-o", nargs='?', dest="output")
     parser.add_argument("-chip", dest="chip")
     parser.add_argument("-v", action="store_true", dest="verbose")

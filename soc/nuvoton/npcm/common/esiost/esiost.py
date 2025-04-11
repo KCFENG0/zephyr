@@ -13,6 +13,9 @@
 import os
 import sys
 import hashlib
+import struct
+import typing
+from elftools.elf.elffile import ELFFile
 from colorama import init, Fore
 from esiost_args import EsiostArgs, exit_with_failure
 from pathlib import Path
@@ -28,6 +31,10 @@ HDR_FW_FLASH_ADDR_END_LOAD_OFFSET       = 0x224
 HDR_FW_LOAD_START_ADDR_OFFSET           = 0x228
 HDR_FW_LENGTH_OFFSET                    = 0x22C
 HDR_FW_LOAD_HASH_OFFSET                 = 0x480
+HDR_FW_ROM_HOOK1_OFFSET                 = 0x4B0
+HDR_FW_ROM_HOOK2_OFFSET                 = 0x4B4
+HDR_FW_ROM_HOOK3_OFFSET                 = 0x4B8
+HDR_FW_ROM_HOOK4_OFFSET                 = 0x4BC
 HDR_FW_SEG1_START_OFFSET                = 0x4C0
 HDR_FW_SEG1_SIZE_OFFSET                 = 0x4C4
 HDR_FW_SEG2_START_OFFSET                = 0x4C8
@@ -82,6 +89,7 @@ def _bt_mode_handler(esiost_args):
     _copy_image(output_file, esiost_args)
     _set_anchor(output_file, esiost_args)
     _set_firmware_load_start_address(output_file, esiost_args)
+    _set_firmware_hook_address(output_file, esiost_args)
     _set_firmware_entry_point(output_file, esiost_args)
     _set_firmware_length(output_file, esiost_args)
     _set_firmware_load_hash(output_file, esiost_args)
@@ -533,6 +541,66 @@ def _copy_image(output, esiost_args):
     fw_length = esiost_args.firmware_length
     if fw_length is None:
         esiost_args.firmware_length = input_file_size
+
+def _get_hook_func_table(input_elf: typing.Union[str, Path]) -> list[int]:
+    """
+    Extracts the function pointer table from the .rom_hooks section of the ELF file.
+
+    :param input_elf: Path to the ELF file.
+    :return: List of function addresses (as integers).
+    :raises RuntimeError: If the section is missing or data is insufficient.
+    """
+    section_name = ".rom_hooks"
+    with open(input_elf, 'rb') as f:
+        elf = ELFFile(f)
+        section = elf.get_section_by_name(section_name)
+        if not section:
+            raise RuntimeError(f"Section '{section_name}' not found in the ELF file.")
+
+        data = section.data()
+        ptr_size = 4  # 32-bit pointers
+        if len(data) % ptr_size != 0:
+            raise RuntimeError(f"Section '{section_name}' size is not aligned to 4 bytes.")
+
+        table = []
+        for i in range(0, len(data), ptr_size):
+            ptr, = struct.unpack('<I', data[i:i+ptr_size])
+            table.append(ptr)
+        return table
+
+def _set_firmware_hook_address(output: Path, esiost_args):
+    """
+    Set the firmware hook addresses in the binary header.
+
+    :param output: Path to the output binary file.
+    :param esiost_args: Arguments object with input_elf attribute.
+    """
+    input_elf_path = Path(esiost_args.input_elf)
+    if not input_elf_path.exists():
+        print(f"Error: ELF file '{input_elf_path}' does not exist.")
+        return
+
+    try:
+        hook_table = _get_hook_func_table(input_elf_path)
+    except Exception as e:
+        print(f"Error reading hook table: {e}")
+        return
+
+    function_offset = {
+        "Rom_hook1": (HDR_FW_ROM_HOOK1_OFFSET, 0),
+        "Rom_hook2": (HDR_FW_ROM_HOOK2_OFFSET, 1),
+        "Rom_hook3": (HDR_FW_ROM_HOOK3_OFFSET, 2),
+        "Rom_hook4": (HDR_FW_ROM_HOOK4_OFFSET, 3),
+    }
+
+    with output.open("r+b") as output_file:
+        for name, (offset, index) in function_offset.items():
+            if index >= len(hook_table):
+                print(f"Warning: {name} index {index} out of range in hook table.")
+                continue
+            output_file.seek(offset)
+            print(f"[hook] {name} is located at: {_hex_print_format(hook_table[index])}")
+            output_file.write(hook_table[index].to_bytes(4, "little"))
 
 def _hex_print_format(value):
     """hex representation of an integer
