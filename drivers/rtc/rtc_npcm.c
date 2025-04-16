@@ -561,6 +561,13 @@ static int rtc_npcm_init(const struct device *dev)
 	const struct device *c2h_dev = cfg->c2h_dev;
 	uint8_t i, val;
 
+	if (((rtc_read_offset(dev, RTC_CTS) & RTC_CTS_PADSTS_Msk) &&
+		(rtc_read_offset(dev, RTC_CTS) & RTC_CTS_RTCPAD05STS_Msk)) &&
+		(rtc_read_offset(dev, RTC_CTS) & RTC_CTS_ENRTCTIMESTS_Msk)) {
+		LOG_INF("rtc is already initiated");
+		goto skip_init;
+	}
+
 	/* Enable Core-to-Host access module */
 	inst_c2h->SIBCTRL |= BIT(NPCM_SIBCTRL_CSAE);
 	rtc_write_offset(c2h_dev, RTC_CFG, 0x0);
@@ -580,20 +587,10 @@ static int rtc_npcm_init(const struct device *dev)
 	}
 
 	val = rtc_read_offset(c2h_dev, RTC_CFG);
-	val &= ~RTC_CFG_ENRTCTIME_Msk;
+	val |= RTC_CFG_ENRTCTIME_Msk;
 	rtc_write_offset(c2h_dev, RTC_CFG, val);
 
-	for (i = 0; i < TIMER_DELAY_COUNT; i++) {
-		if (!(rtc_read_offset(c2h_dev, RTC_CTS) & RTC_CTS_ENRTCTIMESTS_Msk))
-			break;
-		k_busy_wait(1);
-	}
-
-	if (i == TIMER_DELAY_COUNT) {
-		LOG_ERR("%s Unable to disable RTC timer", __func__);
-		return -EINVAL;
-	}
-
+skip_init:
 	/* Initialize a miwu device input and its callback function */
 	npcm_miwu_init_dev_callback(&rtc_miwu_cb, &cfg->rtcwk, rtc_npcm_isr,
 			dev);
