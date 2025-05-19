@@ -30,7 +30,7 @@ LOG_MODULE_REGISTER(rtc_npcm);
 #define NPCM_YEAR_GAP 100
 /* struct tm start time:   1st, Jan, 1900 */
 #define TM_YEAR_REF 1900
-#define DELAY_COUNT 500
+#define DELAY_COUNT 2000
 #define TIMER_DELAY_COUNT 10
 
 struct rtc_npcm_config {
@@ -559,7 +559,8 @@ static int rtc_npcm_init(const struct device *dev)
 	struct rtc_npcm_config *cfg = (struct rtc_npcm_config *)dev->config;
 	struct c2h_reg *const inst_c2h = cfg->inst_c2h;
 	const struct device *c2h_dev = cfg->c2h_dev;
-	uint8_t i, val;
+	uint8_t val;
+	int i;
 
 	if (((rtc_read_offset(dev, RTC_CTS) & RTC_CTS_PADSTS_Msk) &&
 		(rtc_read_offset(dev, RTC_CTS) & RTC_CTS_RTCPAD05STS_Msk)) &&
