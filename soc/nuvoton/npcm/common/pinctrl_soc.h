@@ -188,7 +188,12 @@ typedef struct npcm_pinctrl pinctrl_soc_pin_t;
 		DT_NODE_HAS_PROP(node_id, pinmux), \
 		(Z_PINCTRL_STATE_PIN_INIT_EXT(node_id, prop)))
 
+#define Z_PINCTRL_STATE_PIN_INIT_PHA(node_id, prop, idx)                                           \
+	DT_FOREACH_CHILD_VARGS(DT_PHANDLE_BY_IDX(node_id, prop, idx), Z_PINCTRL_STATE_PIN_INIT)
+
 #define Z_PINCTRL_STATE_PINS_INIT(node_id, prop)                                                   \
-	{DT_FOREACH_CHILD_VARGS(DT_PHANDLE(node_id, prop), Z_PINCTRL_STATE_PIN_INIT)}
+	{                                                                                          \
+		DT_FOREACH_PROP_ELEM(node_id, prop, Z_PINCTRL_STATE_PIN_INIT_PHA)                  \
+	}
 
 #endif /* ZEPHYR_SOC_NUVOTON_NPCM_COMMON_PINCTRL_SOC_H_ */
