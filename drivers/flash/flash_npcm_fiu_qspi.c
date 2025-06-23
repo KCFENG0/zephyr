@@ -16,7 +16,7 @@
 #include "flash_npcm_qspi.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(npcm_fiu_qspi, LOG_LEVEL_ERR);
+LOG_MODULE_REGISTER(npcm_fiu_qspi, CONFIG_FLASH_LOG_LEVEL);
 
 #define NPCM_FIU_CHK_TIMEOUT_US	10000
 
@@ -39,6 +39,53 @@ struct npcm_qspi_fiu_config {
 	/* Clock configuration */
 	uint32_t clk_cfg;
 };
+
+/* Clock control device */
+struct npcm_scfg_config {
+        /* scfg device base address */
+        uintptr_t base_scfg;
+};
+
+static const struct npcm_scfg_config npcm_scfg_cfg = {
+        .base_scfg = DT_REG_ADDR_BY_NAME(DT_NODELABEL(pinctrl), scfg),
+};
+#define NPCM_CLK_CTRL_DEV DT_NODELABEL(pcc)
+#define NPCM_DEV_CTL3     0x04
+#define DEV_CTL3_INST     (npcm_scfg_cfg.base_scfg + NPCM_DEV_CTL3)
+
+#define NPCM_FIU_FLASH_WP       BIT(0)
+#define NPCM_SPIM_FLASH_WP      BIT(1)
+#define NPCM_DEV_CTL3_WP_INT_FL 0
+#define NPCM_DEV_CTL3_WP_GPIO55 1
+#define NPCM_DEV_CTL3_WP_GPIO76 2
+static int npcm_pinctrl_flash_write_protect_set(int interface)
+{
+	volatile uintptr_t dev_ctl3 = DEV_CTL3_INST;
+	uint32_t reg_val;
+
+	switch (interface) {
+	case NPCM_FIU_FLASH_WP:
+		reg_val = sys_read32(dev_ctl3) | BIT(NPCM_DEV_CTL3_WP_GPIO55);
+		sys_write32(reg_val, dev_ctl3);
+		if (!(sys_read32(dev_ctl3) & BIT(NPCM_DEV_CTL3_WP_GPIO55))) {
+			return -EIO;
+		}
+		break;
+
+	case NPCM_SPIM_FLASH_WP:
+		reg_val = sys_read32(dev_ctl3) | BIT(NPCM_DEV_CTL3_WP_INT_FL);
+		sys_write32(reg_val, dev_ctl3);
+		if (!(sys_read32(dev_ctl3) & BIT(NPCM_DEV_CTL3_WP_INT_FL))) {
+			return -EIO;
+		}
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
 
 /* NPCM SPI User Mode Access (UMA) functions */
 static inline void qspi_npcm_uma_cs_level(const struct device *dev, uint8_t sw_cs, bool level)

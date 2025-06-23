@@ -357,4 +357,35 @@
 			pinmux = <GPIOA6__TA6__USB20 2>;
 		};
 	};
+
+	/* PWM */
+	/omit-if-no-ref/ pwm4_gpioa0: periph-pwm4 {
+		pwm {
+			pinmux = <GPIOA0__PWM4__IOX2_LDSH 1>;
+		};
+	};
+
+	/* Tach */
+	/omit-if-no-ref/ tach4_gpioa1: periph-tach4 {
+		tach {
+			pinmux = <GPIOA1__TA4__IOX2_DOUT 1>;
+		};
+	};
+
+	/omit-if-no-ref/ tach3_gpio81: periph-tach3 {
+		tach {
+			pinmux = <GPIO81__TA3 1>;
+		};
+	};
+
+	/* EMAC */
+	/omit-if-no-ref/ emac_gpio01_06: periph-emac {
+		rmii_en {
+			pinmux = <GPIO01__EMAC_RXD0__DSRB__TA7 1>;
+		};
+
+		mdio_en {
+			pinmux = <GPIO06__EMAC_MDI0__DCDB__PWM9 1>;
+		};
+	};
 };

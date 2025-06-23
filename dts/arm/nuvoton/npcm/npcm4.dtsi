@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* npcm4 series pinmux mapping table */
-#include "npcm4/npcm4-alts-map.dtsi"
 /* npcm4 series mapping table between MIWU wui bits and source device */
 #include "npcm4/npcm4-miwus-wui-map.dtsi"
 /* npcm4 series mapping table between MIWU groups and interrupts */
@@ -18,23 +16,6 @@
 #include <freq.h>
 
 / {
-	def-io-conf-list {
-		/* Change default functional pads to GPIOs */
-		pinmux = <&alt5c_psin_sel
-			  &alt5c_psout_sel
-			  &alt5c_pson_sel
-			  &alt5d_rstout0_sel
-			  &alt5d_rstout1_sel
-			  &alt5d_rstout2_sel
-			  &alt5d_sktocc_sel
-			  &alt5d_caseopen_sel
-			  &alt5e_dpwrok_sel
-			  &alt5e_rsmrst_sel
-			  &alt5e_deep_s5_sel
-			  &alt5e_pwrok0_sel
-			  &alt5e_3vsbsw_sel>;
-	};
-
 	soc {
 		pcc: clock-controller@4000d000 {
 			clock-frequency = <DT_FREQ_M(96)>; /* OFMCLK runs at 96MHz */

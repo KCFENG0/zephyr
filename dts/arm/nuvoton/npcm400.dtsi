@@ -39,6 +39,6 @@
 
 &tach3 {
 	pin-static;
-	pinctrl-0 = <&ta3_sl_gp81>;
+	pinctrl-0 = <&tach3_gpio81>;
 	pinctrl-names = "default";
 };

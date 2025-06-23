@@ -48,7 +48,7 @@ struct npcm_scfg_config {
 };
 
 static const struct npcm_scfg_config npcm_scfg_cfg = {
-        .base_scfg = DT_REG_ADDR_BY_NAME(DT_NODELABEL(scfg), scfg),
+        .base_scfg = DT_REG_ADDR_BY_NAME(DT_NODELABEL(pinctrl), scfg),
 };
 
 /* Driver convenience defines */

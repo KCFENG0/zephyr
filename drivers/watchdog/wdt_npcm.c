@@ -39,7 +39,6 @@
 #include <zephyr/logging/log.h>
 
 #include <soc.h>
-#include "soc_dbg.h"
 LOG_MODULE_REGISTER(wdt_npcm, CONFIG_WDT_LOG_LEVEL);
 
 /* Watchdog operating frequency is fixed to LFCLK (32.768) kHz */
@@ -63,10 +62,15 @@ LOG_MODULE_REGISTER(wdt_npcm, CONFIG_WDT_LOG_LEVEL);
 /* Timeout for stopping watchdog. (Unit:ms) */
 #define NPCM_WATCHDOG_STOP_TIMEOUT 1
 
+/* Debug Interface registers */
+#define NPCM_DBGCTRL_OFFSET 0x22
+
 /* Device config */
 struct wdt_npcm_config {
 	/* wdt controller base address */
 	uintptr_t base;
+	/* The scfg device base address */
+	uintptr_t base_scfg;
 	/* t0 timer wake-up input source configuration */
 	const struct npcm_wui t0out;
 };
@@ -87,6 +91,9 @@ struct miwu_callback miwu_cb;
 
 /* Driver convenience defines */
 #define HAL_INSTANCE(dev) ((struct twd_reg *)((const struct wdt_npcm_config *)(dev)->config)->base)
+#define HAL_BASE_DBGCTRL_INST(dev)                                                                 \
+	((struct dbg_reg *)((const struct wdt_npcm_config *)(dev)->config)->base_scfg +            \
+	 NPCM_DBGCTRL_OFFSET)
 
 /* WDT local inline functions */
 static inline int wdt_t0out_reload(const struct device *dev)
@@ -131,6 +138,20 @@ static inline int wdt_wait_stopped(const struct device *dev)
 
 	return 0;
 }
+
+/**
+ * @brief Configure the Automatic Freeze mode. If this mode is enabled, whenever
+ * the Core is halted, various modules’ clocks, counters are stopped and
+ * destructive reads are disabled, pending the respective module enable bit for
+ * debugging.
+ */
+static void npcm_dbg_freeze_enable(const struct device *dev, bool enable)
+{
+       struct dbg_reg *const inst = HAL_BASE_DBGCTRL_INST(dev);
+
+       inst->DBGFRZEN3 = enable ? (inst->DBGFRZEN3 & ~BIT(NPCM_DBGFRZEN3_GLBL_FRZ_DIS))
+                                : (inst->DBGFRZEN3 | BIT(NPCM_DBGFRZEN3_GLBL_FRZ_DIS));
+}    
 
 /* WDT local functions */
 static void wdt_t0out_isr(const struct device *dev, struct npcm_wui *wui)
@@ -234,9 +255,9 @@ static int wdt_npcm_setup(const struct device *dev, uint8_t options)
 
 	/* Stall the WDT counter when halted by debugger */
 	if ((options & WDT_OPT_PAUSE_HALTED_BY_DBG) != 0) {
-		npcm_dbg_freeze_enable(true);
+		npcm_dbg_freeze_enable(dev, true);
 	} else {
-		npcm_dbg_freeze_enable(false);
+		npcm_dbg_freeze_enable(dev, false);
 	}
 
 	/*
@@ -353,6 +374,7 @@ static int wdt_npcm_init(const struct device *dev)
 
 static const struct wdt_npcm_config wdt_npcm_cfg_0 = {
 	.base = DT_INST_REG_ADDR(0),
+	.base_scfg = DT_REG_ADDR_BY_NAME(DT_NODELABEL(pinctrl), scfg),
 	.t0out = NPCM_DT_WUI_ITEM_BY_NAME(0, t0_out)
 };
 
