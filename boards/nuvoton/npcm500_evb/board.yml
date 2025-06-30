@@ -1,0 +1,5 @@
+board:
+  name: npcm500_evb
+  vendor: nuvoton
+  socs:
+  - name: npcm500

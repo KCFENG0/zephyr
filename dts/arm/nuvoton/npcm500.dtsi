@@ -1,0 +1,44 @@
+/*
+ * Copyright (c) 2024 Nuvoton Technology Corporation.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+
+/* Device tree declarations of npcm soc family */
+#include <mem.h>
+#include "npcm/npcm5.dtsi"
+
+/ {
+	flash0: flash@80000 {
+		reg = <0x00080000 DT_SIZE_M(2)>;
+	};
+
+	sram0: memory@10008000 {
+		compatible = "mmio-sram";
+		reg = <0x10008000 DT_SIZE_K(764)>;
+	};
+
+	soc {
+	};
+};
+
+&qspi_spim {
+	int_flash: w25q16@0 {
+		compatible ="nuvoton,npcm-nor";
+		size = <DT_SIZE_M(2 * 8)>;
+		reg = <0>;
+		status = "okay";
+
+		/* quad spi bus configuration of nor flash device */
+		qspi-flags = <NPCM_QSPI_SW_CS0>;
+		rd-mode = "NPCM_RD_MODE_QUAD";
+		mapped-addr = <0x80000>;
+        };
+};
+
+&tach3 {
+	pin-static;
+	pinctrl-0 = <&tach3_gpio81>;
+	pinctrl-names = "default";
+};

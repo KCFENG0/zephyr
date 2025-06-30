@@ -1,0 +1,13 @@
+# Nuvoton Cortex-M4 Embedded Controller NPCM5 series
+
+# Copyright (c) 2024 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_SERIES_NPCM5
+	select ARM
+	select CPU_CORTEX_M7
+	select CPU_CORTEX_M_HAS_DWT
+	select SOC_FAMILY_NPCM
+	select CPU_HAS_ARM_MPU
+	help
+	  Enable support for Nuvoton NPCM5 series

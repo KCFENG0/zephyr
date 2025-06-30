@@ -4,3 +4,6 @@ family:
   - name: npcm4
     socs:
     - name: npcm400
+  - name: npcm5
+    socs:
+    - name: npcm500
