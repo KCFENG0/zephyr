@@ -10,8 +10,19 @@
 #include "npcm/npcm5.dtsi"
 
 / {
-	flash0: flash@80000 {
-		reg = <0x00080000 DT_SIZE_M(2)>;
+	fstab {
+		compatible = "zephyr,fstab";
+		lfs1: lfs1 {
+			compatible = "zephyr,fstab,littlefs";
+			mount-point = "/lfs1";
+			partition = <&storage_partition>;
+			automount;
+			read-size = <32>;
+			prog-size = <32>;
+			cache-size = <256>;
+			lookahead-size = <64>;
+			block-cycles = <512>;
+		};
 	};
 
 	sram0: memory@10008000 {
@@ -24,17 +35,33 @@
 };
 
 &qspi_spim {
-	int_flash: w25q16@0 {
+	int_flash: w25q16@80000 {
 		compatible ="nuvoton,npcm-nor";
 		size = <DT_SIZE_M(2 * 8)>;
-		reg = <0>;
+		reg = <0x80000 0x00200000>;
 		status = "okay";
 
 		/* quad spi bus configuration of nor flash device */
 		qspi-flags = <NPCM_QSPI_SW_CS0>;
 		rd-mode = "NPCM_RD_MODE_QUAD";
 		mapped-addr = <0x80000>;
-        };
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+	        img_partition: partition@0 {
+				label = "img";
+				reg = <0 0x00100000>;
+			};
+
+	        storage_partition: partition@100000 {
+				label = "storage";
+				reg = <0x00100000 0x00100000>;
+			};
+	    };
+	};
 };
 
 &tach3 {
