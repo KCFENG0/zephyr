@@ -1303,8 +1303,6 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 {
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 	struct npcm_i3c_data *const data = dev->data;
-	const struct i3c_target_callbacks *target_cb =
-		(data->target_config != NULL) ? data->target_config->callbacks : NULL;
 	uint8_t len = 0;
 	uint8_t rx_fifo_count;
 	bool is_rx;
@@ -2053,6 +2051,7 @@ static void npcm_i3c_ibi_work(struct k_work *work)
 	struct i3c_ibi_work *i3c_ibi_work = CONTAINER_OF(work, struct i3c_ibi_work, work);
 	const struct device *dev = i3c_ibi_work->controller;
 	struct npcm_i3c_data *data = dev->data;
+	struct i3c_dev_attached_list *dev_list = &data->common.attached_dev;
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 	struct i3c_device_desc *target = NULL;
 	uint32_t ibitype, ibiaddr;
@@ -2086,7 +2085,7 @@ static void npcm_i3c_ibi_work(struct k_work *work)
 
 	switch (ibitype) {
 	case NPCM_I3C_MSTATUS_IBITYPE_IBI:
-		target = i3c_dev_list_i3c_addr_find(dev, (uint8_t)ibiaddr);
+		target = i3c_dev_list_i3c_addr_find(dev_list, (uint8_t)ibiaddr);
 		if (target != NULL) {
 			ret = npcm_i3c_xfer_read_fifo(i3c_inst, &payload[0], sizeof(payload));
 			if (ret >= 0) {
@@ -2693,7 +2692,7 @@ static void npcm_i3c_target_isr(const struct device *dev)
 			i3c_inst->STATUS = NPCM_I3C_STATUS_DACHG;
 			if (i3c_inst->DYNADDR & NPCM_I3C_DYNADDR_DAVALID) {
 				if (target_config != NULL) {
-					config_target->dynamic_addr = NPCM_GET_REG_FIELD(
+					config_target->static_addr = NPCM_GET_REG_FIELD(
 						i3c_inst->DYNADDR, NPCM_I3C_DYNADDR_DADDR);
 				}
 			}
@@ -3380,23 +3379,16 @@ out_xfer_i2c_stop_unlock:
  *                     The caller must ensure that the buffer is valid until the
  *                     transaction is completed (STOP or Sr received).
  * param[in] len       Number of bytes in buf to send or receive.
- * param[in] hdr_mode  HDR mode.
  *
  * return  Number of bytes transferred, or negative if error.
  */
-static int npcm_i3c_target_tx_write(const struct device *dev, uint8_t *buf, uint16_t len,
-				    uint8_t hdr_mode)
+static int npcm_i3c_target_tx_write(const struct device *dev, uint8_t *buf, uint16_t len)
 {
 	int ret = 0;
 
 	if ((buf == NULL) || (len == 0)) {
 		LOG_ERR("Data buffer configuration failed");
 		return -EINVAL;
-	}
-
-	if (hdr_mode != 0) {
-		LOG_ERR("HDR not supported");
-		return -ENOSYS;
 	}
 
 #ifdef CONFIG_I3C_NPCM_DMA
@@ -3468,7 +3460,7 @@ static int npcm_i3c_target_unregister(const struct device *dev, struct i3c_targe
 	return 0;
 }
 
-static DEVICE_API(i3c, npcm_i3c_driver) = {
+static const struct i3c_driver_api npcm_i3c_driver_api = {
 	.i2c_api.configure = npcm_i3c_i2c_api_configure,
 	.i2c_api.transfer = npcm_i3c_i2c_api_transfer,
 	.i2c_api.recover_bus = npcm_i3c_recover_bus,
@@ -3541,6 +3533,6 @@ static DEVICE_API(i3c, npcm_i3c_driver) = {
 	};                                                                                         \
 	DEVICE_DT_INST_DEFINE(inst, npcm_i3c_init, NULL, &npcm_i3c_data_##inst,                    \
 			      &npcm_i3c_config_##inst, POST_KERNEL,                                \
-			      CONFIG_I3C_CONTROLLER_INIT_PRIORITY, &npcm_i3c_driver);
+			      CONFIG_I3C_CONTROLLER_INIT_PRIORITY, &npcm_i3c_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(I3C_NPCM_DEVICE)
