@@ -222,6 +222,18 @@
 	status = "okay";
 };
 
+&pwm6 {
+       pinctrl-0 = <&pwm5_gpioa3>;
+       pinctrl-names = "default";
+       status = "okay";
+};
+
+&pwm7 {
+       pinctrl-0 = <&pwm6_gpioa5>;
+       pinctrl-names = "default";
+       status = "okay";
+};
+
 &tach1 {
 	pin-select = <NPCM_TACH_PIN_SELECT_4>; /* Select tach pin 4 as input pin */
 	sample-clk = <NPCM_TACH_FREQ_LFCLK>; /* Use LFCLK as sampling clock */

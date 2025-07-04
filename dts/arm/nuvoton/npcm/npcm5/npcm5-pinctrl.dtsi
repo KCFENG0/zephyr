@@ -371,6 +371,18 @@
 		};
 	};
 
+	/omit-if-no-ref/ pwm5_gpioa3: periph-pwm5 {
+		pwm {
+			pinmux = <GPIOA3__PWM5__IOX2_DIN 1>;
+		};
+	};
+
+	/omit-if-no-ref/ pwm6_gpioa5: periph-pwm6 {
+		pwm {
+			pinmux = <GPIOA5__PWM6 1>;
+		};
+	};
+
 	/* Tach */
 	/omit-if-no-ref/ tach4_gpioa1: periph-tach4 {
 		tach {
