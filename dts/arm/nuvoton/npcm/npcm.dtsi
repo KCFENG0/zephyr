@@ -248,6 +248,23 @@
 			#gpio-cells=<2>;
 		};
 
+		sgpio0: sgpio@4001d000 {
+			compatible = "nuvoton,npcm-sgpio";
+			reg = <0x4001d000 0x100>;
+			interrupts = <80 3>;
+			clocks = <&pcc NPCM_CLOCK_SIOX1>;
+			status = "disabled";
+		};
+
+		sgpio1: sgpio@4001d100 {
+			compatible = "nuvoton,npcm-sgpio";
+			reg = <0x4001d100 0x100>;
+			interrupts = <81 3>;
+			clocks = <&pcc NPCM_CLOCK_SIOX2>;
+			status = "disabled";
+		};
+
+
 		twd: watchdog@400d8000 {
 			compatible = "nuvoton,npcm-watchdog";
 			reg = <0x400d8000 0x100>;
