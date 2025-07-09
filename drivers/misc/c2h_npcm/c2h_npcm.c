@@ -41,7 +41,7 @@ static void host_c2h_wait_write_done(const struct device *dev)
 	uint32_t max_wait_cycles =
 			k_us_to_cyc_ceil32(NPCM_C2H_TRANSACTION_TIMEOUT_US);
 
-	while (IS_BIT_SET(inst_c2h->SIBCTRL, NPCM_SIBCTRL_CSWR)) {
+	while (NPCM_IS_BIT_SET(inst_c2h->SIBCTRL, NPCM_SIBCTRL_CSWR)) {
 		elapsed_cycles = k_cycle_get_32() - start_cycles;
 		if (elapsed_cycles > max_wait_cycles) {
 			LOG_ERR("c2h write transaction expired!");
@@ -59,7 +59,7 @@ static void host_c2h_wait_read_done(const struct device *dev)
 	uint32_t max_wait_cycles =
 			k_us_to_cyc_ceil32(NPCM_C2H_TRANSACTION_TIMEOUT_US);
 
-	while (IS_BIT_SET(inst_c2h->SIBCTRL, NPCM_SIBCTRL_CSRD)) {
+	while (NPCM_IS_BIT_SET(inst_c2h->SIBCTRL, NPCM_SIBCTRL_CSRD)) {
 		elapsed_cycles = k_cycle_get_32() - start_cycles;
 		if (elapsed_cycles > max_wait_cycles) {
 			LOG_ERR("c2h read transaction expired!");

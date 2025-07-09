@@ -139,7 +139,7 @@ static int uart_npcm_irq_tx_complete(const struct device *dev)
 	struct uart_reg *const inst = config->base;
 
 	/* Tx FIFO is empty or last byte is sending */
-	return !IS_BIT_SET(inst->USTAT, NPCM_USTAT_XMIP);
+	return !NPCM_IS_BIT_SET(inst->USTAT, NPCM_USTAT_XMIP);
 }
 
 static void uart_npcm_irq_rx_enable(const struct device *dev)
@@ -241,7 +241,7 @@ static int uart_npcm_poll_in(const struct device *dev, unsigned char *c)
 	const struct uart_npcm_config *const config = dev->config;
 	struct uart_reg *const inst = config->base;
 
-	if (!IS_BIT_SET(inst->UICTRL, NPCM_UICTRL_RBF)) {
+	if (!NPCM_IS_BIT_SET(inst->UICTRL, NPCM_UICTRL_RBF)) {
 		return -1;
 	}
 
@@ -257,7 +257,7 @@ static void uart_npcm_poll_out(const struct device *dev, unsigned char c)
 	const struct uart_npcm_config *const config = dev->config;
 	struct uart_reg *const inst = config->base;
 
-	while (!IS_BIT_SET(inst->UICTRL, NPCM_UICTRL_TBE)) {
+	while (!NPCM_IS_BIT_SET(inst->UICTRL, NPCM_UICTRL_TBE)) {
 		continue;
 	}
 	inst->UTBUF = c;
@@ -273,13 +273,13 @@ static int uart_npcm_err_check(const struct device *dev)
 
 	uint8_t stat = inst->USTAT;
 
-	if (IS_BIT_SET(stat, NPCM_USTAT_DOE))
+	if (NPCM_IS_BIT_SET(stat, NPCM_USTAT_DOE))
 		err |= UART_ERROR_OVERRUN;
 
-	if (IS_BIT_SET(stat, NPCM_USTAT_PE))
+	if (NPCM_IS_BIT_SET(stat, NPCM_USTAT_PE))
 		err |= UART_ERROR_PARITY;
 
-	if (IS_BIT_SET(stat, NPCM_USTAT_FE))
+	if (NPCM_IS_BIT_SET(stat, NPCM_USTAT_FE))
 		err |= UART_ERROR_FRAMING;
 
 	return err;

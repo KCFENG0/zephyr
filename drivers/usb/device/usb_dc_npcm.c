@@ -144,7 +144,7 @@ static inline bool usbd_ep_is_enabled(uint8_t ep_idx)
 	if (ep_idx == 0) {
 		return 1;
 	} else {
-		return IS_BIT_SET(USBD->EP[ep_idx - 1].USBD_EPCFG, NPCM_USBD_EPCFG_EPEN);
+		return NPCM_IS_BIT_SET(USBD->EP[ep_idx - 1].USBD_EPCFG, NPCM_USBD_EPCFG_EPEN);
 	}
 
 }
@@ -198,14 +198,14 @@ static void usb_dc_cep_isr(void)
 	IrqSt = USBD->USBD_CEPINTSTS & USBD->USBD_CEPINTEN;
 
 	/* Setup Token */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_SETUPTKIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_SETUPTKIF)) {
 		/* Clear CEP interrupt flag */
 		USBD->USBD_CEPINTSTS = BIT(NPCM_USBD_CEPINTSTS_SETUPTKIF);
 		return;
 	}
 
 	/* Setup Packet */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_SETUPPKIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_SETUPPKIF)) {
 		LOG_DBG("\r\n\r\nSETUP pkt");
 
 		dev_data.ep_status = USB_DC_EP_SETUP;
@@ -214,7 +214,7 @@ static void usb_dc_cep_isr(void)
 	}
 
 	/* Control OUT Token */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_OUTTKIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_OUTTKIF)) {
 		/* Clear CEP interrupt flag */
 		USBD->USBD_CEPINTSTS = BIT(NPCM_USBD_CEPINTSTS_OUTTKIF);
 
@@ -223,7 +223,7 @@ static void usb_dc_cep_isr(void)
 	}
 
 	/* Control IN Token */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_INTKIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_INTKIF)) {
 		/* Clear CEP interrupt flag */
 		USBD->USBD_CEPINTSTS = BIT(NPCM_USBD_CEPINTSTS_INTKIF);
 
@@ -236,14 +236,14 @@ static void usb_dc_cep_isr(void)
 	}
 
 	/* Ping Token */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_PINGIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_PINGIF)) {
 		/* Clear CEP interrupt flag */
 		USBD->USBD_CEPINTSTS = BIT(NPCM_USBD_CEPINTSTS_PINGIF);
 		return;
 	}
 
 	/* Data Packet Transmitted and Acked */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_TXPKIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_TXPKIF)) {
 		/* Clear CEP interrupt flag */
 		USBD->USBD_CEPINTSTS = BIT(NPCM_USBD_CEPINTSTS_TXPKIF);
 
@@ -252,7 +252,7 @@ static void usb_dc_cep_isr(void)
 	}
 
 	/* Host received */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_RXPKIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_RXPKIF)) {
 		/* Clear CEP interrupt flag */
 		USBD->USBD_CEPINTSTS = BIT(NPCM_USBD_CEPINTSTS_RXPKIF);
 
@@ -264,28 +264,28 @@ static void usb_dc_cep_isr(void)
 	}
 
 	/* NAK sent */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_NAKIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_NAKIF)) {
 		/* Clear CEP interrupt flag */
 		USBD->USBD_CEPINTSTS = BIT(NPCM_USBD_CEPINTSTS_NAKIF);
 		return;
 	}
 
 	/* STALL Sent */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_STALLIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_STALLIF)) {
 		/* Clear CEP interrupt flag */
 		USBD->USBD_CEPINTSTS = BIT(NPCM_USBD_CEPINTSTS_STALLIF);
 		return;
 	}
 
 	/* USB Error */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_ERRIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_ERRIF)) {
 		/* Clear CEP interrupt flag */
 		USBD->USBD_CEPINTSTS = BIT(NPCM_USBD_CEPINTSTS_ERRIF);
 		return;
 	}
 
 	/* Status Completion */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_STSDONEIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_STSDONEIF)) {
 		/* Enable CEP Interrupt */
 		USBD->USBD_CEPINTEN = BIT(NPCM_USBD_CEPINTEN_SETUPPKIEN);
 
@@ -300,14 +300,14 @@ static void usb_dc_cep_isr(void)
 	}
 
 	/* Control Buffer Full */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_BUFFULLIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_BUFFULLIF)) {
 		/* Clear CEP interrupt flag */
 		USBD->USBD_CEPINTSTS = BIT(NPCM_USBD_CEPINTSTS_BUFFULLIF);
 		return;
 	}
 
 	/* Control Buffer Empty */
-	if (IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_BUFEMPTYIF)) {
+	if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_CEPINTSTS_BUFEMPTYIF)) {
 		/* Clear CEP interrupt flag */
 		USBD->USBD_CEPINTSTS = BIT(NPCM_USBD_CEPINTSTS_BUFEMPTYIF);
 		return;
@@ -328,18 +328,18 @@ static void usb_dc_isr(void)
 	}
 
 	/* USB interrupt */
-	if (IS_BIT_SET(IrqStL, NPCM_USBD_GINTSTS_USBIF)) {
+	if (NPCM_IS_BIT_SET(IrqStL, NPCM_USBD_GINTSTS_USBIF)) {
 		/* Bus Status */
 		IrqSt = USBD->USBD_BUSINTSTS & USBD->USBD_BUSINTEN;
 
 		/* SOF */
-		if (IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_SOFIF)) {
+		if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_SOFIF)) {
 			/* Clear Bus interrupt flag */
 			USBD->USBD_BUSINTSTS = BIT(NPCM_USBD_BUSINTSTS_SOFIF);
 		}
 
 		/* Reset */
-		if (IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_RSTIF)) {
+		if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_RSTIF)) {
 			LOG_DBG("reset_isr");
 
 			USBD->USBD_FADDR = 0; /* Reset USB device address */
@@ -349,7 +349,7 @@ static void usb_dc_isr(void)
 			usbd_reset_dma();
 			usbd_flush_all_ep();
 
-			if (IS_BIT_SET(USBD->USBD_OPER, NPCM_USBD_OPER_CURSPD)) {
+			if (NPCM_IS_BIT_SET(USBD->USBD_OPER, NPCM_USBD_OPER_CURSPD)) {
 				/* high speed */
 				LOG_DBG("hs");
 			} else {
@@ -374,7 +374,7 @@ static void usb_dc_isr(void)
 		}
 
 		/* Resume */
-		if (IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_RESUMEIF)) {
+		if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_RESUMEIF)) {
 			/* Callback function */
 			dev_data.status_cb(USB_DC_RESUME, NULL);
 
@@ -386,7 +386,7 @@ static void usb_dc_isr(void)
 		}
 
 		/* Suspend Request */
-		if (IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_SUSPENDIF)) {
+		if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_SUSPENDIF)) {
 			/* Callback function */
 			dev_data.status_cb(USB_DC_SUSPEND, NULL);
 
@@ -398,7 +398,7 @@ static void usb_dc_isr(void)
 		}
 
 		/* High speed */
-		if (IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_HISPDIF)) {
+		if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_HISPDIF)) {
 			/* Enable CEP Interrupt */
 			USBD->USBD_CEPINTEN = BIT(NPCM_USBD_CEPINTEN_SETUPPKIEN);
 			/* Clear Bus interrupt flag */
@@ -406,8 +406,8 @@ static void usb_dc_isr(void)
 		}
 
 		/* DMA Completion */
-		if (IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_DMADONEIF)) {
-			if (IS_BIT_SET(USBD->USBD_DMACTL, NPCM_USBD_DMACTL_DMARD)) {
+		if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_DMADONEIF)) {
+			if (NPCM_IS_BIT_SET(USBD->USBD_DMACTL, NPCM_USBD_DMACTL_DMARD)) {
 				/* DMA read */
 			} else {
 				/* DMA write */
@@ -417,14 +417,14 @@ static void usb_dc_isr(void)
 		}
 
 		/* PHY clock is usable */
-		if (IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_PHYCLKVLDIF)) {
+		if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_PHYCLKVLDIF)) {
 			/* Clear Bus interrupt flag */
 			USBD->USBD_BUSINTSTS = BIT(NPCM_USBD_BUSINTSTS_PHYCLKVLDIF);
 		}
 
 		/* Hot-Plug */
-		if (IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_VBUSDETIF)) {
-			if (IS_BIT_SET(USBD->USBD_PHYCTL, NPCM_USBD_PHYCTL_VBUSDET)) {
+		if (NPCM_IS_BIT_SET(IrqSt, NPCM_USBD_BUSINTSTS_VBUSDETIF)) {
+			if (NPCM_IS_BIT_SET(USBD->USBD_PHYCTL, NPCM_USBD_PHYCTL_VBUSDET)) {
 				/* USB Plug In */
 				/* Enable USB */
 				USBD->USBD_PHYCTL |= BIT(NPCM_USBD_PHYCTL_PHYEN) |
@@ -440,19 +440,19 @@ static void usb_dc_isr(void)
 	}
 
 	/* Endpoint interrupt */
-	if (IS_BIT_SET(IrqStL, NPCM_USBD_GINTSTS_CEPIF)) {
+	if (NPCM_IS_BIT_SET(IrqStL, NPCM_USBD_GINTSTS_CEPIF)) {
 		/* CEP interrupt */
 		usb_dc_cep_isr();
 	} else {
 		/* Other endpoints interrupt */
 		for (ep_idx = EPA; ep_idx <= EPL; ep_idx++) {
-			if (IS_BIT_SET(IrqStL, (NPCM_USBD_GINTSTS_EPAIF + ep_idx))) {
+			if (NPCM_IS_BIT_SET(IrqStL, (NPCM_USBD_GINTSTS_EPAIF + ep_idx))) {
 				IrqSt = USBD->EP[ep_idx].USBD_EPINTSTS &
 					USBD->EP[ep_idx].USBD_EPINTEN;
 
 				USBD->EP[ep_idx].USBD_EPINTSTS = IrqSt;
 				if (IrqSt != 0) {
-					if (IS_BIT_SET(USBD->EP[ep_idx].USBD_EPCFG,
+					if (NPCM_IS_BIT_SET(USBD->EP[ep_idx].USBD_EPCFG,
 						       NPCM_USBD_EPCFG_EPDIR)) {
 						LOG_DBG("\r\n\r\nEP_IN %d", ep_idx);
 

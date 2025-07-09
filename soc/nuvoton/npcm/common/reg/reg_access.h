@@ -10,7 +10,7 @@
 /*
  * NPCM register bit/field access operations
  */
-#define IS_BIT_SET(reg, bit)        (((reg >> bit) & (0x1)) != 0)
+#define NPCM_IS_BIT_SET(reg, bit)        (((reg >> bit) & (0x1)) != 0)
 
 #define GET_POS_FIELD(pos, size)    pos
 #define GET_SIZE_FIELD(pos, size)   size

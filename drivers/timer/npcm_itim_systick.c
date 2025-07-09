@@ -111,7 +111,7 @@ static inline void npcm_itim_sys_enable(void)
 	sys_tmr->ITCTS |= BIT(NPCM_ITCTS_ITEN);
 
 	/* Wait until sys timer enable */
-	while (!IS_BIT_SET(sys_tmr->ITCTS, NPCM_ITCTS_ITEN));
+	while (!NPCM_IS_BIT_SET(sys_tmr->ITCTS, NPCM_ITCTS_ITEN));
 }
 
 static inline void npcm_itim_sys_disable(void)
@@ -120,7 +120,7 @@ static inline void npcm_itim_sys_disable(void)
 	sys_tmr->ITCTS &= ~BIT(NPCM_ITCTS_ITEN);
 
 	/* Wait until sys timer disable */
-	while (IS_BIT_SET(sys_tmr->ITCTS, NPCM_ITCTS_ITEN));
+	while (NPCM_IS_BIT_SET(sys_tmr->ITCTS, NPCM_ITCTS_ITEN));
 }
 
 /* ITIM local functions */
@@ -182,7 +182,7 @@ static int npcm_itim_start_sys_tmr_by_tick(int32_t ticks)
 	 */
 
 	/* Disable timer and clear timeout if needed before configuring timer */
-	if (IS_BIT_SET(sys_tmr->ITCTS, NPCM_ITCTS_ITEN)) {
+	if (NPCM_IS_BIT_SET(sys_tmr->ITCTS, NPCM_ITCTS_ITEN)) {
 		npcm_itim_sys_disable();
 
 		if (sys_tmr->ITCTS & BIT(NPCM_ITCTS_TO_STS)) {
@@ -344,7 +344,7 @@ static int sys_clock_driver_init(void)
 		return -EINVAL;
 	}
 
-	if (IS_BIT_SET(sys_tmr->ITCTS, NPCM_ITCTS_ITEN)) {
+	if (NPCM_IS_BIT_SET(sys_tmr->ITCTS, NPCM_ITCTS_ITEN)) {
 		npcm_itim_sys_disable();
 	}
 

@@ -118,13 +118,13 @@ static inline bool tach_npcm_is_underflow(const struct device *dev)
 	struct tach_reg *const inst = HAL_INSTANCE(dev);
 
 	LOG_DBG("tach is underflow %d",
-		IS_BIT_SET(inst->TECTRL, NPCM_TECTRL_TCPND));
+		NPCM_IS_BIT_SET(inst->TECTRL, NPCM_TECTRL_TCPND));
 
 	/*
 	 * In mode 5, the flag TCPND indicates the TCNT1 is under
 	 * underflow situation. (No edges are detected.)
 	 */
-	return IS_BIT_SET(inst->TECTRL, NPCM_TECTRL_TCPND);
+	return NPCM_IS_BIT_SET(inst->TECTRL, NPCM_TECTRL_TCPND);
 }
 
 static inline void tach_npcm_clear_underflow_flag(const struct device *dev)
@@ -138,12 +138,12 @@ static inline bool tach_npcm_is_captured(const struct device *dev)
 {
 	struct tach_reg *const inst = HAL_INSTANCE(dev);
 
-	LOG_DBG("tach is captured %d", IS_BIT_SET(inst->TECTRL, NPCM_TECTRL_TAPND));
+	LOG_DBG("tach is captured %d", NPCM_IS_BIT_SET(inst->TECTRL, NPCM_TECTRL_TAPND));
 
 	/*
 	 * In mode 5, the flag TAPND indicates a input captured on TAn transition.
 	 */
-	return IS_BIT_SET(inst->TECTRL, NPCM_TECTRL_TAPND);
+	return NPCM_IS_BIT_SET(inst->TECTRL, NPCM_TECTRL_TAPND);
 }
 
 static inline void tach_npcm_clear_captured_flag(const struct device *dev)

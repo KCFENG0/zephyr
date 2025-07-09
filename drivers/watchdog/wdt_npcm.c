@@ -106,10 +106,10 @@ static inline int wdt_t0out_reload(const struct device *dev)
 		      BIT(NPCM_T0CSR_RST);
 	/* Wait for timer is loaded and restart */
 	st = k_uptime_get();
-	while (IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_RST)) {
+	while (NPCM_IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_RST)) {
 		if (k_uptime_get() - st > NPCM_T0CSR_RST_TIMEOUT) {
 			/* RST bit is still set? */
-			if (IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_RST)) {
+			if (NPCM_IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_RST)) {
 				LOG_ERR("Timeout: reload T0 timer!");
 				return -ETIMEDOUT;
 			}
@@ -126,10 +126,10 @@ static inline int wdt_wait_stopped(const struct device *dev)
 
 	st = k_uptime_get();
 	/* If watchdog is still running? */
-	while (IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_WD_RUN)) {
+	while (NPCM_IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_WD_RUN)) {
 		if (k_uptime_get() - st > NPCM_WATCHDOG_STOP_TIMEOUT) {
 			/* WD_RUN bit is still set? */
-			if (IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_WD_RUN)) {
+			if (NPCM_IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_WD_RUN)) {
 				LOG_ERR("Timeout: stop watchdog timer!");
 				return -ETIMEDOUT;
 			}
@@ -197,7 +197,7 @@ static int wdt_npcm_install_timeout(const struct device *dev,
 	struct twd_reg *const inst = HAL_INSTANCE(dev);
 
 	/* If watchdog is already running */
-	if (IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_WD_RUN)) {
+	if (NPCM_IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_WD_RUN)) {
 		return -EBUSY;
 	}
 
@@ -243,7 +243,7 @@ static int wdt_npcm_setup(const struct device *dev, uint8_t options)
 		return -EINVAL;
 	}
 
-	if (IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_WD_RUN)) {
+	if (NPCM_IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_WD_RUN)) {
 		LOG_ERR("WDT timer is busy");
 		return -EBUSY;
 	}

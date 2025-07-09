@@ -633,7 +633,7 @@ static int npcm_i3c_pdma_wait_completion(const struct device *dev, bool is_rx)
 	}
 
 	/* Check dma transfer done */
-	if (WAIT_FOR(IS_BIT_SET(pdma_inst->PDMA_TDSTS, dsct_idx), I3C_CHK_TIMEOUT_US, NULL) ==
+	if (WAIT_FOR(NPCM_IS_BIT_SET(pdma_inst->PDMA_TDSTS, dsct_idx), I3C_CHK_TIMEOUT_US, NULL) ==
 	    false) {
 		LOG_ERR("Check dma transfer done timed out");
 		return -ETIMEDOUT;
@@ -660,7 +660,7 @@ static int npcm_i3c_pdma_remain_count(const struct device *dev, bool is_rx)
 		return -EINVAL;
 	}
 
-	if (!IS_BIT_SET(pdma_inst->PDMA_TDSTS, dsct_idx)) {
+	if (!NPCM_IS_BIT_SET(pdma_inst->PDMA_TDSTS, dsct_idx)) {
 		return NPCM_GET_REG_FIELD(dsct_inst->CTL, NPCM_PDMA_DSCT_CTL_TXCNT) + 1;
 	} else {
 		return 0;
@@ -3486,7 +3486,7 @@ static const struct i3c_driver_api npcm_i3c_driver_api = {
 	COND_CODE_1(DT_INST_PROP_HAS_IDX(id, prop, idx), (DT_INST_PROP_BY_IDX(id, prop, idx)), (0))
 #define DT_INST_TGT_PID_RAND_PROP_OR(id, prop, idx)                                                \
 	COND_CODE_1(DT_INST_PROP_HAS_IDX(id, prop, idx),                                           \
-		    IS_BIT_SET(DT_INST_PROP_BY_IDX(id, prop, 0), 0), (0))
+		    NPCM_IS_BIT_SET(DT_INST_PROP_BY_IDX(id, prop, 0), 0), (0))
 
 #define I3C_NPCM_DEVICE(inst)                                                                      \
 	PINCTRL_DT_INST_DEFINE(inst);                                                              \

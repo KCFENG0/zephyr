@@ -236,7 +236,7 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 
 	ret = spi_npcm_spip_process_tx_buf(data, &tx_frame);
 
-	if (WAIT_FOR(!IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_BUSY),
+	if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_BUSY),
 		     SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
 		LOG_ERR("Check Status BSY Timeout");
 		return -ETIMEDOUT;
@@ -254,7 +254,7 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 
 	reg_base->SPIP_TX = tx_frame;
 
-	if (WAIT_FOR(!IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_RXEMPTY),
+	if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_RXEMPTY),
 		     SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
 		LOG_ERR("Check Status RBF Timeout");
 		return -ETIMEDOUT;
@@ -301,7 +301,7 @@ static int spi_npcm_spip_transceive(const struct device *dev, const struct spi_c
 	}
 
 	/* Cleaning junk data in the buffer */
-	while (!IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_RXEMPTY)) {
+	while (!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_RXEMPTY)) {
 		uint8_t unused __attribute__((unused));
 
 		unused = reg_base->SPIP_RX;

@@ -122,7 +122,7 @@ static inline void qspi_npcm_uma_write_byte(const struct device *dev, uint8_t da
 	inst->UMA_CTS = cts;
 
 	/* EXEC_DONE will be zero automatically if a UMA transaction is completed. */
-	while (IS_BIT_SET(inst->UMA_CTS, NPCM_UMA_CTS_EXEC_DONE)) {
+	while (NPCM_IS_BIT_SET(inst->UMA_CTS, NPCM_UMA_CTS_EXEC_DONE)) {
 		continue;
 	}
 }
@@ -146,7 +146,7 @@ static inline void qspi_npcm_uma_read_byte(const struct device *dev, uint8_t *da
 	/* Trigger UMA and Get data from DB0 later */
 	inst->UMA_CTS = cts;
 
-	while (IS_BIT_SET(inst->UMA_CTS, NPCM_UMA_CTS_EXEC_DONE)) {
+	while (NPCM_IS_BIT_SET(inst->UMA_CTS, NPCM_UMA_CTS_EXEC_DONE)) {
 		continue;
 	}
 
@@ -244,7 +244,7 @@ static inline int qspi_npcm_fiu_uma_lock(const struct device *dev)
 	struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
 	struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
 
-	if (WAIT_FOR(IS_BIT_SET(host_inst->FIU_MSR_STS, NPCM_FIU_MSR_STS_MSTR_INACT),
+	if (WAIT_FOR(NPCM_IS_BIT_SET(host_inst->FIU_MSR_STS, NPCM_FIU_MSR_STS_MSTR_INACT),
 			NPCM_FIU_CHK_TIMEOUT_US, NULL) == false) {
 		LOG_ERR("wait host fiu inactive timeout");
 		return -ETIMEDOUT;

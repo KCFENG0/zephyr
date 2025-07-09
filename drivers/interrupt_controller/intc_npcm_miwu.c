@@ -160,14 +160,14 @@ bool npcm_miwu_irq_get_state(const struct npcm_wui *wui)
 	const struct intc_miwu_config *config = miwu_devs[wui->table]->config;
 	const uint32_t base = config->base;
 
-	return IS_BIT_SET(NPCM_WKEN(base, wui->group), wui->bit);
+	return NPCM_IS_BIT_SET(NPCM_WKEN(base, wui->group), wui->bit);
 }
 
 bool npcm_miwu_irq_get_and_clear_pending(const struct npcm_wui *wui)
 {
 	const struct intc_miwu_config *config = miwu_devs[wui->table]->config;
 	const uint32_t base = config->base;
-	bool pending = IS_BIT_SET(NPCM_WKPND(base, wui->group), wui->bit);
+	bool pending = NPCM_IS_BIT_SET(NPCM_WKPND(base, wui->group), wui->bit);
 
 	if (pending) {
 		NPCM_WKPCL(base, wui->group) = BIT(wui->bit);

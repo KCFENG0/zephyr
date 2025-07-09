@@ -52,7 +52,7 @@ static int counter_npcm_itim32_stop(const struct device *dev)
 	/* Disable itim32 timer */
 	inst->ITCTS &= ~BIT(NPCM_ITCTS_ITEN);
 	/* Wait until itim32 timer disable */
-	while (IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_ITEN));
+	while (NPCM_IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_ITEN));
 
 	return 0;
 }
@@ -62,12 +62,12 @@ static int counter_npcm_itim32_start(const struct device *dev)
 	struct itim32_reg *const inst = HAL_INSTANCE(dev);
 	struct counter_npcm_itim32_data *data = dev->data;
 
-	if (IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_TO_STS)) {
+	if (NPCM_IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_TO_STS)) {
 		inst->ITCTS |= BIT(NPCM_ITCTS_TO_STS);
 	}
 
 	/* Disable itim32 timer */
-	if (IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_ITEN)) {
+	if (NPCM_IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_ITEN)) {
 		counter_npcm_itim32_stop(dev);
 	}
 
@@ -78,7 +78,7 @@ static int counter_npcm_itim32_start(const struct device *dev)
 	inst->ITCTS |= BIT(NPCM_ITCTS_ITEN);
 
 	/* Wait until itim32 timer enable */
-	while (!IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_ITEN));
+	while (!NPCM_IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_ITEN));
 
 	return 0;
 }
@@ -92,7 +92,7 @@ static int counter_npcm_itim32_get_value(const struct device *dev, uint32_t *tic
 
 	overflow = 0;
 
-	if (IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_TO_STS)) {
+	if (NPCM_IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_TO_STS)) {
 		overflow = data->setup_cycles;
 	}
 
@@ -184,7 +184,7 @@ static uint32_t counter_npcm_itim32_get_pending_int(const struct device *dev)
 {
 	struct itim32_reg *const inst = HAL_INSTANCE(dev);
 
-	if (IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_TO_STS)) {
+	if (NPCM_IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_TO_STS)) {
 		return 1;
 	} else {
 		return 0;
@@ -225,7 +225,7 @@ static void counter_npcm_itim32_isr(const struct device *dev)
 	}
 
 	/* Clear event timeout */
-	if (IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_TO_STS)) {
+	if (NPCM_IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_TO_STS)) {
 		inst->ITCTS |= BIT(NPCM_ITCTS_TO_STS);
 	}
 }
@@ -260,7 +260,7 @@ static int counter_npcm_itim32_init(const struct device *dev)
 	}
 
 	/* Disable itim32 timer */
-	if (IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_ITEN)) {
+	if (NPCM_IS_BIT_SET(inst->ITCTS, NPCM_ITCTS_ITEN)) {
 		counter_npcm_itim32_stop(dev);
 	}
 

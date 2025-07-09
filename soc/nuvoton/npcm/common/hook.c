@@ -33,7 +33,6 @@ HOOK_FUNC_ATTRIBUTE __attribute((weak)) void Rom_hook2(void)
 {
 #define adr_FIU_FwInfo_status 0x100c59d4
 #define bit_auth_pass         0x02
-#define M32(addr)             (*((volatile unsigned long *)(addr)))
 #define DEVALT5               0x400c3015
 #define EMC_CTL               0x400c304d
 #define GPIOB0_DEVALT         6
