@@ -49,6 +49,24 @@
 /** PWM pin inverted polarity (active-low pulse). */
 #define PWM_POLARITY_INVERTED	(1 << 0)
 
+/** PWMCTL CKSEL */
+#define PWMCTL_CKSEL            (1 << 1)
+
+/** PWMCTL HB_DC_CTL Visual */
+#define PWMCTL_HB_VISUAL        (1 << 2)
+
+/** PWMCTL HB_DC_CTL Standard */
+#define PWMCTL_HB_STANDARD      (1 << 3)
+
+/** PWMCTL SYNC */
+#define PWMCTL_SYNC             (1 << 4)
+
+/** PWMCTL HBNK_SEL */
+#define PWMCTL_HBNK_SEL         (1 << 6)
+
+/** PWMCTL PWR */
+#define PWMCTL_PWR              (1 << 7)
+
 /** @cond INTERNAL_HIDDEN */
 #define PWM_POLARITY_MASK	0x1
 /** @endcond */

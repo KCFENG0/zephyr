@@ -349,19 +349,29 @@ struct pwm_reg {
 	volatile uint16_t CTR;
 	/* 0x004: PWM Control */
 	volatile uint8_t PWMCTL;
-	volatile uint8_t reserved1;
+	/* 0x005: Number of Steps for Rise Duty Cycle */
+	volatile uint8_t N_STEP_RS;
 	/* 0x006: Duty Cycle */
 	volatile uint16_t DCR;
-	volatile uint8_t reserved2[4];
+	/* 0x008: Cycle Time for Fall Duty Cycle */
+	volatile uint16_t CTR_FL;
+	/* 0x00A: Maximum Duty-Cycle Fall */
+	volatile uint16_t MAX_DC_FL;
 	/* 0x00C: PWM Control Extended */
 	volatile uint8_t PWMCTLEX;
-	volatile uint8_t reserved3;
+	/* 0x00D: Number of Steps for Fall Duty Cycle */
+	volatile uint8_t N_STEP_FL;
+	/* 0x00E: Extend ON Time */
+	volatile uint8_t EXT_ON;
+	/* 0x00F: Extend OFF Time */
+	volatile uint8_t EXT_OFF;
 };
 
 /* PWM register fields */
 #define NPCM_PWMCTL_INVP                      0
 #define NPCM_PWMCTL_CKSEL                     1
 #define NPCM_PWMCTL_HB_DC_CTL_FIELD           FIELD(2, 2)
+#define NPCM_PWMCTL_HBNK_SEL                  6
 #define NPCM_PWMCTL_PWR                       7
 #define NPCM_PWMCTLEX_FCK_SEL_FIELD           FIELD(4, 2)
 #define NPCM_PWMCTLEX_OD_OUT                  7

@@ -31,6 +31,8 @@ LOG_MODULE_REGISTER(pwm_npcm, LOG_LEVEL_ERR);
 
 /* PWM heart-beat mode selection */
 #define NPCM_PWM_HBM_NORMAL         0
+#define NPCM_PWM_HBM_VISUAL         1
+#define NPCM_PWM_HBM_STANDARD       2
 
 /* Device config */
 struct pwm_npcm_config {
@@ -144,6 +146,40 @@ static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel,
 		/* Enable PWM now. */
 		inst->PWMCTL = ctl;
 
+		/* Heartbeat Standard and Visual Mode */
+		if (flags & PWMCTL_HB_STANDARD) {
+			inst->PWMCTL &= ~BIT(NPCM_PWMCTL_PWR);
+			inst->PRSC = 0;
+			inst->PWMCTL |= BIT(NPCM_PWMCTL_CKSEL);
+			SET_FIELD(inst->PWMCTL, NPCM_PWMCTL_HB_DC_CTL_FIELD,
+							NPCM_PWM_HBM_STANDARD);
+			inst->PWMCTL |= BIT(NPCM_PWMCTL_HBNK_SEL);
+			inst->CTR = 181;
+			inst->N_STEP_RS = 45;
+			inst->DCR = 181;
+			inst->CTR_FL = 181;
+			inst->MAX_DC_FL = 181;
+			inst->N_STEP_FL = 45;
+			inst->EXT_ON = 0;
+			inst->EXT_OFF = 0;
+			inst->PWMCTL |= BIT(NPCM_PWMCTL_PWR);
+		} else if (flags & PWMCTL_HB_VISUAL) {
+			inst->PWMCTL &= ~BIT(NPCM_PWMCTL_PWR);
+			inst->PRSC = 0;
+			inst->PWMCTL |= BIT(NPCM_PWMCTL_CKSEL);
+			SET_FIELD(inst->PWMCTL, NPCM_PWMCTL_HB_DC_CTL_FIELD,
+							NPCM_PWM_HBM_VISUAL);
+			inst->PWMCTL |= BIT(NPCM_PWMCTL_HBNK_SEL);
+			inst->CTR = 438;
+			inst->N_STEP_RS = 19;
+			inst->DCR = 438;
+			inst->CTR_FL = 438;
+			inst->MAX_DC_FL = 438;
+			inst->N_STEP_FL = 19;
+			inst->EXT_ON = 0;
+			inst->EXT_OFF = 0;
+			inst->PWMCTL |= BIT(NPCM_PWMCTL_PWR);
+		}
 		return 0;
 	}
 
