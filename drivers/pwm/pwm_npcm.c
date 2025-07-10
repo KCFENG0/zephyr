@@ -105,6 +105,13 @@ static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel,
 		ctl &= ~BIT(NPCM_PWMCTL_INVP);
 	}
 
+	/* Select PWM Operation Synchronization */
+	if (flags & PWMCTL_SYNC) {
+		ctl |= BIT(NPCM_PWMCTL_SYNC);
+	} else {
+		ctl &= ~BIT(NPCM_PWMCTL_SYNC);
+	}
+
 	/* If pulse_cycles is 0, switch PWM off and return. */
 	if (pulse_cycles == 0) {
 		ctl &= ~BIT(NPCM_PWMCTL_PWR);

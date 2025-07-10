@@ -371,6 +371,7 @@ struct pwm_reg {
 #define NPCM_PWMCTL_INVP                      0
 #define NPCM_PWMCTL_CKSEL                     1
 #define NPCM_PWMCTL_HB_DC_CTL_FIELD           FIELD(2, 2)
+#define NPCM_PWMCTL_SYNC                      4
 #define NPCM_PWMCTL_HBNK_SEL                  6
 #define NPCM_PWMCTL_PWR                       7
 #define NPCM_PWMCTLEX_FCK_SEL_FIELD           FIELD(4, 2)
