@@ -96,6 +96,13 @@ static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel,
 	uint32_t dcr;
 	uint32_t prsc;
 
+    /* Configure pin-mux for PWM device */
+    int ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+    if (ret < 0) {
+		LOG_ERR("PWM configure failed (%d)", ret);
+        return ret;
+    }
+
 	ctl = inst->PWMCTL | BIT(NPCM_PWMCTL_PWR);
 
 	/* Select PWM inverted polarity (ie. active-low pulse). */
