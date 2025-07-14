@@ -9,5 +9,6 @@ config SOC_SERIES_NPCM5
 	select CPU_CORTEX_M_HAS_DWT
 	select SOC_FAMILY_NPCM
 	select CPU_HAS_ARM_MPU
+	select CPU_HAS_FPU
 	help
 	  Enable support for Nuvoton NPCM5 series
