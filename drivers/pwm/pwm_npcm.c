@@ -149,7 +149,8 @@ static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel,
 		data->cycles_per_sec / period_cycles, prsc, ctr, dcr);
 
 	/* Reconfigure only if necessary. */
-	if (inst->PWMCTL != ctl || inst->PRSC != prsc || inst->CTR != ctr) {
+	if (inst->PWMCTL != ctl || inst->PRSC != prsc || inst->CTR != ctr ||\
+		(flags & PWMCTL_HB_STANDARD) || (flags & PWMCTL_HB_VISUAL) || (flags & PWMCTL_SYNC)) {
 		/* Disable PWM before configuring. */
 		inst->PWMCTL &= ~BIT(NPCM_PWMCTL_PWR);
 
