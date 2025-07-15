@@ -18,6 +18,8 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(uart_npcm, CONFIG_UART_LOG_LEVEL);
 
+void uart_set_npcm_baud_rate(const struct device *dev, int baud_rate, uint32_t src_clk);
+
 /* Driver config */
 struct uart_npcm_config {
 	struct uart_reg *base;
@@ -285,6 +287,182 @@ static int uart_npcm_err_check(const struct device *dev)
 	return err;
 }
 
+#ifdef CONFIG_UART_USE_RUNTIME_CONFIGURE
+static inline bool uart_cfg2npcm_parity(uint8_t *mode_reg, enum uart_config_parity parity)
+{
+	if (parity) {
+		*mode_reg |= BIT(NPCM_UFRS_PEN); /* Enable parity */
+
+		switch (parity) {
+		default:
+		case UART_CFG_PARITY_ODD:
+			*mode_reg &= ~BIT(5);
+			*mode_reg &= ~BIT(4);
+			break;
+		case UART_CFG_PARITY_EVEN:
+			*mode_reg &= ~BIT(5);
+			*mode_reg |= BIT(4);
+			break;
+		case UART_CFG_PARITY_MARK:
+			*mode_reg |= BIT(5);
+			*mode_reg &= ~BIT(4);
+			break;
+		case UART_CFG_PARITY_SPACE:
+			*mode_reg |= BIT(5);
+			*mode_reg |= BIT(4);
+			break;
+		}
+	}
+	else {
+		*mode_reg &= ~BIT(NPCM_UFRS_PEN); /* Disable parity */
+	}
+
+	return true;
+}
+
+static inline bool uart_cfg2npcm_stopbits(uint8_t *mode_reg, enum uart_config_stop_bits stopbits)
+{
+	switch (stopbits) {
+	case UART_CFG_STOP_BITS_0_5:
+	case UART_CFG_STOP_BITS_1_5:
+		return false;
+	case UART_CFG_STOP_BITS_1:
+		*mode_reg &= ~BIT(NPCM_UFRS_STP); /* 1 stop bit */
+		break;
+	case UART_CFG_STOP_BITS_2:
+		*mode_reg |= BIT(NPCM_UFRS_STP); /* 2 stop bits */
+		break;
+	}
+
+	return true;
+}
+
+static inline bool uart_cfg2npcm_databits(uint8_t *mode_reg, enum uart_config_data_bits databits)
+{
+	switch (databits) {
+	case UART_CFG_DATA_BITS_5:
+	case UART_CFG_DATA_BITS_6:
+		/* Controller doesn't support 5 or 6 data bits */
+		return false;
+	case UART_CFG_DATA_BITS_7:
+		*mode_reg &= ~BIT(1);
+		*mode_reg |= BIT(0);
+		break;
+	case UART_CFG_DATA_BITS_8:
+		*mode_reg &= ~BIT(1);
+		*mode_reg &= ~BIT(0);
+		break;
+	case UART_CFG_DATA_BITS_9:
+	default:
+		*mode_reg |= BIT(1);
+		*mode_reg &= ~BIT(0);
+		break;
+	}
+
+	return true;
+}
+
+static int uart_npcm_configure(const struct device *dev,
+				const struct uart_config *cfg)
+{
+	const struct uart_npcm_config *const config = dev->config;
+	struct uart_reg *const inst = config->base;
+	const struct device *const clk_dev = DEVICE_DT_GET(DT_NODELABEL(pcc));
+	uint32_t uart_rate;
+	uint8_t mode_reg = inst->UFRS;
+	int ret;
+
+	/* Turn on device clock first and get source clock freq. */
+	ret = clock_control_on(clk_dev, (clock_control_subsys_t)
+							config->clk_cfg);
+	if (ret < 0) {
+		LOG_ERR("Turn on UART clock fail %d", ret);
+		return ret;
+	}
+
+	ret = clock_control_get_rate(clk_dev, (clock_control_subsys_t)
+		config->clk_cfg, &uart_rate);
+	if (ret < 0) {
+		LOG_ERR("Get UART clock rate error %d", ret);
+		return ret;
+	}
+
+	/* Assemble the updated registers, validity checks contained within */
+	if ((!uart_cfg2npcm_parity(&mode_reg, cfg->parity)) ||
+	    (!uart_cfg2npcm_stopbits(&mode_reg, cfg->stop_bits)) ||
+	    (!uart_cfg2npcm_databits(&mode_reg, cfg->data_bits))) {
+		return -ENOTSUP;
+	}
+
+	/* Set baud rate */
+	uart_set_npcm_baud_rate(dev, cfg->baudrate, uart_rate);
+	inst->UFRS = mode_reg;
+
+	return 0;
+}
+
+static inline enum uart_config_parity uart_npcm_cfg_parity(uint8_t mode_reg)
+{
+	if (NPCM_IS_BIT_SET(mode_reg, NPCM_UFRS_PEN)) {
+		/* Parity enabled */
+		switch (FIELD_GET(GENMASK(5, 4), mode_reg)) {
+			default:
+			case 0:
+				return UART_CFG_PARITY_ODD;
+			case 1:
+				return UART_CFG_PARITY_EVEN;
+			case 2:
+				return UART_CFG_PARITY_MARK;
+			case 3:
+				return UART_CFG_PARITY_SPACE;
+		}
+	} else {
+		/* Parity disabled */
+		return UART_CFG_PARITY_NONE;
+	}
+}
+
+static inline enum uart_config_stop_bits uart_npcm_cfg_stopbits(uint8_t mode_reg)
+{
+	if (NPCM_IS_BIT_SET(mode_reg, NPCM_UFRS_STP))
+		/* Stop bits enabled */
+		return UART_CFG_STOP_BITS_2;
+	else
+		return UART_CFG_STOP_BITS_1;
+}
+
+static inline enum uart_config_data_bits uart_npcm_cfg_databits(uint8_t mode_reg)
+{
+	switch (FIELD_GET(GENMASK(1, 0), mode_reg)) {
+		default:
+		case 0:
+			return UART_CFG_DATA_BITS_8;
+		case 1:
+			return UART_CFG_DATA_BITS_7;
+		case 2:
+			return UART_CFG_DATA_BITS_9;
+		case 3:
+			return UART_CFG_DATA_BITS_9;
+	}
+}
+
+static int uart_npcm_config_get(const struct device *dev, struct uart_config *cfg)
+{
+	const struct uart_npcm_config *const config = dev->config;
+	struct uart_npcm_data *const data = dev->data;
+	struct uart_reg *const inst = config->base;
+	uint8_t mode_reg = inst->UFRS;
+
+	cfg->baudrate = data->baud_rate;
+	cfg->parity = uart_npcm_cfg_parity(mode_reg);
+	cfg->stop_bits = uart_npcm_cfg_stopbits(mode_reg);
+	cfg->data_bits = uart_npcm_cfg_databits(mode_reg);
+	cfg->flow_ctrl = UART_CFG_FLOW_CTRL_NONE;
+
+	return 0;
+}
+#endif /* CONFIG_UART_USE_RUNTIME_CONFIGURE */
+
 /* UART driver registration */
 static const struct uart_driver_api uart_npcm_driver_api = {
 	.poll_in = uart_npcm_poll_in,
@@ -306,6 +484,10 @@ static const struct uart_driver_api uart_npcm_driver_api = {
 	.irq_update = uart_npcm_irq_update,
 	.irq_callback_set = uart_npcm_irq_callback_set,
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
+#ifdef CONFIG_UART_USE_RUNTIME_CONFIGURE
+	.configure = uart_npcm_configure,
+	.config_get = uart_npcm_config_get,
+#endif /* CONFIG_UART_USE_RUNTIME_CONFIGURE */
 };
 
 void uart_set_npcm_baud_rate(const struct device *dev, int baud_rate, uint32_t src_clk)
@@ -366,15 +548,15 @@ void uart_set_npcm_baud_rate(const struct device *dev, int baud_rate, uint32_t s
 	clk = src_clk;
 
 	for (i = 1; i <= 31; i++) {
-		div = (clk * 10) / (16 * data->baud_rate * prescalar);
+		div = (clk * 10) / (16 * baud_rate * prescalar);
 		if (div == 0) {
 			div = 1;
 		}
 
 		calc_baudrate = (clk * 10) / (16 * div * prescalar);
-		deviation = (calc_baudrate > data->baud_rate) ?
-				    (calc_baudrate - data->baud_rate) :
-				    (data->baud_rate - calc_baudrate);
+		deviation = (calc_baudrate > baud_rate) ?
+				    (calc_baudrate - baud_rate) :
+				    (baud_rate - calc_baudrate);
 		if (deviation < min_deviation) {
 			min_deviation = deviation;
 			opt_prescalar = i;
