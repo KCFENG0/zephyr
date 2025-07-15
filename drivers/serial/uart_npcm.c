@@ -494,7 +494,6 @@ void uart_set_npcm_baud_rate(const struct device *dev, int baud_rate, uint32_t s
 {
 	uint32_t div, opt_dev, min_deviation, clk, calc_baudrate, deviation;
 	const struct uart_npcm_config *const config = dev->config;
-	struct uart_npcm_data *const data = dev->data;
 	struct uart_reg *const inst = config->base;
 	uint8_t prescalar, opt_prescalar, i;
 
