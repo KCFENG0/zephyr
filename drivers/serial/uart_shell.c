@@ -62,6 +62,74 @@ static int cmd_uart_baudrate(const struct shell *sh, size_t argc, char **argv)
 	return 0;
 }
 
+static int cmd_uart_conf(const struct shell *sh, size_t argc, char **argv)
+{
+	char *s_dev_name = argv[1];
+	const struct device *dev;
+	struct uart_config cfg;
+	uint32_t baudrate;
+	uint32_t databits;
+	uint32_t parity;
+	uint32_t stopbits;
+	int ret;
+
+	dev = device_get_binding(s_dev_name);
+	if (dev == NULL) {
+		shell_error(sh, "UART: Device driver %s not found.", s_dev_name);
+		return -ENODEV;
+	}
+
+	baudrate = strtol(argv[2], NULL, 10);
+	databits = strtol(argv[3], NULL, 10);
+	parity = strtol(argv[4], NULL, 10);
+	stopbits = strtol(argv[5], NULL, 10);
+
+	if (databits == 7) {
+		databits = UART_CFG_DATA_BITS_7;
+	} else if (databits == 8) {
+		databits = UART_CFG_DATA_BITS_8;
+	} else if (databits == 9) {
+		databits = UART_CFG_DATA_BITS_9;
+	} else {
+		shell_error(sh, "UART: Failed databits (7/8/9).");
+		return -EINVAL;
+	}
+
+	if ((parity < 0) || (parity > 3)) {
+		shell_error(sh, "UART: Failed parity (0~3).");
+		return -EINVAL;
+	}
+
+	if (stopbits == 1) {
+		stopbits = UART_CFG_STOP_BITS_1;
+	} else if (stopbits == 2) {
+		stopbits = UART_CFG_STOP_BITS_2;
+	}
+	else {
+		shell_error(sh, "UART: Failed stopbits (1/2).");
+		return -EINVAL;
+	}
+
+	ret = uart_config_get(dev, &cfg);
+	if (ret < 0) {
+		shell_error(sh, "UART: Failed to get current configuration: %d", ret);
+		return ret;
+	}
+
+	cfg.baudrate = baudrate;
+	cfg.data_bits = databits;
+	cfg.parity = parity;
+	cfg.stop_bits = stopbits;
+
+	ret = uart_configure(dev, &cfg);
+	if (ret < 0) {
+		shell_error(sh, "UART: Failed to configure device: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int cmd_uart_flow_control(const struct shell *sh, size_t argc, char **argv)
 {
 	char *s_dev_name = argv[1];
@@ -126,6 +194,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_uart_cmds,
 		      "Configure UART device baudrate\n"
 		      "Usage: baudrate <device> <baudrate>",
 		      cmd_uart_baudrate, 3, 0),
+	SHELL_CMD_ARG(conf, &dsub_device_name,
+		      "Configure UART device conifg\n"
+		      "Usage: uart conf <device> <baudrate> <databits> <parity> <stopbits>",
+		      cmd_uart_conf, 6, 0),
 	SHELL_CMD_ARG(fc, &dsub_device_name,
 		      "Configure UART device flow control\n"
 		      "Usage: fc <device> <none|rtscts|dtrdsr|rs485>",
