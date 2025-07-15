@@ -52,6 +52,20 @@
 	pinctrl-names = "default";
 };
 
+&uart3 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&cr_uart3_sin_sout_gpioc0_c1>;
+	pinctrl-names = "default";
+};
+
+&uart4 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&cr_uart4_sin_sout_gpioc4_c5>;
+	pinctrl-names = "default";
+};
+
 &sgpio0 {
 	status = "okay";
 	pinctrl-0 = <&iox1_ldsh_dout_din_sclk_gpio74_75_f2_f3>;
