@@ -45,6 +45,7 @@
 		qspi-flags = <NPCM_QSPI_SW_CS0>;
 		rd-mode = "NPCM_RD_MODE_QUAD";
 		mapped-addr = <0x80000>;
+		label = "spi_spim0_cs0";
 
 		partitions {
 			compatible = "fixed-partitions";
@@ -58,7 +59,7 @@
 
 	        storage_partition: partition@100000 {
 				label = "storage";
-				reg = <0x00100000 0x00100000>;
+				reg = <0x00100000 0x00010000>;
 			};
 	    };
 	};

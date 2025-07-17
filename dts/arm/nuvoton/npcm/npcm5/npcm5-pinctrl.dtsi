@@ -23,6 +23,38 @@
 		};
 	};
 
+	/omit-if-no-ref/ fiu0_pvt_cs_io0_io1_clk_gpio23_45_46_47: periph-fiu0-pvt {
+		cs {
+			nuvoton,device-control = <NPCM_PINCTRL_DEVCNT_6_SHD_SPI_TRIS 0>;
+			pinmux = <GPIO23__PVT_CS__I3C2_SCL__DCDB__ACK 1>;
+		};
+		io0 {
+			pinmux = <GPIO45__SHD_DIO0 1>;
+		};
+		io1 {
+			pinmux = <GPIO46__SHD_DIO1 1>;
+		};
+		clk {
+			pinmux = <GPIO47__SHD_SCLK 1>;
+		};
+	};
+
+	/omit-if-no-ref/ fiu0_back_cs_io0_io1_clk_gpio21_45_46_47: periph-fiu0-back {
+		cs {
+			nuvoton,device-control = <NPCM_PINCTRL_DEVCNT_6_SHD_SPI_TRIS 0>;
+			pinmux = <GPIO21__BACK_CS__I3C1_SCL__DSRB__PE__CIRRX 1>;
+		};
+		io0 {
+			pinmux = <GPIO45__SHD_DIO0 1>;
+		};
+		io1 {
+			pinmux = <GPIO46__SHD_DIO1 1>;
+		};
+		clk {
+			pinmux = <GPIO47__SHD_SCLK 1>;
+		};
+	};
+
 	/omit-if-no-ref/ fiu0_shd_quad_io2_io3_clk_gpio55_56: periph-fiu0-shd-quad {
 		io2 {
 			pinmux = <GPIO55__SHD_DIO2__WP_GPIO55 1>;
