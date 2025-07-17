@@ -289,6 +289,51 @@ static int sgpio_npcm_config(const struct device *dev, gpio_pin_t pin, gpio_flag
 	return 0;
 }
 
+static int sgpio_npcm_poll_test(const struct device *dev)
+{
+	struct sgpio_reg *inst = HAL_INSTANCE(dev);
+	uint8_t set_port, reg;
+
+	npcm_sgpio_setup_enable(DRV_CONFIG(dev)->parent, false);
+	set_port = inst->IOXCFG2;
+	reg = inst->IOXCTS;
+
+	inst->IOXCTS = 0x00;
+	inst->IOXCFG2 = 0x11;
+	inst->XDOUT0 = 0xfe;
+	k_msleep(5);
+	inst->IOXCTS = inst->IOXCTS | BIT(3);
+	inst->IOXCTS = inst->IOXCTS | BIT(7);
+	k_msleep(5);
+	inst->IOXCTS = inst->IOXCTS | BIT(0);
+	k_msleep(5);
+
+	if(inst->IOXCTS  == 0x98 )
+		inst->IOXCTS = inst->IOXCTS | BIT(4);
+	else
+		return 0;
+
+	k_msleep(5);
+	inst->IOXCTS = inst->IOXCTS | BIT(0);
+	k_msleep(5);
+
+	if(inst->IOXCTS  == 0x98 ) {
+		inst->IOXCTS = inst->IOXCTS | BIT(4);
+		if(inst->XDOUT0 != inst->XDIN0)
+			return 0;
+	}
+	else
+		return 0;
+
+       npcm_sgpio_setup_enable(DRV_CONFIG(dev)->parent, false);
+
+       inst->IOXCFG2 = set_port;
+       inst->XDOUT0 = 0x00;
+       npcm_sgpio_setup_enable(DRV_CONFIG(dev)->parent, true);
+
+	return 1;
+}
+
 static int sgpio_npcm_port_toggle_bits(const struct device *dev, gpio_port_value_t mask)
 {
 	struct sgpio_reg *inst = HAL_INSTANCE(dev);
@@ -414,6 +459,7 @@ static const struct gpio_driver_api sgpio_npcm_driver = {
 	.port_toggle_bits = sgpio_npcm_port_toggle_bits,
 	.pin_interrupt_configure = sgpio_npcm_pin_interrupt_configure,
 	.manage_callback = sgpio_npcm_manage_callback,
+	.sgpio_poll_test = sgpio_npcm_poll_test,
 };
 
 static void sgpio_npcm_isr(const void *arg)
@@ -466,7 +512,7 @@ int sgpio_npcm_parent_init(const struct device *parent)
 		return -1;
 	}
 
-	/* Configure pin-mux for I2C device */
+	/* Configure pin-mux for SIOX device */
 	ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
 	if (ret < 0) {
 		LOG_ERR("SGPIO pinctrl setup failed (%d)", ret);

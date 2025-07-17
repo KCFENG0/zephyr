@@ -813,6 +813,7 @@ __subsystem struct gpio_driver_api {
 	int (*manage_callback)(const struct device *port,
 			       struct gpio_callback *cb,
 			       bool set);
+	int (*sgpio_poll_test)(const struct device *port);
 	uint32_t (*get_pending_int)(const struct device *dev);
 #ifdef CONFIG_GPIO_GET_DIRECTION
 	int (*port_get_direction)(const struct device *port, gpio_port_pins_t map,
@@ -942,6 +943,17 @@ static inline int gpio_pin_interrupt_configure_dt(const struct gpio_dt_spec *spe
 {
 	return gpio_pin_interrupt_configure(spec->port, spec->pin, flags);
 }
+
+__syscall int gpio_sgpio_poll_test(const struct device *port);
+
+static inline int z_impl_gpio_sgpio_poll_test(const struct device *port)
+{
+	const struct gpio_driver_api *api =
+			(const struct gpio_driver_api *)port->api;
+
+	return api->sgpio_poll_test(port);
+}
+
 
 /**
  * @brief Configure a single pin.

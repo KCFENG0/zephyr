@@ -37,6 +37,49 @@ struct sh_gpio {
 	const struct device *dev;
 	gpio_pin_t pin;
 };
+
+
+unsigned int sgpio_test[64], sgpio_result[8], node;
+const struct device *sgpio_outarray[8], *sgpio_inarray[8];
+const struct device *sgpio_dev;
+const char* sgpio_str[] = {
+		"SGPIO0_0",
+		"SGPIO0_1",
+		"SGPIO0_2",
+		"SGPIO0_3",
+		"SGPIO0_4",
+		"SGPIO0_5",
+		"SGPIO0_6",
+		"SGPIO0_7",
+		"SGPIO1_0",
+		"SGPIO1_1",
+		"SGPIO1_2",
+		"SGPIO1_3",
+		"SGPIO1_4",
+		"SGPIO1_5",
+		"SGPIO1_6",
+		"SGPIO1_7",
+};
+const char* sgpio_in[] = {
+		"SGPIO0_8",
+		"SGPIO0_9",
+		"SGPIO0_a",
+		"SGPIO0_b",
+		"SGPIO0_c",
+		"SGPIO0_d",
+		"SGPIO0_e",
+		"SGPIO0_f",
+		"SGPIO1_8",
+		"SGPIO1_9",
+		"SGPIO1_a",
+		"SGPIO1_b",
+		"SGPIO1_c",
+		"SGPIO1_d",
+		"SGPIO1_e",
+		"SGPIO1_f",
+};
+struct gpio_callback int_gpio_cb[64];
+
 /*
  * Find idx-th pin reference from the set of non reserved
  * pin numbers and provided line names.
@@ -640,6 +683,126 @@ static void print_ordered_info(const struct shell *sh)
 	foreach_pin(pin_ordered, &data);
 }
 
+static void int_gpio_callback(const struct device *dev,
+                                     struct gpio_callback *cb, uint32_t pins)
+{
+	int i;
+
+	for(i = 0; i<16; i++) {
+		if (strncmp(dev->name, sgpio_in[i], 8) == 0)
+			sgpio_result[i % 8] = sgpio_result[i % 8] | pins;
+	}
+}
+
+static int cmd_gpio_sgpio_loopback(const struct shell *sh,
+			size_t argc, char **argv)
+{
+	const struct gpio_ctrl *ctrl;
+	unsigned long value;
+	int i,j;
+
+	ctrl = get_gpio_ctrl(argv[ARGV_DEV]);
+	if (ctrl == NULL) {
+		shell_error(sh, "unknown gpio controller: %s", argv[ARGV_DEV]);
+		return -EINVAL;
+	}
+
+	if (strncmp(argv[ARGV_DEV], "SGPIO0_0", 8) == 0)
+		node=0;
+	else if (strncmp(argv[ARGV_DEV], "SGPIO1_0", 8) == 0)
+		node=8;
+	else
+		return -EINVAL;
+
+	value = shell_strtoul(argv[2], 10, &node);
+	if(value >8)
+		return -EINVAL;
+
+	for(j=0; j < value; j++) {
+		for(i = 0; i < 8; i++) {
+			sgpio_inarray[i] = device_get_binding(sgpio_in[node+j]);
+			if (gpio_pin_configure(sgpio_inarray[i], i,
+									(GPIO_INPUT |
+										GPIO_ACTIVE_HIGH))) {
+					printf("Unable to configure GPIO pin\n");
+			}
+			gpio_init_callback(&int_gpio_cb[8 * j + i], int_gpio_callback,
+							BIT(i));
+			gpio_add_callback(sgpio_inarray[i], &int_gpio_cb[8*j+i]);
+			gpio_pin_interrupt_configure(sgpio_inarray[i], i,
+							GPIO_INT_EDGE_BOTH);
+		}
+	}
+
+	for(i = 0; i < value; i++) {
+		sgpio_outarray[i] = device_get_binding(sgpio_str[node+i]);
+		for(j = 1; j < 8; j++) {
+				gpio_pin_configure(sgpio_outarray[i], j,
+								GPIO_OUTPUT_INIT_HIGH);
+				k_msleep(10);
+		}
+	}
+	for(i=0; i<value; i++) {
+		if(sgpio_result[i]==0xfe) {
+			printf("[%s]EDGE HIGH test pass\n",sgpio_in[node+i]);
+			sgpio_result[i]=0;
+		}
+		else
+			printf("[%s]EDGE HIGH test failed\n",sgpio_in[node+i]);
+	}
+
+	for(i = 0; i < value; i++) {
+		sgpio_outarray[i] = device_get_binding(sgpio_str[node+i]);
+		for(j = 1; j < 8; j++) {
+				gpio_pin_configure(sgpio_outarray[i], j,
+								GPIO_OUTPUT_INIT_LOW);
+				k_msleep(10);
+		}
+	}
+
+	for(i=0; i<value; i++) {
+		if(sgpio_result[i]==0xfe) {
+			printf("[%s]EDGE LOW test pass\n",sgpio_in[node+i]);
+			sgpio_result[i]=0;
+		}
+		else
+			printf("[%s]EDGE LOW test failed\n",sgpio_in[node+i]);
+	}
+
+	for(j=0; j < value; j++) {
+		for(i = 0; i < 8; i++) {
+			sgpio_inarray[i] = device_get_binding(sgpio_in[node+j]);
+			gpio_pin_interrupt_configure(sgpio_inarray[i], i,
+							GPIO_INT_DISABLE);
+		}
+	}
+
+	return 0;
+}
+
+static int cmd_gpio_sgpio_poll_test(const struct shell *sh,
+			size_t argc, char **argv)
+{
+	int ret;
+
+	if (strncmp(argv[ARGV_DEV], "SGPIO0_0", 8) == 0){
+		node=0;
+		sgpio_dev = device_get_binding("SGPIO0_0");
+	}
+	else if (strncmp(argv[ARGV_DEV], "SGPIO1_0", 8) == 0){
+		node=8;
+		sgpio_dev = device_get_binding("SGPIO1_0");
+	}
+
+	ret = gpio_sgpio_poll_test(sgpio_dev);
+
+	if(ret == 1)
+		printf("[%s]poll test pass\n",sgpio_str[node]);
+	else
+		printf("[%s]poll test failed\n",sgpio_str[node]);
+	return 0;
+}
+
 static int cmd_gpio_info(const struct shell *sh, size_t argc, char **argv)
 {
 	const struct gpio_ctrl *ctrl = get_gpio_ctrl(argv[ARGV_DEV]);
@@ -672,6 +835,14 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_gpio,
 	SHELL_CMD_ARG(set, &sub_gpio_dev,
 		"Set GPIO pin value\n"
 		"Usage: gpio set <device> <pin> <level 0|1>", cmd_gpio_set, 4, 0),
+	SHELL_CMD_ARG(sgpio_loopback, &sub_gpio_dev,
+		"SGPIO loopback test\n"
+		"Usage: gpio sgpio_loopback <SGPIO0_0|SGPIO1_0> <port>",
+		cmd_gpio_sgpio_loopback, 3	, 0),
+	SHELL_CMD_ARG(sgpio_poll_test, &sub_gpio_dev,
+		"SGPIO poll test\n"
+		"Usage: gpio sgpio_poll_test <SGPIO0_0|SGPIO1_0>",
+		cmd_gpio_sgpio_poll_test, 2	, 0),
 	SHELL_COND_CMD_ARG(CONFIG_GPIO_SHELL_TOGGLE_CMD, toggle, &sub_gpio_dev,
 		"Toggle GPIO pin\n"
 		"Usage: gpio toggle <device> <pin>", cmd_gpio_toggle, 3, 0),
