@@ -52,6 +52,7 @@ struct eth_npcm_dev_cfg {
 	void (*config_func)(void);
 	uint32_t clk_cfg;
 	const struct pinctrl_dev_config *pcfg;
+	volatile uint32_t *emcphy_ctl_reg;
 };
 
 /* Device run time data */
@@ -967,6 +968,10 @@ static int eth_initialize(const struct device *dev)
 		__ETH_UNLOCK(heth);
 	}
 
+	/* EMCPHY_CTL set Phy address */
+	sys_write8((uint8_t)(heth->InitParm.PhyAddress << NPCM_EMCPHYCTL_PHYADDR),
+			(mem_addr_t)dev_cfg->emcphy_ctl_reg);
+
 	/* EMAC Software reset */
 	RegSetBit(emac_regs->DMABMR, BIT(NPCM_DMABMR_SR));
 	timeout = 0;
@@ -1222,6 +1227,7 @@ static const struct eth_npcm_dev_cfg eth0_config = {
 	.config_func = eth0_irq_config,
 	.clk_cfg = DT_INST_PHA(0, clocks, clk_cfg),
 	.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(0),
+	.emcphy_ctl_reg = (volatile uint32_t *)DT_INST_REG_ADDR_BY_IDX(0, 1),
 };
 
 static struct eth_npcm_dev_data eth0_data = {

@@ -700,7 +700,8 @@
 
 		emac: ethernet@40018000 {
 			compatible = "nuvoton,npcm-ethernet";
-			reg = <0x40018000 0x2000>;
+			reg = <0x40018000 0x2000>,
+			       <0x400c304c 0x2>;
 			clocks = <&pcc NPCM_CLOCK_EMAC>;
 			interrupts = <36 3>;
 			status = "disabled";

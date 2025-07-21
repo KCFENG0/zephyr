@@ -453,7 +453,7 @@
 		};
 
 		mdio_en {
-			pinmux = <GPIO06__EMAC_MDI0__DCDB__PWM9 1>;
+			pinmux = <GPIO07__EMAC_MDC__RIB__TA9 1>;
 		};
 	};
 };

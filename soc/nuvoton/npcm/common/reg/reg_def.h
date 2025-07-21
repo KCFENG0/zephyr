@@ -3664,6 +3664,8 @@ struct emac_reg {
 /* DMACHRBAR fields */
 #define NPCM_DMACHRBAR_HRBAP                         (0U)
 
+/* EMCPHY_CTL phy address fields */
+#define NPCM_EMCPHYCTL_PHYADDR               	     (3U)
 typedef enum {
 	/* 1: Configuration */
 	SIB_DEV_CFG = 1,
