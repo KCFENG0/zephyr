@@ -23,4 +23,6 @@
 
 #define NPCM_PUPD_EN_OFFSET(n)		(((n) == 2 ) ? 0x073 : ((n) == 3 ) ? 0x07b : (0x028 + n))
 
+#define SCFG_BASE_ADDR (0x400C3000)
+
 #endif /* _NUVOTON_NPCM_SOC_H_ */
