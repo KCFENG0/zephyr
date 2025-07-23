@@ -13,7 +13,8 @@
 
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
-void z_arm_platform_init(void)
+#ifdef CONFIG_SOC_RESET_HOOK
+void soc_reset_hook(void)
 {
 	uintptr_t scfg_base = SCFG_BASE_ADDR;
 	struct scfg_reg *inst_scfg = (struct scfg_reg *)scfg_base;
@@ -24,6 +25,7 @@ void z_arm_platform_init(void)
 	inst_scfg->DEVALT10 = NPCM_DEVALT10_CRGPIO_SELECT_SL_CORE;
 #endif
 }
+#endif
 
 #if CONFIG_SOC_LATE_INIT_HOOK
 __pinned_bss bool npcm_sys_application;
@@ -35,10 +37,3 @@ void soc_late_init_hook(void)
 	npcm_sys_application = true;
 }
 #endif
-
-static int soc_npcm5_init(void)
-{
-	return 0;
-}
-
-SYS_INIT(soc_npcm5_init, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
