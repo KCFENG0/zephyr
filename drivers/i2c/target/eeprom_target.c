@@ -155,8 +155,10 @@ static int eeprom_target_read_processed(struct i2c_target_config *config,
 	/* Increment will be done in the next read_processed callback
 	 * In case of STOP, the byte won't be taken in account
 	 */
-
-	return 0;
+	if(data->buffer_idx == data->buffer_size )
+		return 1;
+	else
+		return 0;
 }
 
 static int eeprom_target_stop(struct i2c_target_config *config)
@@ -255,6 +257,7 @@ static int i2c_eeprom_target_init(const struct device *dev)
 	data->buffer = cfg->buffer;
 	data->config.address = cfg->bus.addr;
 	data->config.callbacks = &eeprom_callbacks;
+	eeprom_target_register(dev);
 
 	return 0;
 }
