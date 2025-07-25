@@ -111,6 +111,9 @@ const struct shell *shell_backend_uart_get_ptr(void);
  */
 struct smp_shell_data *shell_uart_smp_shell_data_get_ptr(void);
 
+/* NPCM: IRQ callback initialization */
+void shell_uart_irq_callback_init(void);
+
 #ifdef __cplusplus
 }
 #endif

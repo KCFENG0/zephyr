@@ -1263,6 +1263,11 @@ static int instance_init(const struct shell *sh,
 	return ret;
 }
 
+void shell_irq_callback_init(const struct shell *sh)
+{
+	sh->iface->api->init_irq_callback(sh->iface);
+}
+
 static int instance_uninit(const struct shell *sh)
 {
 	__ASSERT_NO_MSG(sh);

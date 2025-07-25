@@ -719,6 +719,8 @@ struct shell_transport_api {
 	 */
 	void (*update)(const struct shell_transport *transport);
 
+	/* NPCM: IRQ callback initialization */
+	void (*init_irq_callback)(const struct shell_transport *transport);
 };
 
 struct shell_transport {
@@ -1298,6 +1300,10 @@ int shell_mode_delete_set(const struct shell *sh, bool val);
  * @retval return value of previous command
  */
 int shell_get_return_value(const struct shell *sh);
+
+
+/* NPCM: IRQ callback initialization */
+void shell_irq_callback_init(const struct shell *sh);
 
 /**
  * @}

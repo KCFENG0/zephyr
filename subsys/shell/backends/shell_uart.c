@@ -208,6 +208,18 @@ static void uart_callback(const struct device *dev, void *user_data)
 	}
 }
 
+void init_irq_cb(const struct shell_transport *transport)
+{
+	struct shell_uart_int_driven *sh_uart = (struct shell_uart_int_driven *)transport->ctx;
+	const struct device *dev = sh_uart->common.dev;
+
+	if (IS_ENABLED(CONFIG_SHELL_BACKEND_SERIAL_API_INTERRUPT_DRIVEN)) {
+		sh_uart->tx_busy = 0;
+		uart_irq_callback_user_data_set(dev, uart_callback, (void *)sh_uart);
+		uart_irq_rx_enable(dev);
+	}
+}
+
 static void irq_init(struct shell_uart_int_driven *sh_uart)
 {
 	const struct device *dev = sh_uart->common.dev;
@@ -513,6 +525,7 @@ const struct shell_transport_api shell_uart_transport_api = {
 #ifdef CONFIG_MCUMGR_TRANSPORT_SHELL
 	.update = update,
 #endif /* CONFIG_MCUMGR_TRANSPORT_SHELL */
+	.init_irq_callback = init_irq_cb,
 };
 
 SHELL_UART_DEFINE(shell_transport_uart);
@@ -551,6 +564,11 @@ static int enable_shell_uart(void)
 	shell_init(&shell_uart, dev, cfg_flags, log_backend, level);
 
 	return 0;
+}
+
+void shell_uart_irq_callback_init(void)
+{
+	shell_irq_callback_init(&shell_uart);
 }
 
 SYS_INIT(enable_shell_uart, POST_KERNEL,
