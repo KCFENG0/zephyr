@@ -77,3 +77,16 @@ int console_init(void)
 
 	return 0;
 }
+
+int console_close(void)
+{
+	const struct device *uart_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+
+	if (!device_is_ready(uart_dev)) {
+		return -ENODEV;
+	}
+
+	tty_close(&console_serial);
+
+	return 0;
+}

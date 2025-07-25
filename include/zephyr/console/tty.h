@@ -51,6 +51,8 @@ struct tty_serial {
  */
 int tty_init(struct tty_serial *tty, const struct device *uart_dev);
 
+int tty_close(struct tty_serial *tty);
+
 /**
  * @brief Set receive timeout for tty device.
  *

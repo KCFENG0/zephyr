@@ -262,6 +262,28 @@ int tty_init(struct tty_serial *tty, const struct device *uart_dev)
 	return 0;
 }
 
+int tty_close(struct tty_serial *tty)
+{
+	if (!tty) {
+		return -EINVAL;
+	}
+
+	k_sem_give(&tty->rx_sem);
+	k_sem_give(&tty->tx_sem);
+
+	uart_irq_rx_disable(tty->uart_dev);
+	uart_irq_tx_disable(tty->uart_dev);
+
+	tty->uart_dev = NULL;
+	tty->rx_ringbuf = NULL;
+	tty->rx_ringbuf_sz = 0U;
+	tty->tx_ringbuf = NULL;
+	tty->tx_ringbuf_sz = 0U;
+	tty->rx_get = tty->rx_put = tty->tx_get = tty->tx_put = 0U;
+
+	return 0;
+}
+
 int tty_set_rx_buf(struct tty_serial *tty, void *buf, size_t size)
 {
 	uart_irq_rx_disable(tty->uart_dev);

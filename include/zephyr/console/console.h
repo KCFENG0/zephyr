@@ -34,6 +34,8 @@ extern "C" {
  */
 int console_init(void);
 
+int console_close(void);
+
 /**
  * @brief Read data from console.
  *
