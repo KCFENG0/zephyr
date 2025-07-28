@@ -44,7 +44,7 @@
  * @{
  */
 /** PWM pin normal polarity (active-high pulse). */
-#define PWM_POLARITY_NORMAL	(0 << 0)
+#define PWM_POLARITY_NORMAL     (0 << 0)
 
 /** PWM pin inverted polarity (active-low pulse). */
 #define PWM_POLARITY_INVERTED	(1 << 0)
@@ -67,11 +67,24 @@
 /** PWMCTL PWR */
 #define PWMCTL_PWR              (1 << 7)
 
+/*
+ * The upper 8 bits are reserved for SoC specific flags.
+ *    Heartbeat Example Type a flag   [8]
+ *    Heartbeat Example Type b flag   [9]
+ *    Heartbeat Example Type c flag   [10]
+ *    Heartbeat Example Type d flag   [11]
+ *    Heartbeat Example Type d1 flag  [12]
+ */
+#define PWM_HB_TYPE_A           (1 << 8)
+#define PWM_HB_TYPE_B           (1 << 9)
+#define PWM_HB_TYPE_C           (1 << 10)
+#define PWM_HB_TYPE_D           (1 << 11)
+#define PWM_HB_TYPE_D1          (1 << 12)
+/** @} */
+
 /** @cond INTERNAL_HIDDEN */
 #define PWM_POLARITY_MASK	0x1
 /** @endcond */
-/** @} */
-
 /** @} */
 
 #endif /* ZEPHYR_INCLUDE_DT_BINDINGS_PWM_PWM_H_ */

@@ -50,6 +50,157 @@ struct pwm_npcm_data {
 	uint32_t cycles_per_sec;
 };
 
+/* Define the pwm_hb_config structure */
+struct pwm_hb_config {
+	uint32_t prsc;
+	uint32_t ctr;
+	uint32_t n_step_rs;
+	uint32_t dcr;
+	uint32_t ctr_fl;
+	uint32_t max_dc_fl;
+	uint32_t n_step_fl;
+	uint32_t ext_on;
+	uint32_t ext_off;
+	uint32_t hb_dc_ctl_field;
+};
+
+struct pwm_hb_config hb_standard[5] = {
+	{
+		// Heartbeat Standard Example: Type A
+		.prsc = 0,
+		.ctr = 745,
+		.n_step_rs = 33,
+		.dcr = 745,
+		.ctr_fl = 745,
+		.max_dc_fl = 745,
+		.n_step_fl = 33,
+		.ext_on = 0,
+		.ext_off = 0,
+		.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD
+	},
+	{
+		// Heartbeat Standard Example: Type B
+		.prsc = 0,
+		.ctr = 181,
+		.n_step_rs = 45,
+		.dcr = 181,
+		.ctr_fl = 181,
+		.max_dc_fl = 181,
+		.n_step_fl = 45,
+		.ext_on = 0,
+		.ext_off = 0,
+		.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD
+	},
+	{
+		// Heartbeat Standard Example: Type C
+		.prsc = 0,
+		.ctr = 69,
+		.n_step_rs = 17,
+		.dcr = 69,
+		.ctr_fl = 69,
+		.max_dc_fl = 69,
+		.n_step_fl = 17,
+		.ext_on = 0,
+		.ext_off = 28,
+		.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD
+	},
+	{
+		// Heartbeat Standard Example: Type D
+		.prsc = 0,
+		.ctr = 222,
+		.n_step_rs = 56,
+		.dcr = 222,
+		.ctr_fl = 256,
+		.max_dc_fl = 256,
+		.n_step_fl = 64,
+		.ext_on = 20,
+		.ext_off = 80,
+		.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD
+	},
+	{
+		// Heartbeat Standard Example: Type D1
+		.prsc = 0,
+		.ctr = 151,
+		.n_step_rs = 28,
+		.dcr = 112,
+		.ctr_fl = 151,
+		.max_dc_fl = 112,
+		.n_step_fl = 28,
+		.ext_on = 40,
+		.ext_off = 80,
+		.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD
+	}
+};
+
+struct pwm_hb_config hb_visual[5] = {
+	{
+		// Heartbeat Visual Example: Type A
+		.prsc = 0,
+		.ctr = 745,
+		.n_step_rs = 33,
+		.dcr = 745,
+		.ctr_fl = 745,
+		.max_dc_fl = 745,
+		.n_step_fl = 33,
+		.ext_on = 0,
+		.ext_off = 0,
+		.hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL
+	},
+	{
+		// Heartbeat Visual Example: Type B
+		.prsc = 0,
+		.ctr = 438,
+		.n_step_rs = 19,
+		.dcr = 438,
+		.ctr_fl = 438,
+		.max_dc_fl = 438,
+		.n_step_fl = 19,
+		.ext_on = 0,
+		.ext_off = 0,
+		.hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL
+	},
+	{
+		// Heartbeat Visual Example: Type C
+		.prsc = 0,
+		.ctr = 162,
+		.n_step_rs = 7,
+		.dcr = 162,
+		.ctr_fl = 162,
+		.max_dc_fl = 162,
+		.n_step_fl = 7,
+		.ext_on = 0,
+		.ext_off = 28,
+		.hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL
+	},
+	{
+		// Heartbeat Visual Example: Type D
+		.prsc = 0,
+		.ctr = 222,
+		.n_step_rs = 56,
+		.dcr = 222,
+		.ctr_fl = 256,
+		.max_dc_fl = 256,
+		.n_step_fl = 64,
+		.ext_on = 20,
+		.ext_off = 80,
+		.hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL
+	},
+	{
+		// Heartbeat Visual Example: Type D1
+		.prsc = 0,
+		.ctr = 151,
+		.n_step_rs = 28,
+		.dcr = 112,
+		.ctr_fl = 151,
+		.max_dc_fl = 112,
+		.n_step_fl = 28,
+		.ext_on = 40,
+		.ext_off = 80,
+		.hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL
+	}
+};
+
+
 /* PWM local functions */
 static int pwm_npcm_configure(const struct device *dev, uint32_t cycles)
 {
@@ -80,121 +231,122 @@ static int pwm_npcm_configure(const struct device *dev, uint32_t cycles)
 	return 0;
 }
 
-/* PWM api functions */
-static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel,
-			       uint32_t period_cycles, uint32_t pulse_cycles,
-			       pwm_flags_t flags)
+/* Get the heartbeat configuration */
+struct pwm_hb_config *get_heartbeat_config(int flags, struct pwm_hb_config *hb_array)
 {
-	/* Single channel for each pwm device */
+    if (flags & PWM_HB_TYPE_A)
+        return &hb_array[0];
+    else if (flags & PWM_HB_TYPE_B)
+        return &hb_array[1];
+    else if (flags & PWM_HB_TYPE_C)
+        return &hb_array[2];
+    else if (flags & PWM_HB_TYPE_D)
+        return &hb_array[3];
+    else if (flags & PWM_HB_TYPE_D1)
+        return &hb_array[4];
+    else
+        return &hb_array[0]; // Default case
+}
+
+/* Set the heartbeat configuration */
+void pwm_npcm_configure_heartbeat(struct pwm_reg *inst, struct pwm_hb_config *hb_cfg)
+{
+	inst->PWMCTL &= ~BIT(NPCM_PWMCTL_PWR);
+	inst->PRSC = hb_cfg->prsc;
+	inst->PWMCTL |= BIT(NPCM_PWMCTL_CKSEL);
+	SET_FIELD(inst->PWMCTL, NPCM_PWMCTL_HB_DC_CTL_FIELD, hb_cfg->hb_dc_ctl_field);
+	inst->PWMCTL |= BIT(NPCM_PWMCTL_HBNK_SEL);
+	inst->CTR = hb_cfg->ctr;
+	inst->N_STEP_RS = hb_cfg->n_step_rs;
+	inst->DCR = hb_cfg->dcr;
+	inst->CTR_FL = hb_cfg->ctr_fl;
+	inst->MAX_DC_FL = hb_cfg->max_dc_fl;
+	inst->N_STEP_FL = hb_cfg->n_step_fl;
+	inst->EXT_ON = hb_cfg->ext_on;
+	inst->EXT_OFF = hb_cfg->ext_off;
+	inst->PWMCTL |= BIT(NPCM_PWMCTL_PWR);
+}
+
+/* PWM API functions */
+static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel,
+                               uint32_t period_cycles, uint32_t pulse_cycles,
+                               pwm_flags_t flags)
+{
+	/* Single channel for each PWM device */
 	ARG_UNUSED(channel);
+
 	const struct pwm_npcm_config *config = dev->config;
 	struct pwm_npcm_data *const data = dev->data;
 	struct pwm_reg *inst = config->base;
-	int prescaler;
-	uint32_t ctl;
-	uint32_t ctr;
-	uint32_t dcr;
-	uint32_t prsc;
 
-    /* Configure pin-mux for PWM device */
-    int ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
-    if (ret < 0) {
+	uint32_t ctl, ctr, dcr, prsc;
+	int prescaler, ret;
+
+	/* Configure pin-mux for PWM device */
+	ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+	if (ret < 0) {
 		LOG_ERR("PWM configure failed (%d)", ret);
-        return ret;
-    }
+		return ret;
+	}
 
 	ctl = inst->PWMCTL | BIT(NPCM_PWMCTL_PWR);
 
-	/* Select PWM inverted polarity (ie. active-low pulse). */
+	/* Set PWM polarity */
 	if (flags & PWM_POLARITY_INVERTED) {
 		ctl |= BIT(NPCM_PWMCTL_INVP);
 	} else {
 		ctl &= ~BIT(NPCM_PWMCTL_INVP);
 	}
 
-	/* Select PWM Operation Synchronization */
+	/* Set PWM operation synchronization */
 	if (flags & PWMCTL_SYNC) {
 		ctl |= BIT(NPCM_PWMCTL_SYNC);
 	} else {
 		ctl &= ~BIT(NPCM_PWMCTL_SYNC);
 	}
 
-	/* If pulse_cycles is 0, switch PWM off and return. */
+	/* If pulse_cycles is 0, disable PWM and return */
 	if (pulse_cycles == 0) {
 		ctl &= ~BIT(NPCM_PWMCTL_PWR);
 		inst->PWMCTL = ctl;
 		return 0;
 	}
 
-	/*
-	 * Calculate PWM prescaler that let period_cycles map to
-	 * maximum pwm period cycles and won't exceed it.
-	 * Then prescaler = ceil (period_cycles / pwm_max_period_cycles)
-	 */
+	/* Calculate prescaler */
 	prescaler = DIV_ROUND_UP(period_cycles, NPCM_PWM_MAX_PERIOD_CYCLES);
 	if (prescaler > NPCM_PWM_MAX_PRESCALER) {
 		return -EINVAL;
 	}
 
-	/* Set PWM prescaler. */
 	prsc = prescaler - 1;
-
-	/* Set PWM period cycles. */
 	ctr = (period_cycles / prescaler) - 1;
-
-	/* Set PWM pulse cycles. */
 	dcr = (pulse_cycles / prescaler) - 1;
 
 	LOG_DBG("freq %d, pre %d, period %d, pulse %d",
 		data->cycles_per_sec / period_cycles, prsc, ctr, dcr);
 
-	/* Reconfigure only if necessary. */
-	if (inst->PWMCTL != ctl || inst->PRSC != prsc || inst->CTR != ctr ||\
-		(flags & PWMCTL_HB_STANDARD) || (flags & PWMCTL_HB_VISUAL) || (flags & PWMCTL_SYNC)) {
-		/* Disable PWM before configuring. */
+	/* Reconfigure only if necessary */
+	if (inst->PWMCTL != ctl || inst->PRSC != prsc || inst->CTR != ctr ||
+		(flags & PWMCTL_HB_STANDARD) || (flags & PWMCTL_HB_VISUAL) ||
+		(flags & PWMCTL_SYNC)) {
+
+		/* Disable PWM before configuring */
 		inst->PWMCTL &= ~BIT(NPCM_PWMCTL_PWR);
 
 		inst->PRSC = prsc;
 		inst->CTR = ctr;
 		inst->DCR = dcr;
 
-		/* Enable PWM now. */
+		/* Enable PWM */
 		inst->PWMCTL = ctl;
 
-		/* Heartbeat Standard and Visual Mode */
+		/* Configure heartbeat modes */
 		if (flags & PWMCTL_HB_STANDARD) {
-			inst->PWMCTL &= ~BIT(NPCM_PWMCTL_PWR);
-			inst->PRSC = 0;
-			inst->PWMCTL |= BIT(NPCM_PWMCTL_CKSEL);
-			SET_FIELD(inst->PWMCTL, NPCM_PWMCTL_HB_DC_CTL_FIELD,
-							NPCM_PWM_HBM_STANDARD);
-			inst->PWMCTL |= BIT(NPCM_PWMCTL_HBNK_SEL);
-			inst->CTR = 181;
-			inst->N_STEP_RS = 45;
-			inst->DCR = 181;
-			inst->CTR_FL = 181;
-			inst->MAX_DC_FL = 181;
-			inst->N_STEP_FL = 45;
-			inst->EXT_ON = 0;
-			inst->EXT_OFF = 0;
-			inst->PWMCTL |= BIT(NPCM_PWMCTL_PWR);
+			pwm_npcm_configure_heartbeat(inst, get_heartbeat_config(flags, hb_standard));
 		} else if (flags & PWMCTL_HB_VISUAL) {
-			inst->PWMCTL &= ~BIT(NPCM_PWMCTL_PWR);
-			inst->PRSC = 0;
-			inst->PWMCTL |= BIT(NPCM_PWMCTL_CKSEL);
-			SET_FIELD(inst->PWMCTL, NPCM_PWMCTL_HB_DC_CTL_FIELD,
-							NPCM_PWM_HBM_VISUAL);
-			inst->PWMCTL |= BIT(NPCM_PWMCTL_HBNK_SEL);
-			inst->CTR = 438;
-			inst->N_STEP_RS = 19;
-			inst->DCR = 438;
-			inst->CTR_FL = 438;
-			inst->MAX_DC_FL = 438;
-			inst->N_STEP_FL = 19;
-			inst->EXT_ON = 0;
-			inst->EXT_OFF = 0;
-			inst->PWMCTL |= BIT(NPCM_PWMCTL_PWR);
+			pwm_npcm_configure_heartbeat(inst, get_heartbeat_config(flags, hb_visual));
 		}
+
 		return 0;
 	}
 
