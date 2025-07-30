@@ -950,6 +950,7 @@ static int eth_initialize(const struct device *dev)
 	uint32_t timeout = 0;
 	const struct eth_npcm_dev_cfg *dev_cfg;
 	int ret;
+	uint8_t temp;
 
 	dev_data = dev->data;
 	heth = &dev_data->heth;
@@ -969,7 +970,8 @@ static int eth_initialize(const struct device *dev)
 	}
 
 	/* EMCPHY_CTL set Phy address */
-	sys_write8((uint8_t)(heth->InitParm.PhyAddress << NPCM_EMCPHYCTL_PHYADDR),
+	temp = sys_read8((mem_addr_t)dev_cfg->emcphy_ctl_reg);
+	sys_write8((uint8_t)(heth->InitParm.PhyAddress << NPCM_EMCPHYCTL_PHYADDR) | temp,
 			(mem_addr_t)dev_cfg->emcphy_ctl_reg);
 
 	/* EMAC Software reset */
