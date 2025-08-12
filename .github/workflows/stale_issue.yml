@@ -7,7 +7,7 @@ jobs:
   stale:
     name: Find Stale issues and PRs
     runs-on: ubuntu-latest-l
-    if: github.repository == 'zephyrproject-rtos/zephyr'
+    if: github.repository == 'nuvoton-CS00/zephyr'
     steps:
     - uses: actions/stale@v8
       with:
