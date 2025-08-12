@@ -21,9 +21,8 @@ concurrency:
 
 jobs:
   twister-build-prep:
-    if: github.repository_owner == 'zephyrproject-rtos'
-    runs-on:
-      group: zephyr-runner-v2-linux-x64-4xlarge
+    if: github.repository_owner == 'nuvoton-CS00'
+    runs-on: ubuntu-latest-l
     container:
       image: ghcr.io/zephyrproject-rtos/ci:v0.26.18
       options: '--entrypoint /bin/bash'
@@ -124,8 +123,7 @@ jobs:
           echo "fullrun=${TWISTER_FULL}" >> $GITHUB_OUTPUT
 
   twister-build:
-    runs-on:
-      group: zephyr-runner-v2-linux-x64-4xlarge
+    runs-on: ubuntu-latest-l
     needs: twister-build-prep
     if: needs.twister-build-prep.outputs.size != 0
     container:
@@ -302,7 +300,7 @@ jobs:
   twister-test-results:
     name: "Publish Unit Tests Results"
     needs: twister-build
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest-l
     # the build-and-test job might be skipped, we don't need to run this job then
     if: success() || failure()
 

@@ -22,7 +22,7 @@ on:
 jobs:
   scripts-tests:
     name: Scripts tests
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest-l
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12']

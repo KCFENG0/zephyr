@@ -25,9 +25,9 @@ env:
 jobs:
   doc-file-check:
     name: Check for doc changes
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest-l
     if: >
-      github.repository_owner == 'zephyrproject-rtos'
+      github.repository_owner == 'nuvoton-CS00'
     outputs:
       file_check: ${{ steps.check-doc-files.outputs.any_changed }}
     steps:
@@ -60,10 +60,9 @@ jobs:
     name: "Documentation Build (HTML)"
     needs: [doc-file-check]
     if: >
-      github.repository_owner == 'zephyrproject-rtos' &&
+      github.repository_owner == 'nuvoton-CS00' &&
         ( needs.doc-file-check.outputs.file_check == 'true' || github.event_name != 'pull_request' )
-    runs-on:
-      group: zephyr-runner-v2-linux-x64-4xlarge
+    runs-on: ubuntu-latest-l
     timeout-minutes: 90
     concurrency:
       group: doc-build-html-${{ github.ref }}
@@ -197,9 +196,8 @@ jobs:
     needs: [doc-file-check]
     if: |
       github.event_name != 'pull_request' &&
-      github.repository_owner == 'zephyrproject-rtos'
-    runs-on:
-      group: zephyr-runner-v2-linux-x64-4xlarge
+      github.repository_owner == 'nuvoton-CS00'
+    runs-on: ubuntu-latest-l
     container: texlive/texlive:latest
     timeout-minutes: 120
     concurrency:

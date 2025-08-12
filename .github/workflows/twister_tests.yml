@@ -29,7 +29,7 @@ on:
 jobs:
   twister-tests:
     name: Twister Unit Tests
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest-l
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12']
