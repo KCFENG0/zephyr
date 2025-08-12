@@ -4,6 +4,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+config C2H_SHELL
+	bool "C2H Shell commands"
+	depends on SHELL
+	help
+	  C2H Shell commands
+
 config C2H_NPCM
 	bool "NPCM core access to host modules driver"
 	depends on DT_HAS_NUVOTON_NPCM_C2H_ENABLED

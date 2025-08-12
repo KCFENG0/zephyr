@@ -268,6 +268,75 @@ uint8_t rtc_read_offset(const struct device *dev, SIB_RTC_OFFSET_Enum offset)
 	return value;
 }
 
+void sib_write_offset(const struct device *dev, SIB_DEVICE_T sib_dev,
+		      uint8_t offset, uint8_t value)
+{
+	struct c2h_npcm_config *cfg = (struct c2h_npcm_config *)dev->config;
+	struct c2h_reg *const inst_c2h = cfg->inst_c2h;
+
+	/* Disable interrupts */
+	int key = irq_lock();
+
+	/* Lock host access EC configuration registers (0x4E/0x4F) */
+	inst_c2h->LKSIOHA |= BIT(NPCM_LKSIOHA_LKCFG);
+	if (sib_dev == SIB_DEV_CFG || sib_dev == SIB_DEV_RTC ||
+	    sib_dev == SIB_DEV_PMCHAN1 || sib_dev == SIB_DEV_PMCHAN2 ||
+	    sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4) {
+		__c2h_write_reg(dev, sib_dev, 0x0, offset);
+		__c2h_write_reg(dev, sib_dev, 0x1, value);
+	} else if (sib_dev == SIB_DEV_SHM) {
+		__c2h_write_reg(dev, sib_dev, offset, value);
+	} else if (sib_dev == SIB_DEV_KBC) {
+		__c2h_write_reg(dev, sib_dev, 0x64, offset);
+	} else {
+		LOG_ERR("Not Defined!!");
+	}
+
+	/* Disable Core-to-Host access 'reg' module */
+	inst_c2h->CRSMAE &= (SIB_DEVICE_T)~sib_dev;
+	/* Unlock host access EC configuration registers (0x4E/0x4F) */
+	inst_c2h->LKSIOHA &= ~BIT(NPCM_LKSIOHA_LKCFG);
+
+	/* Enable interrupts */
+	irq_unlock(key);
+}
+
+uint8_t sib_read_offset(const struct device *dev,
+			SIB_DEVICE_T sib_dev, uint8_t offset)
+{
+	struct c2h_npcm_config *cfg = (struct c2h_npcm_config *)dev->config;
+	struct c2h_reg *const inst_c2h = cfg->inst_c2h;
+	uint8_t value = 0xFF;
+
+	/* Disable interrupts */
+	int key = irq_lock();
+
+	/* Lock host access EC configuration registers (0x4E/0x4F) */
+	inst_c2h->LKSIOHA |= BIT(NPCM_LKSIOHA_LKCFG);
+	if (sib_dev == SIB_DEV_CFG || sib_dev == SIB_DEV_RTC ||
+	    sib_dev == SIB_DEV_PMCHAN1 || sib_dev == SIB_DEV_PMCHAN2 ||
+	    sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4) {
+		__c2h_write_reg(dev, sib_dev, 0x0, offset);
+		value = __c2h_read_reg(dev, sib_dev, 0x1);
+	} else if (sib_dev == SIB_DEV_SHM) {
+		value = __c2h_read_reg(dev, sib_dev, offset);
+	} else if (sib_dev == SIB_DEV_KBC) {
+		value = __c2h_read_reg(dev, sib_dev, 0x60);
+	} else {
+		LOG_ERR("Not Defined!!");
+	}
+
+	/* Disable Core-to-Host access 'reg' module */
+	inst_c2h->CRSMAE &= (SIB_DEVICE_T)~sib_dev;
+	/* Unlock host access EC configuration registers (0x4E/0x4F) */
+	inst_c2h->LKSIOHA &= ~BIT(NPCM_LKSIOHA_LKCFG);
+
+	/* Enable interrupts */
+	irq_unlock(key);
+
+	return value;
+}
+
 /* C2H driver registration */
 #define NPCM_C2H_INIT_FUNC(inst) _CONCAT(c2h_init, inst)
 #define NPCM_C2H_INIT_FUNC_DECL(inst) \
