@@ -17,6 +17,8 @@ void rtc_write_offset(const struct device *dev, SIB_RTC_OFFSET_Enum offset, uint
 
 uint8_t rtc_read_offset(const struct device *dev, SIB_RTC_OFFSET_Enum offset);
 
+void sib_lock_host_access(const struct device *dev, SIB_DEVICE_T sib_dev, bool lock);
+
 uint8_t sib_read_offset(const struct device *dev, SIB_DEVICE_T sib_dev, uint8_t offset);
 
 void sib_write_offset(const struct device *dev, SIB_DEVICE_T sib_dev, uint8_t offset, uint8_t value);

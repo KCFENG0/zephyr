@@ -268,6 +268,22 @@ uint8_t rtc_read_offset(const struct device *dev, SIB_RTC_OFFSET_Enum offset)
 	return value;
 }
 
+void sib_lock_host_access(const struct device *dev,
+			  SIB_DEVICE_T sib_dev, bool lock)
+{
+	struct c2h_npcm_config *cfg = (struct c2h_npcm_config *)dev->config;
+	struct c2h_reg *const inst_c2h = cfg->inst_c2h;
+
+	if (sib_dev < SIB_DEV_CFG)
+		return;
+
+	if (lock) {
+		inst_c2h->LKSIOHA |= BIT(sib_dev-1);
+	} else {
+		inst_c2h->LKSIOHA &= ~BIT(sib_dev-1);
+	}
+}
+
 void sib_write_offset(const struct device *dev, SIB_DEVICE_T sib_dev,
 		      uint8_t offset, uint8_t value)
 {
@@ -278,16 +294,14 @@ void sib_write_offset(const struct device *dev, SIB_DEVICE_T sib_dev,
 	int key = irq_lock();
 
 	/* Lock host access EC configuration registers (0x4E/0x4F) */
-	inst_c2h->LKSIOHA |= BIT(NPCM_LKSIOHA_LKCFG);
+	sib_lock_host_access(dev, sib_dev, true);
 	if (sib_dev == SIB_DEV_CFG || sib_dev == SIB_DEV_RTC ||
 	    sib_dev == SIB_DEV_PMCHAN1 || sib_dev == SIB_DEV_PMCHAN2 ||
 	    sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4) {
 		__c2h_write_reg(dev, sib_dev, 0x0, offset);
 		__c2h_write_reg(dev, sib_dev, 0x1, value);
-	} else if (sib_dev == SIB_DEV_SHM) {
+	} else if (sib_dev == SIB_DEV_SHM || sib_dev == SIB_DEV_KBC) {
 		__c2h_write_reg(dev, sib_dev, offset, value);
-	} else if (sib_dev == SIB_DEV_KBC) {
-		__c2h_write_reg(dev, sib_dev, 0x64, offset);
 	} else {
 		LOG_ERR("Not Defined!!");
 	}
@@ -295,7 +309,7 @@ void sib_write_offset(const struct device *dev, SIB_DEVICE_T sib_dev,
 	/* Disable Core-to-Host access 'reg' module */
 	inst_c2h->CRSMAE &= (SIB_DEVICE_T)~sib_dev;
 	/* Unlock host access EC configuration registers (0x4E/0x4F) */
-	inst_c2h->LKSIOHA &= ~BIT(NPCM_LKSIOHA_LKCFG);
+	sib_lock_host_access(dev, sib_dev, false);
 
 	/* Enable interrupts */
 	irq_unlock(key);
@@ -312,16 +326,14 @@ uint8_t sib_read_offset(const struct device *dev,
 	int key = irq_lock();
 
 	/* Lock host access EC configuration registers (0x4E/0x4F) */
-	inst_c2h->LKSIOHA |= BIT(NPCM_LKSIOHA_LKCFG);
+	sib_lock_host_access(dev, sib_dev, true);
 	if (sib_dev == SIB_DEV_CFG || sib_dev == SIB_DEV_RTC ||
 	    sib_dev == SIB_DEV_PMCHAN1 || sib_dev == SIB_DEV_PMCHAN2 ||
 	    sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4) {
 		__c2h_write_reg(dev, sib_dev, 0x0, offset);
 		value = __c2h_read_reg(dev, sib_dev, 0x1);
-	} else if (sib_dev == SIB_DEV_SHM) {
+	} else if (sib_dev == SIB_DEV_SHM || sib_dev == SIB_DEV_KBC) {
 		value = __c2h_read_reg(dev, sib_dev, offset);
-	} else if (sib_dev == SIB_DEV_KBC) {
-		value = __c2h_read_reg(dev, sib_dev, 0x60);
 	} else {
 		LOG_ERR("Not Defined!!");
 	}
@@ -329,7 +341,7 @@ uint8_t sib_read_offset(const struct device *dev,
 	/* Disable Core-to-Host access 'reg' module */
 	inst_c2h->CRSMAE &= (SIB_DEVICE_T)~sib_dev;
 	/* Unlock host access EC configuration registers (0x4E/0x4F) */
-	inst_c2h->LKSIOHA &= ~BIT(NPCM_LKSIOHA_LKCFG);
+	sib_lock_host_access(dev, sib_dev, false);
 
 	/* Enable interrupts */
 	irq_unlock(key);
