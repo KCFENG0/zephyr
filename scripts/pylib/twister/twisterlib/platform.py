@@ -76,9 +76,11 @@ class Platform:
         # if no flash size is specified by the board, take a default of 512K
         self.flash = data.get("flash", 512)
         self.supported = set()
-        for supp_feature in data.get("supported", []):
-            for item in supp_feature.split(":"):
-                self.supported.add(item)
+        supported_features = data.get("supported", [])
+        if supported_features is not None:
+            for supp_feature in supported_features:
+                for item in supp_feature.split(":"):
+                    self.supported.add(item)
 
         self.arch = data['arch']
         self.vendor = data.get('vendor', '')
