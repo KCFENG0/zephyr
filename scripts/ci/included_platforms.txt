@@ -1,0 +1,34 @@
+# Included platforms for CI testing
+# Add one platform per line
+# Lines starting with # are comments
+# Use 'all' to include all platforms (default behavior)
+
+# all
+# Limit to specific platforms (uncomment to enable):
+npcm500_evb
+
+# QEMU Related Boards:
+# qemu_arc
+# qemu_cortex_a53
+# qemu_cortex_a9
+# qemu_cortex_m0
+# qemu_cortex_m3
+# qemu_cortex_r5
+# qemu_kvm_arm64
+# qemu_leon3
+# qemu_malta
+# qemu_nios2
+# qemu_riscv32
+# qemu_riscv32e
+# qemu_riscv32_xip
+# qemu_riscv64
+# qemu_x86
+# qemu_xtensa
+
+# RISC-V Related Boards:
+# litex_vexriscv
+# qemu_riscv32
+# qemu_riscv32e
+# qemu_riscv32_xip
+# qemu_riscv64
+# riscv32_virtual

@@ -37,6 +37,36 @@ logging.getLogger("pykwalify.core").setLevel(50)
 sys.path.append(os.path.join(zephyr_base, 'scripts'))
 import list_boards
 
+def load_included_platforms():
+    """Load list of platforms to include in CI testing."""
+    included_file = os.path.join(zephyr_base, 'scripts', 'ci', 'included_platforms.txt')
+    included = []
+    include_all = False
+
+    if os.path.exists(included_file):
+        try:
+            with open(included_file, 'r') as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    # Skip empty lines and comments
+                    if line and not line.startswith('#'):
+                        if line.lower() == 'all':
+                            include_all = True
+                        else:
+                            included.append(line)
+
+            if include_all:
+                logging.info("Including all platforms (default behavior)")
+                return None  # None means include all
+            else:
+                logging.info(f"Loaded {len(included)} included platforms: {included}")
+                return included
+        except Exception as e:
+            logging.warning(f"Error reading included platforms file: {e}")
+            return None  # Default to include all on error
+    else:
+        logging.info("No included platforms file found, including all platforms")
+        return None  # Default to include all
 
 def _get_match_fn(globs, regexes):
     # Constructs a single regex that tests for matches against the globs in
@@ -115,6 +145,7 @@ class Filters:
         self.tag_cfg_file = alt_tags
         self.quarantine_list = quarantine_list
         self.tc_roots_th = tc_roots_th
+        self.included_platforms = load_included_platforms()
 
     def process(self):
         self.find_modules()
@@ -262,8 +293,15 @@ class Filters:
             self.full_twister = True
             return
 
-        for board in matched_boards:
-            _options.extend(["-p", board ])
+        for board in all_boards:
+            # If included_platforms is None, include all platforms
+            if self.included_platforms is None:
+                _options.extend(["-p", board ])
+            # If included_platforms is a list, only include platforms in the list
+            elif board in self.included_platforms:
+                _options.extend(["-p", board ])
+            else:
+                logging.info(f"Platform not in included list, skipping: {board}")
 
         if _options:
             logging.info(f'Potential board filters...')
@@ -467,6 +505,7 @@ if __name__ == "__main__":
     # remove dupes and filtered cases
     dup_free = []
     dup_free_set = set()
+    filtered_count = 0
     logging.info(f'Total tests gathered: {len(f.all_tests)}')
     for ts in f.all_tests:
         if ts.get('status') == 'filtered':
@@ -474,12 +513,26 @@ if __name__ == "__main__":
         n = ts.get("name")
         a = ts.get("arch")
         p = ts.get("platform")
+        
+        # Filter based on included platforms
+        should_include = True
+        if f.included_platforms is not None:  # If not None, we have a specific include list
+            if p not in f.included_platforms:
+                should_include = False
+                filtered_count += 1
+        
+        if not should_include:
+            continue
+            
         if ts.get('status') == 'error':
             logging.info(f"Error found: {n} on {p} ({ts.get('reason')})")
             errors += 1
         if (n, a, p,) not in dup_free_set:
             dup_free.append(ts)
             dup_free_set.add((n, a, p,))
+    
+    if filtered_count > 0 and f.included_platforms is not None:
+        logging.info(f'Filtered {filtered_count} tests not on included platforms: {f.included_platforms}')
 
     logging.info(f'Total tests to be run: {len(dup_free)}')
     with open(".testplan", "w") as tp:
