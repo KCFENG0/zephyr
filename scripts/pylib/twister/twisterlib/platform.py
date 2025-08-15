@@ -55,6 +55,8 @@ class Platform:
         scp = TwisterConfigParser(platform_file, self.platform_schema)
         scp.load()
         data = scp.data
+        if data is None:
+            raise ValueError(f"Platform file {platform_file} contains no valid data")
 
         self.name = data['identifier']
         self.normalized_name = self.name.replace("/", "_")
