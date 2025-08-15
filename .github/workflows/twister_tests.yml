@@ -9,6 +9,7 @@ on:
     - main
     - v*-branch
     - collab-*
+    - ntil-npcm5-main_CI
     paths:
     - 'scripts/pylib/**'
     - 'scripts/twister'
@@ -19,6 +20,7 @@ on:
     branches:
     - main
     - v*-branch
+    - ntil-npcm5-main_CI
     paths:
     - 'scripts/pylib/**'
     - 'scripts/twister'

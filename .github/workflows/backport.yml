@@ -6,6 +6,7 @@ on:
       - labeled
     branches:
       - main
+      - ntil-npcm5-main_CI
 
 jobs:
   backport:

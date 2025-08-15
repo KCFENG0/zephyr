@@ -9,6 +9,7 @@ on:
       - synchronize
     branches:
       - v*-branch
+      - ntil-npcm5-main_CI
 
 jobs:
   backport:

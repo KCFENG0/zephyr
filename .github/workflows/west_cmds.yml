@@ -9,6 +9,7 @@ on:
     - main
     - v*-branch
     - collab-*
+    - ntil-npcm5-main_CI
     paths:
     - 'scripts/west-commands.yml'
     - 'scripts/west_commands/**'
@@ -18,6 +19,7 @@ on:
     - main
     - v*-branch
     - collab-*
+    - ntil-npcm5-main_CI
     paths:
     - 'scripts/west-commands.yml'
     - 'scripts/west_commands/**'
