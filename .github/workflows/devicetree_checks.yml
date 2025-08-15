@@ -23,7 +23,25 @@ on:
     - '.github/workflows/devicetree_checks.yml'
 
 jobs:
+  # Use self-hosted runner for checkout to bypass IP allow list restrictions
+  # GitHub hosted runners are blocked by repository IP allow list
+  checkout:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: zephyr
+      # Upload source code as artifact to transfer to GitHub hosted runners
+      - name: Upload source code
+        uses: actions/upload-artifact@v4
+        with:
+          name: zephyr-source
+          path: zephyr/
+          retention-days: 1
+
   devicetree-checks:
+    needs: checkout
     name: Devicetree script tests
     runs-on: ${{ matrix.os }}
     strategy:
@@ -72,6 +90,6 @@ jobs:
         pip3 install wheel
         pip3 install pytest pyyaml tox
     - name: run tox
-      working-directory: scripts/dts/python-devicetree
+      working-directory: zephyr/scripts/dts/python-devicetree
       run: |
         tox

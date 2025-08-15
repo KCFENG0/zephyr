@@ -22,7 +22,25 @@ on:
     - '.github/workflows/pylib_tests.yml'
 
 jobs:
+  # Use self-hosted runner for checkout to bypass IP allow list restrictions
+  # GitHub hosted runners are blocked by repository IP allow list
+  checkout:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: zephyr
+      # Upload source code as artifact to transfer to GitHub hosted runners
+      - name: Upload source code
+        uses: actions/upload-artifact@v4
+        with:
+          name: zephyr-source
+          path: zephyr/
+          retention-days: 1
+
   pylib-tests:
+    needs: checkout
     name: Misc. Pylib Unit Tests
     runs-on: ${{ matrix.os }}
     strategy:
@@ -45,9 +63,11 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-${{ matrix.python-version }}
     - name: install-packages
+      working-directory: zephyr
       run: |
         pip3 install -r scripts/requirements-base.txt -r scripts/requirements-build-test.txt
     - name: Run pytest for build_helpers
+      working-directory: zephyr
       env:
         ZEPHYR_BASE: ./
         ZEPHYR_TOOLCHAIN_VARIANT: zephyr

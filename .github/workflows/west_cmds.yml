@@ -26,7 +26,25 @@ on:
     - '.github/workflows/west_cmds.yml'
 
 jobs:
+  # Use self-hosted runner for checkout to bypass IP allow list restrictions
+  # GitHub hosted runners are blocked by repository IP allow list
+  checkout:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: zephyr
+      # Upload source code as artifact to transfer to GitHub hosted runners
+      - name: Upload source code
+        uses: actions/upload-artifact@v4
+        with:
+          name: zephyr-source
+          path: zephyr/
+          retention-days: 1
+
   west-commands:
+    needs: checkout
     name: West Command Tests
     runs-on: ${{ matrix.os }}
     strategy:
@@ -75,10 +93,12 @@ jobs:
         pip3 install wheel
         pip3 install pytest west pyelftools canopen natsort progress mypy intelhex psutil ply pyserial
     - name: run pytest-win
+      working-directory: zephyr
       if: runner.os == 'Windows'
       run: |
         python ./scripts/west_commands/run_tests.py
     - name: run pytest-mac-linux
+      working-directory: zephyr
       if: runner.os != 'Windows'
       run: |
         ./scripts/west_commands/run_tests.py
