@@ -26,9 +26,9 @@ on:
     - '.github/workflows/west_cmds.yml'
 
 jobs:
-  west-commnads:
+  west-commands:
     name: West Command Tests
-    runs-on: ubuntu-latest-l
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12']
