@@ -647,7 +647,7 @@ static inline int uart_npcm_set_power_state(const struct device *dev, uint32_t n
 	struct uart_npcm_data *const data = dev->data;
 
 	/* If next device power state is LOW or SUSPEND power state */
-	if (next_state == PM_DEVICE_STATE_LOW_POWER || next_state == PM_DEVICE_STATE_SUSPEND) {
+	if (next_state == PM_DEVICE_STATE_SUSPENDING || next_state == PM_DEVICE_STATE_SUSPENDED) {
 		/*
 		 * If uart device is busy with transmitting, the driver will
 		 * stay in while loop and wait for the transaction is completed.
