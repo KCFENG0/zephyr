@@ -36,10 +36,6 @@ child-binding:
   description: GPIO child node
   include: gpio-controller.yaml
   properties:
-    label:
-      type: string
-      required: true
-
     ngpios:
       required: true
 
