@@ -370,6 +370,7 @@ static int npcm_volt_level_configure(const struct npcm_pinctrl *pin)
 
 bool npcm_pinctrl_pin_needs_cfg(const pinctrl_soc_pin_t *pin)
 {
+#ifdef CONFIG_HWINFO
 	uint32_t reset_cause;
 	ssize_t ret;
 
@@ -387,6 +388,10 @@ bool npcm_pinctrl_pin_needs_cfg(const pinctrl_soc_pin_t *pin)
 	LOG_DBG("reset cause %x (pin flag=%x)\n", reset_cause, pin->props.flag);
 
 	return !!(pin->props.flag & reset_cause);
+#else
+	/* If no hwinfo, always return true */
+	return true;
+#endif /* CONFIG_HWINFO */
 }
 
 int pinctrl_configure_pin(const pinctrl_soc_pin_t *pin)
