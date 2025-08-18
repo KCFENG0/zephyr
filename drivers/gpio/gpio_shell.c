@@ -43,40 +43,40 @@ unsigned int sgpio_test[64], sgpio_result[8], node;
 const struct device *sgpio_outarray[8], *sgpio_inarray[8];
 const struct device *sgpio_dev;
 const char* sgpio_str[] = {
-		"SGPIO0_0",
-		"SGPIO0_1",
-		"SGPIO0_2",
-		"SGPIO0_3",
-		"SGPIO0_4",
-		"SGPIO0_5",
-		"SGPIO0_6",
-		"SGPIO0_7",
-		"SGPIO1_0",
-		"SGPIO1_1",
-		"SGPIO1_2",
-		"SGPIO1_3",
-		"SGPIO1_4",
-		"SGPIO1_5",
-		"SGPIO1_6",
-		"SGPIO1_7",
+		"sgpio0_0",
+		"sgpio0_1",
+		"sgpio0_2",
+		"sgpio0_3",
+		"sgpio0_4",
+		"sgpio0_5",
+		"sgpio0_6",
+		"sgpio0_7",
+		"sgpio1_0",
+		"sgpio1_1",
+		"sgpio1_2",
+		"sgpio1_3",
+		"sgpio1_4",
+		"sgpio1_5",
+		"sgpio1_6",
+		"sgpio1_7",
 };
 const char* sgpio_in[] = {
-		"SGPIO0_8",
-		"SGPIO0_9",
-		"SGPIO0_a",
-		"SGPIO0_b",
-		"SGPIO0_c",
-		"SGPIO0_d",
-		"SGPIO0_e",
-		"SGPIO0_f",
-		"SGPIO1_8",
-		"SGPIO1_9",
-		"SGPIO1_a",
-		"SGPIO1_b",
-		"SGPIO1_c",
-		"SGPIO1_d",
-		"SGPIO1_e",
-		"SGPIO1_f",
+		"sgpio0_8",
+		"sgpio0_9",
+		"sgpio0_a",
+		"sgpio0_b",
+		"sgpio0_c",
+		"sgpio0_d",
+		"sgpio0_e",
+		"sgpio0_f",
+		"sgpio1_8",
+		"sgpio1_9",
+		"sgpio1_a",
+		"sgpio1_b",
+		"sgpio1_c",
+		"sgpio1_d",
+		"sgpio1_e",
+		"sgpio1_f",
 };
 struct gpio_callback int_gpio_cb[64];
 
@@ -707,9 +707,9 @@ static int cmd_gpio_sgpio_loopback(const struct shell *sh,
 		return -EINVAL;
 	}
 
-	if (strncmp(argv[ARGV_DEV], "SGPIO0_0", 8) == 0)
+	if (strncmp(argv[ARGV_DEV], "sgpio0_0", 8) == 0)
 		node=0;
-	else if (strncmp(argv[ARGV_DEV], "SGPIO1_0", 8) == 0)
+	else if (strncmp(argv[ARGV_DEV], "sgpio1_0", 8) == 0)
 		node=8;
 	else
 		return -EINVAL;
@@ -785,13 +785,13 @@ static int cmd_gpio_sgpio_poll_test(const struct shell *sh,
 {
 	int ret;
 
-	if (strncmp(argv[ARGV_DEV], "SGPIO0_0", 8) == 0){
+	if (strncmp(argv[ARGV_DEV], "sgpio0_0", 8) == 0){
 		node=0;
-		sgpio_dev = device_get_binding("SGPIO0_0");
+		sgpio_dev = device_get_binding("sgpio0_0");
 	}
-	else if (strncmp(argv[ARGV_DEV], "SGPIO1_0", 8) == 0){
+	else if (strncmp(argv[ARGV_DEV], "sgpio1_0", 8) == 0){
 		node=8;
-		sgpio_dev = device_get_binding("SGPIO1_0");
+		sgpio_dev = device_get_binding("sgpio1_0");
 	}
 
 	ret = gpio_sgpio_poll_test(sgpio_dev);
@@ -837,11 +837,11 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_gpio,
 		"Usage: gpio set <device> <pin> <level 0|1>", cmd_gpio_set, 4, 0),
 	SHELL_CMD_ARG(sgpio_loopback, &sub_gpio_dev,
 		"SGPIO loopback test\n"
-		"Usage: gpio sgpio_loopback <SGPIO0_0|SGPIO1_0> <port>",
+		"Usage: gpio sgpio_loopback <sgpio0_0|sgpio1_0> <port>",
 		cmd_gpio_sgpio_loopback, 3	, 0),
 	SHELL_CMD_ARG(sgpio_poll_test, &sub_gpio_dev,
 		"SGPIO poll test\n"
-		"Usage: gpio sgpio_poll_test <SGPIO0_0|SGPIO1_0>",
+		"Usage: gpio sgpio_poll_test <sgpio0_0|sgpio1_0>",
 		cmd_gpio_sgpio_poll_test, 2	, 0),
 	SHELL_COND_CMD_ARG(CONFIG_GPIO_SHELL_TOGGLE_CMD, toggle, &sub_gpio_dev,
 		"Toggle GPIO pin\n"
