@@ -434,6 +434,12 @@
 	};
 
 	/* Tach */
+	/omit-if-no-ref/ tach5_gpioa4: periph-tach5 {
+		tach {
+			pinmux = <GPIOA4__TA5__IOX2_SCLK 1>;
+		};
+	};
+
 	/omit-if-no-ref/ tach4_gpioa1: periph-tach4 {
 		tach {
 			pinmux = <GPIOA1__TA4__IOX2_DOUT 1>;

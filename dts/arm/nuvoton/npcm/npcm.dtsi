@@ -593,7 +593,7 @@
 		tach1: tach@400e1000 {
 			compatible = "nuvoton,npcm-tach";
 			reg = <0x400e1000 0x2000>;
-			clocks = <&pcc NPCM_CLOCK_MFT1>;
+			clocks = <&pcc NPCM_CLOCK_MFT1_LF>;
 			tach-channel = <1>;
 			status = "disabled";
 		};
@@ -609,7 +609,7 @@
 		tach3: tach@400e5000 {
 			compatible = "nuvoton,npcm-tach";
 			reg = <0x400e5000 0x2000>;
-			clocks = <&pcc NPCM_CLOCK_MFT3>;
+			clocks = <&pcc NPCM_CLOCK_MFT3_LF>;
 			tach-channel = <3>;
 			status = "disabled";
 		};

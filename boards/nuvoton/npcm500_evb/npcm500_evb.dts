@@ -626,6 +626,24 @@
 	status = "okay";
 };
 
+&tach2 {
+	pin-select = <NPCM_TACH_PIN_SELECT_5>; /* Select tach pin 5 as input pin */
+	sample-clk = <NPCM_TACH_FREQ_LFCLK>; /* Use LFCLK as sampling clock */
+	pulses-per-round = <2>; /* number of pulses per round of encoder */
+	pinctrl-0 = <&tach5_gpioa4>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&tach3 {
+	pin-select = <NPCM_TACH_PIN_SELECT_3>; /* Select tach pin 3 as input pin */
+	sample-clk = <NPCM_TACH_FREQ_LFCLK>; /* Use LFCLK as sampling clock */
+	pulses-per-round = <2>; /* number of pulses per round of encoder */
+	pinctrl-0 = <&tach3_gpio81>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
 &i3c1 {
 	i3c-scl-hz = <12500000>;
 	i3c-od-scl-hz = <4170000>;
