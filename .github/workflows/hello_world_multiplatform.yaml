@@ -50,30 +50,6 @@ jobs:
           git rebase origin/${BASE_REF}
           git log --graph --oneline HEAD...${PR_HEAD}
 
-      # Upload source code as artifact to transfer to GitHub hosted runners
-      - name: Upload source code
-        uses: actions/upload-artifact@v4
-        with:
-          name: zephyr-source
-          path: zephyr/
-          retention-days: 1
-
-  # Use GitHub hosted runners for build/test
-  # Download source code from self-hosted checkout job via artifacts
-  build:
-    needs: checkout
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-2022]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Download source code
-        uses: actions/download-artifact@v4
-        with:
-          name: zephyr-source
-          path: zephyr
-
       - name: Set up Python
         uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
         with:

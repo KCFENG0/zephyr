@@ -56,7 +56,6 @@ jobs:
           retention-days: 1
 
   scripts-tests:
-    needs: checkout
     name: Scripts tests
     runs-on: ${{ matrix.os }}
     strategy:
@@ -64,11 +63,22 @@ jobs:
         python-version: ['3.10', '3.11', '3.12']
         os: [ubuntu-24.04]
     steps:
-      - name: Download source code
-        uses: actions/download-artifact@v4
+      - name: checkout
+        uses: actions/checkout@v4
         with:
-          name: zephyr-source
-          path: zephyr
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Rebase
+        continue-on-error: true
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git config --global user.email "actions@zephyrproject.org"
+          git config --global user.name "Github Actions"
+          git rebase origin/${BASE_REF}
+          git log --graph --oneline HEAD...${PR_HEAD}
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5.5.0
@@ -85,12 +95,10 @@ jobs:
             ${{ runner.os }}-pip-${{ matrix.python-version }}
 
       - name: install-packages
-        working-directory: zephyr
         run: |
           pip3 install -r scripts/requirements-base.txt -r scripts/requirements-build-test.txt
 
       - name: Run pytest
-        working-directory: zephyr
         env:
           ZEPHYR_BASE: ./
         run: |
