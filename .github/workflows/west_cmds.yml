@@ -101,4 +101,5 @@ jobs:
       working-directory: zephyr
       if: runner.os != 'Windows'
       run: |
+        chmod +x ./scripts/west_commands/run_tests.py
         ./scripts/west_commands/run_tests.py
