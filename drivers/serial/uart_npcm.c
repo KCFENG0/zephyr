@@ -661,26 +661,28 @@ static inline int uart_npcm_set_power_state(const struct device *dev, uint32_t n
 	return 0;
 }
 
-/* Implements the device power management control functionality */
-static int uart_npcm_pm_control(const struct device *dev, uint32_t ctrl_command, uint32_t *state,
-				pm_device_cb cb, void *arg)
+/* Implements the device power management action functionality */
+static int uart_npcm_pm_action(const struct device *dev, enum pm_device_action action)
 {
 	int ret = 0;
 
-	switch (ctrl_command) {
-	case PM_DEVICE_STATE_SET:
-		ret = uart_npcm_set_power_state(dev, *state);
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		ret = uart_npcm_set_power_state(dev, PM_DEVICE_STATE_SUSPENDED);
 		break;
-	case PM_DEVICE_STATE_GET:
-		ret = uart_npcm_get_power_state(dev, state);
+	case PM_DEVICE_ACTION_RESUME:
+		ret = uart_npcm_set_power_state(dev, PM_DEVICE_STATE_ACTIVE);
+		break;
+	case PM_DEVICE_ACTION_TURN_OFF:
+		ret = uart_npcm_set_power_state(dev, PM_DEVICE_STATE_OFF);
+		break;
+	case PM_DEVICE_ACTION_TURN_ON:
+		ret = uart_npcm_set_power_state(dev, PM_DEVICE_STATE_ACTIVE);
 		break;
 	default:
-		ret = -EINVAL;
+		ret = -ENOTSUP;
 	}
 
-	if (cb != NULL) {
-		cb(dev, ret, state, arg);
-	}
 	return ret;
 }
 #endif /* CONFIG_PM_DEVICE */
@@ -707,6 +709,8 @@ static int uart_npcm_pm_control(const struct device *dev, uint32_t ctrl_command,
 	                                                                                        \
 	PINCTRL_DT_INST_DEFINE(inst);                                                           \
 												\
+	IF_ENABLED(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_DEFINE(inst, uart_npcm_pm_action);))	\
+												\
 	static const struct uart_npcm_config uart_npcm_cfg_##inst = {				\
 		.base = (struct uart_reg *)DT_INST_REG_ADDR(inst),				\
 		.clk_cfg = DT_INST_PHA(inst, clocks, clk_cfg),					\
@@ -718,8 +722,10 @@ static int uart_npcm_pm_control(const struct device *dev, uint32_t ctrl_command,
 		.baud_rate = DT_INST_PROP(inst, current_speed),					\
 	};                                                                                      \
 												\
-	DEVICE_DT_INST_DEFINE(inst, &uart_npcm_init, NULL, &uart_npcm_data_##inst,		\
-			      &uart_npcm_cfg_##inst, PRE_KERNEL_1,                              \
+	DEVICE_DT_INST_DEFINE(inst, &uart_npcm_init,						\
+			      COND_CODE_1(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_GET(inst)),	\
+					          (NULL)),					\
+			      &uart_npcm_data_##inst, &uart_npcm_cfg_##inst, PRE_KERNEL_1,	\
 			      CONFIG_SERIAL_INIT_PRIORITY, &uart_npcm_driver_api);		\
 												\
 	NPCM_UART_IRQ_CONFIG_FUNC(inst)
