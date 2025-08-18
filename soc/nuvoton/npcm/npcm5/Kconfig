@@ -15,3 +15,8 @@ config SOC_SERIES_NPCM5
 	select SOC_LATE_INIT_HOOK
 	help
 	  Enable support for Nuvoton NPCM5 series
+
+config PLATFORM_SPECIFIC_INIT
+	default n if SOC_SERIES_NPCM5
+	help
+	  Disable deprecated PLATFORM_SPECIFIC_INIT for NPCM5 as it uses SOC_RESET_HOOK instead.
