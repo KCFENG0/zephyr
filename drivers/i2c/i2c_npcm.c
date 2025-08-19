@@ -18,24 +18,14 @@ LOG_MODULE_REGISTER(i2c_npcm, LOG_LEVEL_ERR);
 /* Configure TX and RX buffer size for I2C DMA
  * This setting applies to all (12c1a, 12c1b, 12c2a ...)
  */
-#define CONFIG_I2C_MAX_TX_SIZE 256
-#define CONFIG_I2C_MAX_RX_SIZE 256
+#define I2C_MAX_TX_SIZE 256
+#define I2C_MAX_RX_SIZE 256
 
 /* Default maximum time we allow for an I2C transfer (unit:ms) */
 #define I2C_TRANS_TIMEOUT K_MSEC(500)
 
 /* Default max waiting time for i2c ready (unit:ms) */
 #define I2C_WAITING_TIME K_MSEC(1000)
-
-/* Hardware Timeout configuration (unit:ms) */
-#define CONFIG_CONTROLLER_HW_TIMEOUT_EN 'N'
-#define CONFIG_CONTROLLER_HW_TIMEOUT_CLK_LOW_TIME 25
-#define CONFIG_CONTROLLER_HW_TIMEOUT_CLK_CYCLE_TIME 50
-
-/* when using Quick command (SMBUS), do not enable target timeout */
-#define CONFIG_TARGET_HW_TIMEOUT_EN 'N'
-#define CONFIG_TARGET_HW_TIMEOUT_CLK_LOW_TIME 25
-#define CONFIG_TARGET_HW_TIMEOUT_CLK_CYCLE_TIME 50
 
 /* Data abort timeout */
 #define ABORT_TIMEOUT 10000
@@ -70,8 +60,8 @@ struct i2c_npcm_data {
 	uint16_t rx_cnt;
 	uint16_t tx_cnt;
 	uint8_t dev_addr; /* device address (8 bits) */
-	uint8_t rx_buf[CONFIG_I2C_MAX_TX_SIZE];
-	uint8_t tx_buf[CONFIG_I2C_MAX_RX_SIZE];
+	uint8_t rx_buf[I2C_MAX_TX_SIZE];
+	uint8_t tx_buf[I2C_MAX_RX_SIZE];
 	uint8_t *rx_msg_buf;
 	int err_code;
 	struct i2c_target_config *target_cfg;

@@ -11,3 +11,52 @@ config I2C_NPCM
 	  This option enables the I2C driver for NPCM family of
 	  processors.
 	  Say y to use I2C modules on NPCM MCU.
+
+config CONTROLLER_HW_TIMEOUT_EN
+	bool "Controller hardware timeout"
+	default n
+	help
+	  This option enables the controller hardware timeout feature.
+
+config CONTROLLER_HW_TIMEOUT_CLK_CYCLE_TIME
+	depends on CONTROLLER_HW_TIMEOUT_EN
+	int "Controller hardware timeout clock cycle time"
+	default 50
+	range 0 255
+	help
+	  This option sets the clock cycle time for the controller hardware
+	  timeout in microseconds.
+
+config CONTROLLER_HW_TIMEOUT_CLK_LOW_TIME
+	depends on CONTROLLER_HW_TIMEOUT_EN
+	int "Controller hardware timeout clock low time"
+	default 25
+	range 0 255
+	help
+	  This option sets the clock low time for the controller hardware
+	  timeout in microseconds.
+
+config TARGET_HW_TIMEOUT_EN
+	bool "Target hardware timeout"
+	default n
+	help
+	  This option enables the target hardware timeout feature.
+	  Note that when using Quick command (SMBUS), do not enable target timeout.
+
+config TARGET_HW_TIMEOUT_CLK_LOW_TIME
+	depends on TARGET_HW_TIMEOUT_EN
+	int "Target hardware timeout clock low time"
+	default 25
+	range 0 255
+	help
+	  This option sets the clock low time for the target hardware timeout
+	  in microseconds.
+
+config TARGET_HW_TIMEOUT_CLK_CYCLE_TIME
+	depends on TARGET_HW_TIMEOUT_EN
+	int "Target hardware timeout clock cycle time"
+	default 50
+	range 0 255
+	help
+	  This option sets the clock cycle time for the target hardware timeout
+	  in microseconds.
