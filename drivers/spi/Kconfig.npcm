@@ -3,7 +3,7 @@
 # Copyright (c) 2024 Nuvoton Technology Corporation.
 # SPDX-License-Identifier: Apache-2.0
 
-menuconfig SPI_NPCM_SPIP
+config SPI_NPCM_SPIP
 	bool "Nuvoton NPCM Enhanced Super I/O (eSIO) SPI driver"
 	default y
 	depends on DT_HAS_NUVOTON_NPCM_SPIP_ENABLED

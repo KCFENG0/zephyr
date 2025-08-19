@@ -16,6 +16,37 @@ config SOC_SERIES_NPCM5
 	help
 	  Enable support for Nuvoton NPCM5 series
 
+config FLASH_SIZE
+	int "Flash Size in kB"
+	default $(dt_chosen_reg_size_int,$(DT_CHOSEN_Z_FLASH),0,K) if !XIP
+	help
+	  This option specifies the size of the flash in kB.  It is normally set by
+	  the board's defconfig file and the user should generally avoid modifying
+	  it via the menu configuration.
+
+config FLASH_BASE_ADDRESS
+	hex "Flash Base Address"
+	default $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_FLASH)) if !XIP
+	help
+	  This option specifies the base address of the flash on the board. It is
+	  normally set by the board's defconfig file and the user should generally
+	  avoid modifying it via the menu configuration.
+
+choice GPIO_NPCM_RESET_SL
+	prompt "Selects the GPIO reset to the corresponding reset source"
+	default GPIO_NPCM_RESET_SL_CORE_DOMAIN
+
+config GPIO_NPCM_RESET_SL_CORE_DOMAIN
+	bool "GPIO Reset by Core domain reset"
+	help
+	  GPIO port 0-9, A-F is reset by Core domain reset.
+
+config GPIO_NPCM_RESET_SL_POWER_UP
+	bool "GPIO Reset by VSB Power-Up reset"
+	help
+	GPIO port 0-9, A-F is reset by VSB Power-Up reset.
+endchoice
+
 config PLATFORM_SPECIFIC_INIT
 	default n if SOC_SERIES_NPCM5
 	help

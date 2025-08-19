@@ -688,15 +688,15 @@ static int uart_npcm_pm_action(const struct device *dev, enum pm_device_action a
 #endif /* CONFIG_PM_DEVICE */
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
-#define NPCM_UART_IRQ_CONFIG_FUNC_DECL(inst)                                                    \
+#define NPCM_UART_IRQ_CONFIG_FUNC_DECL(inst)                                                       \
 	static void uart_npcm_irq_config_##inst(const struct device *dev)
 #define NPCM_UART_IRQ_CONFIG_FUNC_INIT(inst) .irq_config_func = uart_npcm_irq_config_##inst,
-#define NPCM_UART_IRQ_CONFIG_FUNC(inst)                                                         \
-	static void uart_npcm_irq_config_##inst(const struct device *dev)                       \
-	{                                                                                       \
-		IRQ_CONNECT(DT_INST_IRQN(inst), DT_INST_IRQ(inst, priority), uart_npcm_isr,     \
-			    DEVICE_DT_INST_GET(inst), 0);                                       \
-		irq_enable(DT_INST_IRQN(inst));                                                 \
+#define NPCM_UART_IRQ_CONFIG_FUNC(inst)                                                            \
+	static void uart_npcm_irq_config_##inst(const struct device *dev)                          \
+	{                                                                                          \
+		IRQ_CONNECT(DT_INST_IRQN(inst), DT_INST_IRQ(inst, priority), uart_npcm_isr,        \
+			    DEVICE_DT_INST_GET(inst), 0);                                          \
+		irq_enable(DT_INST_IRQN(inst));                                                    \
 	}
 #else
 #define NPCM_UART_IRQ_CONFIG_FUNC_DECL(inst)
@@ -704,30 +704,29 @@ static int uart_npcm_pm_action(const struct device *dev, enum pm_device_action a
 #define NPCM_UART_IRQ_CONFIG_FUNC(inst)
 #endif
 
-#define NPCM_UART_INIT(inst)                                                                    \
-	NPCM_UART_IRQ_CONFIG_FUNC_DECL(inst);							\
-	                                                                                        \
-	PINCTRL_DT_INST_DEFINE(inst);                                                           \
-												\
-	IF_ENABLED(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_DEFINE(inst, uart_npcm_pm_action);))	\
-												\
-	static const struct uart_npcm_config uart_npcm_cfg_##inst = {				\
-		.base = (struct uart_reg *)DT_INST_REG_ADDR(inst),				\
-		.clk_cfg = DT_INST_PHA(inst, clocks, clk_cfg),					\
-		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),					\
-		NPCM_UART_IRQ_CONFIG_FUNC_INIT(inst)						\
-	};                                                                                      \
-												\
-	static struct uart_npcm_data uart_npcm_data_##inst = {					\
-		.baud_rate = DT_INST_PROP(inst, current_speed),					\
-	};                                                                                      \
-												\
-	DEVICE_DT_INST_DEFINE(inst, &uart_npcm_init,						\
-			      COND_CODE_1(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_GET(inst)),	\
-					          (NULL)),					\
-			      &uart_npcm_data_##inst, &uart_npcm_cfg_##inst, PRE_KERNEL_1,	\
-			      CONFIG_SERIAL_INIT_PRIORITY, &uart_npcm_driver_api);		\
-												\
+#define NPCM_UART_INIT(inst)                                                                       \
+	NPCM_UART_IRQ_CONFIG_FUNC_DECL(inst);                                                      \
+                                                                                                   \
+	PINCTRL_DT_INST_DEFINE(inst);                                                              \
+                                                                                                   \
+	IF_ENABLED(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_DEFINE(inst, uart_npcm_pm_action);))       \
+                                                                                                   \
+	static const struct uart_npcm_config uart_npcm_cfg_##inst = {                              \
+		.base = (struct uart_reg *)DT_INST_REG_ADDR(inst),                                 \
+		.clk_cfg = DT_INST_PHA(inst, clocks, clk_cfg),                                     \
+		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),                                      \
+		NPCM_UART_IRQ_CONFIG_FUNC_INIT(inst)};                                             \
+                                                                                                   \
+	static struct uart_npcm_data uart_npcm_data_##inst = {                                     \
+		.baud_rate = DT_INST_PROP(inst, current_speed),                                    \
+	};                                                                                         \
+                                                                                                   \
+	DEVICE_DT_INST_DEFINE(                                                                     \
+		inst, &uart_npcm_init,                                                             \
+		COND_CODE_1(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_GET(inst)), (NULL)),              \
+		&uart_npcm_data_##inst, &uart_npcm_cfg_##inst, PRE_KERNEL_1,                       \
+		CONFIG_SERIAL_INIT_PRIORITY, &uart_npcm_driver_api);                               \
+                                                                                                   \
 	NPCM_UART_IRQ_CONFIG_FUNC(inst)
 
 DT_INST_FOREACH_STATUS_OKAY(NPCM_UART_INIT)
