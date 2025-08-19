@@ -150,7 +150,7 @@ jobs:
         python3 -m coverxygen --xml-dir  doc/_build/html/doxygen/xml/ --src-dir include/ --output doc-coverage.info
         # deprecated page causing issues
         lcov --remove doc-coverage.info \*/deprecated > new.info
-        genhtml --no-function-coverage --no-branch-coverage new.info -o coverage-report
+        genhtml --no-function-coverage --no-branch-coverage --ignore-errors unmapped new.info -o coverage-report
 
     - name: compress-docs
       run: |
