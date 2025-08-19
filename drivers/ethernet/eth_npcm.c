@@ -1238,9 +1238,9 @@ static struct eth_npcm_dev_data eth0_data = {
 		NUVOTON_OUI_B1,
 		NUVOTON_OUI_B2,
 #if !defined(CONFIG_ETH_NPCM_RANDOM_MAC)
-		CONFIG_ETH_NPCM_MAC3,
-		CONFIG_ETH_NPCM_MAC4,
-		CONFIG_ETH_NPCM_MAC5
+		ETH_NPCM_MAC3,
+		ETH_NPCM_MAC4,
+		ETH_NPCM_MAC5
 	#endif
 	},
 	.heth = {
