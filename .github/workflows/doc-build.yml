@@ -237,7 +237,8 @@ jobs:
 
     - name: install-pip
       run: |
-        pip3 install -U setuptools wheel pip
+        pip3 install setuptools
+        pip3 install wheel
         pip3 install -r doc/requirements.txt
         pip3 install west==${WEST_VERSION}
         pip3 install cmake==${CMAKE_VERSION}
