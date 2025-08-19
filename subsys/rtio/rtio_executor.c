@@ -82,6 +82,8 @@ void rtio_executor_submit(struct rtio *r)
 
 			__ASSERT(transaction != chained,
 				    "Expected chained or transaction flag, not both");
+			ARG_UNUSED(transaction);
+			ARG_UNUSED(chained);
 #endif
 			node = mpsc_pop(&iodev_sqe->r->sq);
 			next = CONTAINER_OF(node, struct rtio_iodev_sqe, q);
