@@ -144,7 +144,7 @@ static struct clock_control_driver_api npcm_clock_control_api = {
 static int npcm_clock_control_init(const struct device *dev)
 {
 	struct cdcg_reg *const priv = (struct cdcg_reg *)(DRV_CONFIG(dev)->base_cdcg);
-	struct freq_multiplier_t *freq_p;
+	struct freq_multiplier_t *freq_p = NULL;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(freq_multiplier); i++) {
@@ -154,7 +154,7 @@ static int npcm_clock_control_init(const struct device *dev)
 		}
 	}
 
-	if (i >= ARRAY_SIZE(freq_multiplier)) {
+	if (freq_p == NULL) {
 		LOG_ERR("Unsupported OFMCLK frequency %d", OFMCLK);
 		return -EINVAL;
 	}
