@@ -99,7 +99,7 @@ static int cond_wait(pthread_cond_t *cond, pthread_mutex_t *mu, k_timeout_t time
 		return EINVAL;
 	}
 
-	LOG_DBG("Waiting on cond %p with timeout %llx", cv, timeout.ticks);
+	LOG_DBG("Waiting on cond %p with timeout %llx", cv, (unsigned long long)timeout.ticks);
 	ret = k_condvar_wait(cv, m, timeout);
 	if (ret == -EAGAIN) {
 		LOG_DBG("Timeout waiting on cond %p", cv);

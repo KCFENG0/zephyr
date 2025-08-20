@@ -241,9 +241,9 @@ static int __z_clock_nanosleep(clockid_t clock_id, int flags, const struct times
 		goto do_rmtp_update;
 	}
 
-	us = DIV_ROUND_UP(ns, NSEC_PER_USEC);
+	us = DIV_ROUND_UP(ns - uptime_ns, NSEC_PER_USEC);
 	do {
-		us = k_sleep(K_TIMEOUT_ABS_US(us)) * 1000;
+		us = k_sleep(K_USEC(us)) * 1000;
 	} while (us != 0);
 
 do_rmtp_update:

@@ -120,7 +120,7 @@ static int acquire_mutex(pthread_mutex_t *mu, k_timeout_t timeout)
 		return EINVAL;
 	}
 
-	LOG_DBG("Locking mutex %p with timeout %llx", m, timeout.ticks);
+	LOG_DBG("Locking mutex %p with timeout %llx", m, (unsigned long long)timeout.ticks);
 
 	bit = posix_mutex_to_offset(m);
 	type = posix_mutex_type[bit];

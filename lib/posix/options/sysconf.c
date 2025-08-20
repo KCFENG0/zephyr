@@ -11,6 +11,16 @@
 #ifdef CONFIG_POSIX_SYSCONF_IMPL_FULL
 
 #define z_sysconf(x) (long)CONCAT(__z_posix_sysconf, x)
+/* Define missing macros based on POSIX equivalents */
+#ifndef ARG_MAX
+#define ARG_MAX _POSIX_ARG_MAX
+#endif
+#ifndef CHILD_MAX
+#define CHILD_MAX _POSIX_CHILD_MAX
+#endif
+#ifndef IOV_MAX
+#define IOV_MAX _XOPEN_IOV_MAX
+#endif
 
 long sysconf(int x)
 {
