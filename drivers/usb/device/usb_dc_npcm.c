@@ -1149,6 +1149,17 @@ int usb_dc_ep_mps(uint8_t ep)
 	return dev_data.ep_data[ep_idx].mps;
 }
 
+/* Remote wakeup */
+int usb_dc_wakeup_request(void)
+{
+	if (NPCM_IS_BIT_SET(USBD->USBD_OPER, NPCM_USBD_OPER_RESUMEEN) == 0) {
+		USBD->USBD_OPER |= BIT(NPCM_USBD_OPER_RESUMEEN);
+		/* Waiting for this bit to clear itself */
+		while(NPCM_IS_BIT_SET(USBD->USBD_OPER, NPCM_USBD_OPER_RESUMEEN));
+	}
+	return 0;
+}
+
 #define USB_DC_NPCM_INIT(inst)									   \
 	PINCTRL_DT_INST_DEFINE(inst);                                                              \
                                                                                                    \

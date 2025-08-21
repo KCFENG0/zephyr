@@ -223,10 +223,14 @@ config USB_DC_NUMAKER_MSG_HANDLER_THREAD_STACK_SIZE
 
 endif # USB_DC_NUMAKER
 
+DT_NPCM_USBHS := $(dt_nodelabel_path,usbd20)
+DT_NPCM_USBHS_SPEED := $(dt_node_str_prop_equals,$(DT_NPCM_USBHS),maximum-speed,high-speed)
+
 config USB_DC_NPCM
 	bool "Nuvoton NPCM USB Device Controller Driver"
 	default y
 	depends on DT_HAS_NUVOTON_NPCM_USBD_ENABLED
+	select USB_DC_HAS_HS_SUPPORT if "$(DT_NPCM_USBHS_SPEED)"
 	help
 	  This option enables the USB device driver for NPCM family of processors.
 	  Say y if you wish to use USB device on NPCM.
