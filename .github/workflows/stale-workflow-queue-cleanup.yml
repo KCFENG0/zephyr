@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     branches:
       - main
-      - ntil-npcm5-main_CI
+      - ntil-npcm5-main
   schedule:
   # everyday at 15:00
   - cron: '0 15 * * *'

@@ -6,13 +6,13 @@ on:
       - main
       - v*-branch
       - collab-*
-      - ntil-npcm5-main_CI
+      - ntil-npcm5-main
   pull_request:
     branches:
       - main
       - v*-branch
       - collab-*
-      - ntil-npcm5-main_CI
+      - ntil-npcm5-main
     paths:
       - 'scripts/build/**'
       - 'scripts/requirements*.txt'

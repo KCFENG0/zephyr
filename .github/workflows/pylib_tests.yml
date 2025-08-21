@@ -8,7 +8,7 @@ on:
     branches:
     - main
     - v*-branch
-    - ntil-npcm5-main_CI
+    - ntil-npcm5-main
     paths:
     - 'scripts/pylib/build_helpers/**'
     - '.github/workflows/pylib_tests.yml'
@@ -16,7 +16,7 @@ on:
     branches:
     - main
     - v*-branch
-    - ntil-npcm5-main_CI
+    - ntil-npcm5-main
     paths:
     - 'scripts/pylib/build_helpers/**'
     - '.github/workflows/pylib_tests.yml'

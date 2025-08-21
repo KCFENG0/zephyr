@@ -10,7 +10,7 @@ on:
     branches:
     - main
     - v*
-    - ntil-npcm5-main_CI
+    - ntil-npcm5-main
     types:
     - completed
 
