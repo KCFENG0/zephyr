@@ -1,7 +1,20 @@
 name: Code Coverage with codecov
 
 on:
+  push:
+    branches:
+      - main
+      - v*-branch
+      - collab-*
+      - ntil-npcm5-main_CI
+  pull_request_target:
+    branches:
+      - main
+      - v*-branch
+      - collab-*
+      - ntil-npcm5-main_CI
   schedule:
+    # Run on weekdays at 6:25 and 18:25
     - cron: '25 06,18 * * *'
 
 concurrency:
@@ -9,32 +22,127 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  codecov:
+  build-prep:
     if: github.repository_owner == 'nuvoton-CS00'
-    runs-on:
-      group: zephyr-runner-v2-linux-x64-4xlarge
+    runs-on: ubuntu-latest-l
+    container:
+      image: ghcr.io/zephyrproject-rtos/ci-repo-cache:v0.26.11.20240324
+      options: '--entrypoint /bin/bash'
+    outputs:
+      subset: ${{ steps.output-services.outputs.subset }}
+      size: ${{ steps.output-services.outputs.size }}
+      fullrun: ${{ steps.output-services.outputs.fullrun }}
+    env:
+      MATRIX_SIZE: 10
+      PUSH_MATRIX_SIZE: 20
+      DAILY_MATRIX_SIZE: 80
+      BSIM_OUT_PATH: /opt/bsim/
+      BSIM_COMPONENTS_PATH: /opt/bsim/components
+      TESTS_PER_BUILDER: 700
+      COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+      BASE_REF: ${{ github.base_ref }}
+    steps:
+      - name: Apply container owner mismatch workaround
+        run: |
+          # FIXME: The owner UID of the GITHUB_WORKSPACE directory may not
+          #        match the container user UID because of the way GitHub
+          #        Actions runner is implemented. Remove this workaround when
+          #        GitHub comes up with a fundamental fix for this problem.
+          git config --global --add safe.directory ${GITHUB_WORKSPACE}
+
+      - name: Print cloud service information
+        run: |
+          echo "ZEPHYR_RUNNER_CLOUD_PROVIDER = ${ZEPHYR_RUNNER_CLOUD_PROVIDER}"
+          echo "ZEPHYR_RUNNER_CLOUD_NODE = ${ZEPHYR_RUNNER_CLOUD_NODE}"
+          echo "ZEPHYR_RUNNER_CLOUD_POD = ${ZEPHYR_RUNNER_CLOUD_POD}"
+
+      - name: Clone cached Zephyr repository
+        if: github.event_name == 'pull_request_target'
+        continue-on-error: true
+        run: |
+          git clone --shared /repo-cache/zephyrproject/zephyr .
+          git remote set-url origin ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}
+
+      - name: Checkout
+        if: github.event_name == 'pull_request_target'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Environment Setup
+        if: github.event_name == 'pull_request_target'
+        run: |
+          git config --global user.email "bot@zephyrproject.org"
+          git config --global user.name "Zephyr Bot"
+          rm -fr ".git/rebase-apply"
+          git rebase origin/${BASE_REF}
+          git log  --pretty=oneline | head -n 10
+          west init -l . || true
+          west config manifest.group-filter -- +ci,+optional
+          west config --global update.narrow true
+          west update --path-cache /repo-cache/zephyrproject 2>&1 1> west.update.log || west update --path-cache /repo-cache/zephyrproject 2>&1 1> west.update.log || ( rm -rf ../modules ../bootloader ../tools && west update --path-cache /repo-cache/zephyrproject)
+          west forall -c 'git reset --hard HEAD'
+
+          echo "ZEPHYR_SDK_INSTALL_DIR=/opt/toolchains/zephyr-sdk-$( cat SDK_VERSION )" >> $GITHUB_ENV
+
+      - name: Generate Test Plan with Twister
+        if: github.event_name == 'pull_request_target'
+        id: test-plan
+        run: |
+          export ZEPHYR_BASE=${PWD}
+          export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+          python3 ./scripts/ci/test_plan.py -c origin/${BASE_REF}.. --pull-request -t $TESTS_PER_BUILDER
+          if [ -s .testplan ]; then
+            cat .testplan >> $GITHUB_ENV
+          else
+            echo "TWISTER_NODES=${MATRIX_SIZE}" >> $GITHUB_ENV
+          fi
+          rm -f testplan.json .testplan
+
+      - name: Determine matrix size
+        id: output-services
+        run: |
+          if [ "${{github.event_name}}" = "pull_request_target" ]; then
+            if [ -n "${TWISTER_NODES}" ]; then
+              subset="[$(seq -s',' 1 ${TWISTER_NODES})]"
+            else
+              subset="[$(seq -s',' 1 ${MATRIX_SIZE})]"
+            fi
+            size=${TWISTER_NODES}
+          elif [ "${{github.event_name}}" = "push" ]; then
+            subset="[$(seq -s',' 1 ${PUSH_MATRIX_SIZE})]"
+            size=${MATRIX_SIZE}
+          elif [ "${{github.event_name}}" = "schedule" -a "${{github.repository}}" = "nuvoton-CS00/zephyr" ]; then
+            subset="[$(seq -s',' 1 ${DAILY_MATRIX_SIZE})]"
+            size=${DAILY_MATRIX_SIZE}
+          else
+            size=0
+          fi
+          echo "subset=${subset}" >> $GITHUB_OUTPUT
+          echo "size=${size}" >> $GITHUB_OUTPUT
+          echo "fullrun=${TWISTER_FULL}" >> $GITHUB_OUTPUT
+
+  codecov:
+    runs-on: ubuntu-latest-l
+    needs: build-prep
+    if: needs.build-prep.outputs.size != 0
     container:
       image: ghcr.io/zephyrproject-rtos/ci:v0.26.18
       options: '--entrypoint /bin/bash'
     strategy:
       fail-fast: false
       matrix:
-        platform: ["mps2/an385", "native_sim", "qemu_x86", "unit_testing"]
-        include:
-          - platform: 'mps2/an385'
-            normalized: 'mps2_an385'
-          - platform: 'native_sim'
-            normalized: 'native_sim'
-          - platform: 'qemu_x86'
-            normalized: 'qemu_x86'
-          - platform: 'unit_testing'
-            normalized: 'unit_testing'
+        subset: ${{fromJSON(needs.build-prep.outputs.subset)}}
+    timeout-minutes: 1440
     env:
       CCACHE_DIR: /node-cache/ccache-zephyr
       CCACHE_REMOTE_STORAGE: "redis://cache-*.keydb-cache.svc.cluster.local|shards=1,2,3"
       CCACHE_REMOTE_ONLY: "true"
       # `--specs` is ignored because ccache is unable to resovle the toolchain specs file path.
       CCACHE_IGNOREOPTIONS: '--specs=*'
+      TWISTER_COMMON: ' -i --force-color -N -v --timeout-multiplier 2 '
     steps:
       - name: Apply container owner mismatch workaround
         run: |
@@ -100,14 +208,22 @@ jobs:
         run: |
           export ZEPHYR_BASE=${PWD}
           export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
+          PLATFORM_ARGS=$(python3 ./scripts/ci/get_platform_args.py)
           mkdir -p coverage/reports
           pip3 install gcovr==6.0
-          ./scripts/twister -E ${{matrix.normalized}}-testplan.json
-          ls -la
+
           ./scripts/twister \
-            -i --force-color -N -v --filter runnable -p ${{ matrix.platform }} --coverage \
+            ${PLATFORM_ARGS} \
+            -E ${{ runner.os }}-${{matrix.subset}}-testplan.json \
+            --subset ${{matrix.subset}}/${{ strategy.job-total }}
+          ls -la
+
+          ./scripts/twister \
+            ${TWISTER_COMMON} \
+            ${PLATFORM_ARGS} \
+            --filter runnable --coverage \
             -T tests --coverage-tool gcovr -xCONFIG_TEST_EXTRA_STACK_SIZE=4096 -e nano \
-            --timeout-multiplier 2
+            --subset ${{ matrix.subset }}/${{ strategy.job-total }}
 
       - name: Print ccache stats
         if: always()
@@ -117,16 +233,16 @@ jobs:
       - name: Rename coverage files
         if: always()
         run: |
-          mv twister-out/coverage.json coverage/reports/${{matrix.normalized}}.json
+          mv twister-out/coverage.json coverage/reports/${{ runner.os }}-${{ matrix.subset }}.json
 
       - name: Upload Coverage Results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: Coverage Data (Subset ${{ matrix.normalized }})
+          name: Coverage Data (Subset ${{ matrix.subset }})
           path: |
-            coverage/reports/${{ matrix.normalized }}.json
-            ${{ matrix.normalized }}-testplan.json
+            coverage/reports/${{ runner.os }}-${{ matrix.subset }}.json
+            ${{ runner.os }}-${{ matrix.subset }}-testplan.json
 
   codecov-results:
     name: "Publish Coverage Results"
@@ -148,10 +264,36 @@ jobs:
 
       - name: Move coverage files
         run: |
-          ls -lRt  ./coverage/reports
+          ls -lRt ./coverage/reports
           mv ./coverage/reports/*/*testplan.json .
           mv ./coverage/reports/*/coverage/reports/*.json ./coverage/reports
           ls -la ./coverage/reports
+
+      - name: Merge testplan files
+        run: |
+          # Merge all testplan files into a single ${{ runner.os }}-testplan.json using jq
+          echo "Looking for testplan files..."
+          find . -name "*testplan.json" -type f | head -20
+
+          if find . -name "*testplan.json" -type f -print -quit | grep -q .; then
+            echo "Merging testplan files..."
+            echo "{}" > ${{ runner.os }}-testplan.json
+
+            while IFS= read -r -d '' file; do
+              if [ "$(basename "$file")" != "${{ runner.os }}-testplan.json" ]; then
+                echo "Processing $file"
+                jq -s '.[0] * .[1]' ${{ runner.os }}-testplan.json "$file" > temp.json && mv temp.json ${{ runner.os }}-testplan.json
+              fi
+            done < <(find . -name "*testplan.json" -type f -print0)
+
+            echo "Merged testplan files into ${{ runner.os }}-testplan.json"
+            echo "Final merged file size:"
+            wc -l ${{ runner.os }}-testplan.json
+            echo "Number of test entries:"
+            jq 'length' ${{ runner.os }}-testplan.json
+          else
+            echo "No testplan files found"
+          fi
 
       - name: Generate list of coverage files
         id: get-coverage-files
@@ -200,7 +342,7 @@ jobs:
         run: |
           pip install xlsxwriter ijson
           python3 ./scripts/ci/coverage/coverage_analysis.py \
-            -t native_sim-testplan.json \
+            -t ${{ runner.os }}-testplan.json \
             -m MAINTAINERS.yml \
             -c coverage/reports/merged.json \
             -o coverage-report-${{ steps.run_date.outputs.run_date_short }} \

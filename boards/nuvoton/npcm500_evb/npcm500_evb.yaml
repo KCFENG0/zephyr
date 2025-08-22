@@ -14,3 +14,11 @@ toolchain:
 ram: 768
 flash: 2048
 supported:
+  - adc
+  - clock
+  - gpio
+  - i2c
+  - pwm
+  - tach
+  - uart
+  - watchdog
