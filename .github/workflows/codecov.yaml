@@ -6,13 +6,13 @@ on:
       - main
       - v*-branch
       - collab-*
-      - ntil-npcm5-main_CI
+      - ntil-npcm5-main
   pull_request_target:
     branches:
       - main
       - v*-branch
       - collab-*
-      - ntil-npcm5-main_CI
+      - ntil-npcm5-main
   schedule:
     # Run on weekdays at 6:25 and 18:25
     - cron: '25 06,18 * * *'
