@@ -40,6 +40,24 @@ extern "C"
 }
 #endif
 
+/*--------------------------*/
+/*     GDMA_CTL fields      */
+/*--------------------------*/
+#define NPCM_GDMA_GDMAEN            0
+#define NPCM_GDMA_GPD               1
+#define NPCM_GDMA_GDMAMS            2
+#define NPCM_GDMA_DADIR             4
+#define NPCM_GDMA_SADIR             5
+#define NPCM_GDMA_SAFIX             7
+#define NPCM_GDMA_SIEN              8
+#define NPCM_GDMA_BME               9
+#define NPCM_GDMA_TWS_12            12
+#define NPCM_GDMA_TWS_13            13
+#define NPCM_GDMA_GPS               14
+#define NPCM_GDMA_SOFTREQ           16
+#define NPCM_GDMA_TC                18
+#define NPCM_GDMA_GDMAERR           20
+
 void gdma_memset_u8(uint8_t *dat, uint8_t set_val, uint32_t setlen);
 void gdma_memcpy_u8(uint8_t *dst, uint8_t *src, uint32_t cpylen);
 void gdma_memcpy_u32(uint8_t *dst, uint8_t *src, uint32_t cpylen);
