@@ -295,12 +295,12 @@ void sib_write_offset(const struct device *dev, SIB_DEVICE_T sib_dev,
 
 	/* Lock host access EC configuration registers (0x4E/0x4F) */
 	sib_lock_host_access(dev, sib_dev, true);
-	if (sib_dev == SIB_DEV_CFG || sib_dev == SIB_DEV_RTC ||
-	    sib_dev == SIB_DEV_PMCHAN1 || sib_dev == SIB_DEV_PMCHAN2 ||
-	    sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4) {
+	if (sib_dev == SIB_DEV_CFG || sib_dev == SIB_DEV_RTC) {
 		__c2h_write_reg(dev, sib_dev, 0x0, offset);
 		__c2h_write_reg(dev, sib_dev, 0x1, value);
-	} else if (sib_dev == SIB_DEV_SHM || sib_dev == SIB_DEV_KBC) {
+	} else if (sib_dev == SIB_DEV_SHM || sib_dev == SIB_DEV_KBC ||
+		   sib_dev == SIB_DEV_PMCHAN1 || sib_dev == SIB_DEV_PMCHAN2 ||
+		   sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4) {
 		__c2h_write_reg(dev, sib_dev, offset, value);
 	} else {
 		LOG_ERR("Not Defined!!");
@@ -327,12 +327,12 @@ uint8_t sib_read_offset(const struct device *dev,
 
 	/* Lock host access EC configuration registers (0x4E/0x4F) */
 	sib_lock_host_access(dev, sib_dev, true);
-	if (sib_dev == SIB_DEV_CFG || sib_dev == SIB_DEV_RTC ||
-	    sib_dev == SIB_DEV_PMCHAN1 || sib_dev == SIB_DEV_PMCHAN2 ||
-	    sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4) {
+	if (sib_dev == SIB_DEV_CFG || sib_dev == SIB_DEV_RTC) {
 		__c2h_write_reg(dev, sib_dev, 0x0, offset);
 		value = __c2h_read_reg(dev, sib_dev, 0x1);
-	} else if (sib_dev == SIB_DEV_SHM || sib_dev == SIB_DEV_KBC) {
+	} else if (sib_dev == SIB_DEV_SHM || sib_dev == SIB_DEV_KBC ||
+		   sib_dev == SIB_DEV_PMCHAN1 || sib_dev == SIB_DEV_PMCHAN2 ||
+		   sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4) {
 		value = __c2h_read_reg(dev, sib_dev, offset);
 	} else {
 		LOG_ERR("Not Defined!!");

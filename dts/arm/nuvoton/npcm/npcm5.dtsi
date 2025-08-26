@@ -8,6 +8,8 @@
 #include "npcm5/npcm5-miwus-wui-map.dtsi"
 /* npcm5 series mapping table between MIWU groups and interrupts */
 #include "npcm5/npcm5-miwus-int-map.dtsi"
+/* npcm5 series eSPI VW mapping table */
+#include "npcm5/npcm5-espi-vws-map.dtsi"
 
 /* Device tree declarations of npcm soc family */
 #include "npcm.dtsi"
@@ -131,6 +133,11 @@
 
 		dasdc: dsadc@400d1100 {
 			channel-count = <24>;
+		};
+
+		espi0: espi@4000a000 {
+			rx-plsize = <64>;
+			tx-plsize = <64>;
 		};
 	};
 

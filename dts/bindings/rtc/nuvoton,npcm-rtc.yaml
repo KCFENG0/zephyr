@@ -10,7 +10,7 @@ include: [base.yaml]
 properties:
   reg:
     required: false
-  alarms_count:
+  alarms-count:
     type: int
     required: false
   rtc-wk:

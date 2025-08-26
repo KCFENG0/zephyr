@@ -41,6 +41,53 @@
 	NPCM_DT_PROP_ENUM_OR(DT_DRV_INST(inst), prop, default_value)
 
 /**
+ * @brief Construct a uint32_t structure from 'clocks' property at index 'i'
+ *
+ * @param inst instance number for compatible defined in DT_DRV_COMPAT.
+ * @param i index of clocks prop which type is 'phandle-array'
+ * @return uint32_t item from 'clocks' property at index 'i'
+ */
+#define NPCM_DT_CLK_CFG_ITEM_BY_IDX(inst, i) \
+	DT_CLOCKS_CELL_BY_IDX(DT_DRV_INST(inst), i, clk_cfg)
+
+/**
+ * @brief Macro function to construct uint32_t item in LISTIFY
+ * extension.
+ *
+ * @param child child index in LISTIFY extension.
+ * @param inst instance number for compatible defined in DT_DRV_COMPAT.
+ * @return macro function to construct a uint32_t structure.
+ */
+#define NPCM_DT_CLK_CFG_ITEMS_FUNC(child, inst) \
+	NPCM_DT_CLK_CFG_ITEM_BY_IDX(inst, child)
+
+/**
+ * @brief Macro function to construct a list of uint32_t items by
+ * LISTIFY func
+ *
+ * Example devicetree fragment:
+ *    / {
+ *		host_sub: lpc@400c1000 {
+ *			clocks = <&pcc NPCM_CLOCK_C2HACC>,
+ *				 <&pcc NPCM_CLOCK_SHM_REG>,
+ *				 <&pcc NPCM_CLOCK_SHM>,
+ *				 <&pcc NPCM_CLOCK_DP80>,
+ *				 <&pcc NPCM_CLOCK_MSWC>;
+ *			...
+ *		};
+ * Example usage:
+ *	const struct uint32_t clk_cfg[] = NPCM_DT_CLK_CFG_ITEMS_LIST(0);
+ *
+ * @param inst instance number for compatible defined in DT_DRV_COMPAT.
+ * @return an array of uint32_t items.
+ */
+#define NPCM_DT_CLK_CFG_ITEMS_LIST(inst) {        \
+	LISTIFY(DT_INST_PROP_LEN(inst, clocks),   \
+		NPCM_DT_CLK_CFG_ITEMS_FUNC, (,),  \
+		inst)                             \
+	}
+
+/**
  * @brief Get phandle from "name" property which contains wui information.
  *
  * @param inst instance number for compatible defined in DT_DRV_COMPAT.

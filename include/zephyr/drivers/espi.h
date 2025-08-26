@@ -363,6 +363,8 @@ struct espi_cfg {
 	enum espi_channel channel_caps;
 	/** Maximum supported frequency in MHz */
 	uint8_t max_freq;
+	/** RTC Function Supported */
+	uint8_t rtc_supp;
 };
 
 /**

@@ -557,6 +557,30 @@
 	};
 };
 
+&espi0 {
+	status = "okay";
+};
+
+&host_sub {
+	status = "okay";
+};
+
+&kcs1 {
+	status = "okay";
+};
+
+&kcs2 {
+	status = "okay";
+};
+
+&kcs3 {
+	status = "okay";
+};
+
+&kcs4 {
+	status = "okay";
+};
+
 &timer2 {
 	prescaler = <2>;
 	status = "okay";
@@ -679,6 +703,6 @@
 };
 
 &rtc {
-	alarms_count = <1>;
+	alarms-count = <1>;
 	status = "okay";
 };

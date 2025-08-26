@@ -1,0 +1,11 @@
+# Nuvoton IPMI driver configuration options
+
+# Copyright (c) 2021 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+config IPMI_KCS_NPCM
+	bool "NPCM IPMI KCS driver"
+	depends on SOC_FAMILY_NPCM
+	help
+	  This option enables the KCS BMC driver for NPCM SoCs.
+	  Say y if you wish to use KCS channels on NPCM MCU.
