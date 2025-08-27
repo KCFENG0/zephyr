@@ -52,7 +52,7 @@ HOOK_FUNC_ATTRIBUTE __attribute((weak)) void Rom_hook2(void)
 	if (M32(adr_FIU_FwInfo_status) & bit_auth_pass) {
 		/* The GPIOB0 is set to pull-up by default, pull-down to enter recovery mode */
 		if (0 == (M8(GPIOB_IN) & BIT(GPIOB0_BIT))) {
-			M32(adr_FIU_FwInfo_status) &= ~bit_auth_pass;
+			//M32(adr_FIU_FwInfo_status) &= ~bit_auth_pass;
 		}
 	}
 
