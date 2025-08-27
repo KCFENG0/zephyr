@@ -125,6 +125,8 @@
 #define ETH_DMATXDESC_DC                      ((uint32_t)0x08000000U)
 /*!< Disable Padding */
 #define ETH_DMATXDESC_DP                      ((uint32_t)0x04000000U)
+/*!< CRC Replacement Control */
+#define ETH_DMATXDESC_CRCR		      ((uint32_t)0x01000000U)
 /*!< Transmit Time Stamp Enable */
 #define ETH_DMATXDESC_TTSE                    ((uint32_t)0x02000000U)
 /*!< Checksum Insertion Control: 4 cases */

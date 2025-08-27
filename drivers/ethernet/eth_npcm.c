@@ -575,6 +575,9 @@ static void eth_isr(const struct device *dev)
 	struct emac_reg *const emac_regs = ETH_NPCM_REG_BASE;
 	struct eth_npcm_dev_data *dev_data;
 	uint32_t sts = emac_regs->DMASR;
+	uint32_t mac_sts = emac_regs->MACISR;
+	uint32_t i = 0;
+	uint32_t clear = 0;
 
 	dev_data = dev->data;
 
@@ -602,6 +605,47 @@ static void eth_isr(const struct device *dev)
 	if (sts & BIT(NPCM_DMASR_AIS)) {
 		/* Clear the ETH DMA Error flags */
 		emac_regs->DMASR = BIT(NPCM_DMASR_AIS);
+	}
+
+	/* MMC  Interrupt */
+	if (mac_sts & BIT(NPCM_MACSR_MMCS)){
+
+		/* MMC Rx Interrupt */
+		if (mac_sts & BIT(NPCM_MACSR_MMMCRS)) {
+			/* Clear the MMC receive intrrupt register */
+			for (i = 0; i < 26; i++){
+				if(emac_regs->MMCRIR & (0x01 << i)){
+					clear = sys_read32((mem_addr_t)(&(emac_regs->rxframecount_gb)) + (i * 4));
+				}
+			}
+		}
+
+		/* MMC Tx Interrupt */
+		if (mac_sts & BIT(NPCM_MACSR_MMCTS)) {
+			/* Clear the MMC transmit intrrupt register */
+			for (i = 0; i < 26; i++){
+				if(emac_regs->MMCTIR & (0x01 << i)){
+					clear = sys_read32((mem_addr_t)(&(emac_regs->txoctetcount_gb)) + (i * 4));
+				}
+			}
+		}
+
+		/* MMC Receive Checksum offload Interrupt */
+		if (mac_sts & BIT(NPCM_MACSR_MMCRXIPIS)){
+			/* Clear the MMC receive checksum offload intrrupt */
+			for (i = 0; i < 30; i++){
+				if(emac_regs->mmc_ipc_intr_rx & (0x01 << i)){
+					clear = sys_read32((mem_addr_t)(&(emac_regs->mmc_ipc_intr_rx)) + (i * 4));
+				}
+			}
+		}
+	}
+
+	/* PMT intrrupt */
+	if (mac_sts & BIT(NPCM_MACSR_PMTS)) {
+		/* Clear PMT interrupt */
+		emac_regs->MACPMTCSR &= ~(BIT(NPCM_MACPMTCSR_WFR) |  BIT(NPCM_MACPMTCSR_MPR));
+		LOG_DBG("PMT Interrupt\n");
 	}
 }
 

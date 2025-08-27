@@ -3513,6 +3513,7 @@ struct emac_reg {
 
 /* MACSR fields */
 #define NPCM_MACSR_TSTS                              (9U)
+#define NPCM_MACSR_MMCRXIPIS			     (7U)
 #define NPCM_MACSR_MMCTS                             (6U)
 #define NPCM_MACSR_MMMCRS                            (5U)
 #define NPCM_MACSR_MMCS                              (4U)
