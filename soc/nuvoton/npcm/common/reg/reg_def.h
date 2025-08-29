@@ -2658,6 +2658,7 @@ struct usbd_reg {
 #define NPCM_USBD_CEPBUFEND_EADDR         FIELD(0, 12)
 
 #define NPCM_USBD_DMACTL_EPNUM            FIELD(0, 4)
+#define NPCM_USBD_DMACTL_EPNUM_MASK       GENMASK(3, 0)
 #define NPCM_USBD_DMACTL_DMARD            (4)
 #define NPCM_USBD_DMACTL_DMAEN            (5)
 #define NPCM_USBD_DMACTL_SGEN             (6)

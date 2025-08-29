@@ -235,6 +235,15 @@ config USB_DC_NPCM
 	  This option enables the USB device driver for NPCM family of processors.
 	  Say y if you wish to use USB device on NPCM.
 
+config USB_DC_NPCM_DMA_SUPPORT
+	bool "Enable DMA Support for Nuvoton NPCM USB Device Controller"
+	default n
+	depends on USB_DC_NPCM
+	help
+	  Enable this option to add DMA support to the USB device driver
+	  for NPCM family of processors. This can improve data transfer efficiency.
+	  Say y if you wish to use the USB device controller with DMA on NPCM.
+
 config USB_NATIVE_POSIX
 	bool "Native Posix USB Device Controller Driver"
 	depends on ARCH_POSIX && EXTERNAL_LIBC

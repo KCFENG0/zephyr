@@ -899,15 +899,31 @@ int usb_dc_ep_write(const uint8_t ep, const uint8_t *const data,
 			}
 		}
 	} else {
+#if CONFIG_USB_DC_NPCM_DMA_SUPPORT
+		if (packet_len) {
+			/* Set DMA read memory (write to USB buffer) to serve IN EPx */
+			USBD->USBD_DMACTL = (USBD->USBD_DMACTL & ~NPCM_USBD_DMACTL_EPNUM_MASK) |
+					BIT(NPCM_USBD_DMACTL_DMARD) | BIT(NPCM_USBD_DMACTL_SVINEP) | ep_idx;
+			/* Enable DMADONE interrupt */
+			USBD->USBD_BUSINTEN |= BIT(NPCM_USBD_BUSINTEN_DMADONEIEN);
+			/* Set the DMA ADDR to read */
+			USBD->USBD_DMAADDR = (uint32_t)data;
+			/* Set the DMA transfer count to read */
+			USBD->USBD_DMACNT = packet_len;
+			/* Enable DMA */
+			USBD->USBD_DMACTL |= BIT(NPCM_USBD_DMACTL_DMAEN);
+		}
+#else
 		/* Fill data */
 		for (i = 0; i < packet_len; i++) {
 			M8(&USBD->EP[ep_idx - 1].USBD_EPDAT_BYTE) = data[i];
 		}
+#endif
 
 		/* packet end */
 		USBD->EP[ep_idx - 1].USBD_EPRSPCTL = BIT(NPCM_USBD_EPRSPCTL_SHORTTXEN) | BIT(1);
 
-		/* Clear EP data transmitted interrupt flag */
+		/* Set IN EPx transfer count */
 		USBD->EP[ep_idx - 1].USBD_EPTXCNT = packet_len;
 		/* Wait for data is transmitted */
 		st = k_uptime_get();
@@ -1064,11 +1080,24 @@ int usb_dc_ep_read_wait(uint8_t ep, uint8_t *data, uint32_t max_data_len,
 				}
 			}
 		} else {
+#if CONFIG_USB_DC_NPCM_DMA_SUPPORT
+			/* Set DMA to write memory (read from USB buffer) to serve OUT EPx */
+			USBD->USBD_DMACTL = ((USBD->USBD_DMACTL & ~(NPCM_USBD_DMACTL_EPNUM_MASK |
+					BIT(NPCM_USBD_DMACTL_DMARD) | BIT(NPCM_USBD_DMACTL_SVINEP))) | ep_idx);
+			/* Enable DMADONE interrupt */
+			USBD->USBD_BUSINTEN |= BIT(NPCM_USBD_BUSINTEN_DMADONEIEN);
+			/* Set the DMA ADDR to write */
+			USBD->USBD_DMAADDR = (uint32_t)data;
+			/* Set the DMA transfer count to write */
+			USBD->USBD_DMACNT = data_len;
+			/* Enable DMA */
+			USBD->USBD_DMACTL |= BIT(NPCM_USBD_DMACTL_DMAEN);
+#else
 			/* Bulk, Interrupt */
 			for (i = 0; i < data_len; i++) {
 				*data++ = USBD->EP[ep_idx - 1].USBD_EPDAT_BYTE;
 			}
-
+#endif
 		}
 	}
 
