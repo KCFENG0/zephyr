@@ -11,7 +11,11 @@
 #define EMAC_PHY    DP83848
 
 /*!< ETH_HEADER + ETH_EXTRA + ETH_VLAN_TAG + ETH_MAX_ETH_PAYLOAD + ETH_CRC */
+#if defined(CONFIG_ETH_SHELL)
+#define ETH_MAX_PACKET_SIZE    ((uint32_t)2048U)
+#else
 #define ETH_MAX_PACKET_SIZE    ((uint32_t)1524U)
+#endif
 
 /* DP83848: 0x01,   IP101A: 0x01 */
 #define PHY_ADDRESS                 (0x01)
@@ -361,3 +365,15 @@ struct ETH_HANDLE_TYPE {
 	/*!< ETH Lock                    */
 	uint32_t            Lock;
 };
+
+#if defined(CONFIG_ETH_SHELL)
+int eth_initialize_wapper(const struct device *dev);
+int eth_tx_wrapper(const struct device *dev, struct net_pkt *pkt);
+struct net_pkt *eth_rx_wrapper(const struct device *dev, uint16_t *vlan_tag);
+enum ETH_RET_STATUS ETH_Start(struct ETH_HANDLE_TYPE *heth);
+void ETH_MACAddressConfig(uint32_t MacAddr, uint8_t *Addr, uint8_t IsSrcAddr, uint8_t MacAddrMsk);
+enum ETH_RET_STATUS ETH_ReadPHYRegister(struct ETH_HANDLE_TYPE *heth,
+		uint16_t PHYReg, uint32_t *RegValue);
+enum ETH_RET_STATUS ETH_WritePHYRegister(struct ETH_HANDLE_TYPE *heth,
+		uint16_t PHYReg, uint32_t RegValue);
+#endif

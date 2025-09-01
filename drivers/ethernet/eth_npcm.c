@@ -32,7 +32,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "eth_npcm.h"
 #include "eth.h"
 
+#if defined(CONFIG_ETH_SHELL)
+#define ETH_NPCM_MTU 2048
+#else
 #define ETH_NPCM_MTU 1500
+#endif
+
 #define PHY_ADDR	PHY_ADDRESS
 
 #define NUVOTON_OUI_B0 0x08
@@ -379,12 +384,13 @@ static int eth_tx(const struct device *dev, struct net_pkt *pkt)
 	k_mutex_lock(&dev_data->tx_mutex, K_FOREVER);
 
 	total_len = net_pkt_get_len(pkt);
+#if !defined(CONFIG_ETH_SHELL)
 	if (total_len > ETH_TX_BUF_SIZE) {
 		LOG_ERR("PKT too big");
 		res = -EIO;
 		goto error;
 	}
-
+#endif
 	dma_tx_desc = GET_FIRST_DMA_TX_DESC(heth);
 	while (IS_ETH_DMATXDESC_OWN(dma_tx_desc) != 0) {
 		k_yield();
@@ -506,6 +512,7 @@ release_desc:
 	return pkt;
 }
 
+#if !defined(CONFIG_ETH_SHELL)
 static void rx_thread(void *arg1, void *unused1, void *unused2)
 {
 	uint16_t vlan_tag = NET_VLAN_TAG_UNSPEC;
@@ -569,6 +576,7 @@ static void rx_thread(void *arg1, void *unused1, void *unused2)
 		}
 	}
 }
+#endif
 
 static void eth_isr(const struct device *dev)
 {
@@ -1140,6 +1148,7 @@ static int eth_initialize(const struct device *dev)
 	k_sem_init(&dev_data->rx_int_sem, 0, K_SEM_MAX_LIMIT);
 
 	/* Start interruption-poll thread */
+#if !defined(CONFIG_ETH_SHELL)
 	k_thread_create(&dev_data->rx_thread, dev_data->rx_thread_stack,
 			K_KERNEL_STACK_SIZEOF(dev_data->rx_thread_stack),
 			rx_thread, (void *) dev, NULL, NULL,
@@ -1147,7 +1156,7 @@ static int eth_initialize(const struct device *dev)
 			0, K_NO_WAIT);
 
 	k_thread_name_set(&dev_data->rx_thread, "stm_eth");
-
+#endif
 	/* Initialize Tx Descriptors list: Chain Mode */
 	ETH_DMATxDescListInit(heth, DMATxDscrTab, &Tx_Buff[0][0], ETH_TXBUFNB);
 
@@ -1251,6 +1260,23 @@ static int eth_npcm_set_config(const struct device *dev,
 
 	return -ENOTSUP;
 }
+
+#if defined(CONFIG_ETH_SHELL)
+int eth_initialize_wapper(const struct device *dev)
+{
+	return eth_initialize(dev);
+}
+
+int eth_tx_wrapper(const struct device *dev, struct net_pkt *pkt)
+{
+	return eth_tx(dev, pkt);
+}
+
+struct net_pkt *eth_rx_wrapper(const struct device *dev, uint16_t *vlan_tag)
+{
+	return eth_rx(dev, vlan_tag);
+}
+#endif
 
 static const struct ethernet_api eth_api = {
 	.iface_api.init = eth_iface_init,

@@ -633,6 +633,7 @@ Shell
   * :kconfig:option:`CONFIG_USBH_SHELL`
   * :kconfig:option:`CONFIG_W1_SHELL`
   * :kconfig:option:`CONFIG_WDT_SHELL`
+  * :kconfig:option:`CONFIG_ETH_SHELL`
 
 * The ``SHELL_UART_DEFINE`` macro now only requires a ``_name`` argument. In the meantime, the
   macro accepts additional arguments (ring buffer TX & RX size arguments) for compatibility with

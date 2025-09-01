@@ -49,6 +49,12 @@ config ETH_QEMU_EXTRA_ARGS
 	  spaces between arguments. Example: "mac=02:03:04:f0:0d:01" or
 	  "mac=02:03:04:f0:0d:01,downscript=no"
 
+config ETH_SHELL
+	bool "ETH shell"
+	depends on SHELL
+	help
+	  Enable the ETH related shell commands.
+
 source "drivers/ethernet/Kconfig.enc28j60"
 source "drivers/ethernet/Kconfig.enc424j600"
 source "drivers/ethernet/Kconfig.esp32"
