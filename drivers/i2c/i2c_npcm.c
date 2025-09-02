@@ -29,7 +29,7 @@ LOG_MODULE_REGISTER(i2c_npcm, LOG_LEVEL_ERR);
 
 /* Data abort timeout */
 #define ABORT_TIMEOUT 10000
-
+#define I2C_SLAVE_NUM 10
 #define I2C_RECOVER_BUS_DELAY_US 5
 
 /* I2C operation state */
@@ -39,6 +39,19 @@ enum i2c_npcm_oper_state {
 	I2C_NPCM_OPER_STA_WRITE,
 	I2C_NPCM_OPER_STA_READ,
 	I2C_NPCM_OPER_STA_QUICK,
+};
+
+enum i2c_npcm_slave_addrno {
+    I2C_SLAVE_ADDR_1,
+    I2C_SLAVE_ADDR_2,
+    I2C_SLAVE_ADDR_3,
+    I2C_SLAVE_ADDR_4,
+    I2C_SLAVE_ADDR_5,
+    I2C_SLAVE_ADDR_6,
+    I2C_SLAVE_ADDR_7,
+    I2C_SLAVE_ADDR_8,
+    I2C_SLAVE_ADDR_9,
+    I2C_SLAVE_ADDR_10,
 };
 
 /* Device configuration */
@@ -66,7 +79,8 @@ struct i2c_npcm_data {
 	uint8_t tx_buf[I2C_MAX_RX_SIZE];
 	uint8_t *rx_msg_buf;
 	int err_code;
-	struct i2c_target_config *target_cfg;
+	struct i2c_target_config *target_cfg[I2C_SLAVE_NUM];
+	enum i2c_npcm_slave_addrno match_addr_no;
 };
 #pragma pack()
 
@@ -477,8 +491,6 @@ static void i2c_npcm_target_isr(const struct device *dev)
 {
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 	struct i2c_npcm_data *const data = dev->data;
-	const struct i2c_target_callbacks *target_cb =
-		data->target_cfg->callbacks;
 	uint16_t len;
 	uint8_t overflow_data;
 
@@ -537,23 +549,50 @@ static void i2c_npcm_target_isr(const struct device *dev)
 	/* Address match occurred                        */
 	/* --------------------------------------------- */
 	if (inst->SMBnST & BIT(NPCM_SMBnST_NMATCH)) {
+		uint8_t i = 0;
+		const struct i2c_target_callbacks *target_cb;
+
+		if (inst->SMBnCST2 & BIT(NPCM_SMBnCST2_MATCHA1F))
+			i = I2C_SLAVE_ADDR_1;
+		else if (inst->SMBnCST2 & BIT(NPCM_SMBnCST2_MATCHA2F))
+			i = I2C_SLAVE_ADDR_2;
+		else if (inst->SMBnCST2 & BIT(NPCM_SMBnCST2_MATCHA3F))
+			i = I2C_SLAVE_ADDR_3;
+		else if (inst->SMBnCST2 & BIT(NPCM_SMBnCST2_MATCHA4F))
+			i = I2C_SLAVE_ADDR_4;
+		else if (inst->SMBnCST2 & BIT(NPCM_SMBnCST2_MATCHA5F))
+			i = I2C_SLAVE_ADDR_5;
+		else if (inst->SMBnCST2 & BIT(NPCM_SMBnCST2_MATCHA6F))
+			i = I2C_SLAVE_ADDR_6;
+		else if (inst->SMBnCST2 & BIT(NPCM_SMBnCST2_MATCHA7F))
+			i = I2C_SLAVE_ADDR_7;
+		else if (inst->SMBnCST3 & BIT(NPCM_SMBnCST3_MATCHA8F))
+			i = I2C_SLAVE_ADDR_8;
+		else if (inst->SMBnCST3 & BIT(NPCM_SMBnCST3_MATCHA9F))
+			i = I2C_SLAVE_ADDR_9;
+		else if (inst->SMBnCST3 & BIT(NPCM_SMBnCST3_MATCHA10F))
+			i = I2C_SLAVE_ADDR_10;
+
+		data->match_addr_no = i;
+		target_cb = data->target_cfg[data->match_addr_no]->callbacks;
+
 		if (inst->SMBnST & BIT(NPCM_SMBnST_XMIT)) {
 			/* target received Read-Address */
 			if (data->target_oper_state != I2C_NPCM_OPER_STA_START) {
 				/* target received data before */
 				len = 0;
 				while (len < i2c_npcm_get_dma_cnt(dev)) {
-					target_cb->write_received(data->target_cfg,
+					target_cb->write_received(data->target_cfg[i],
 								 data->rx_buf[len]);
 					len++;
 				}
 			}
 
 			/* prepare tx data */
-			if (target_cb->read_requested(data->target_cfg, data->tx_buf) == 0) {
+			if (target_cb->read_requested(data->target_cfg[i], data->tx_buf) == 0) {
 				len = 0;
 				while (++len < sizeof(data->tx_buf)) {
-					if (target_cb->read_processed(data->target_cfg,
+					if (target_cb->read_processed(data->target_cfg[i],
 							data->tx_buf + len) != 0) {
 						break;
 					}
@@ -577,7 +616,7 @@ static void i2c_npcm_target_isr(const struct device *dev)
 			data->target_oper_state = I2C_NPCM_OPER_STA_READ;
 			/* Set DMA register to get data */
 			i2c_npcm_start_DMA(dev, (uint32_t)data->rx_buf, sizeof(data->rx_buf));
-			target_cb->write_requested(data->target_cfg);
+			target_cb->write_requested(data->target_cfg[i]);
 		}
 		/* Clear address match bit & SDA pull high */
 		inst->SMBnST = BIT(NPCM_SMBnST_NMATCH);
@@ -587,18 +626,20 @@ static void i2c_npcm_target_isr(const struct device *dev)
 	/* SDA status is set - transmit or receive       */
 	/* --------------------------------------------- */
 	if (inst->SMBnST & BIT(NPCM_SMBnST_SDAST)) {
+		const struct i2c_target_callbacks *target_cb =
+			data->target_cfg[data->match_addr_no]->callbacks;
 		if (data->target_oper_state == I2C_NPCM_OPER_STA_READ) {
 			/* Over Flow */
 			overflow_data = inst->SMBnSDA;
 
 			len = 0;
 			while (len < i2c_npcm_get_dma_cnt(dev)) {
-				if (target_cb->write_received(data->target_cfg, data->rx_buf[len]))
+				if (target_cb->write_received(data->target_cfg[data->match_addr_no], data->rx_buf[len]))
 					break;
 
 				len++;
 			}
-			target_cb->write_received(data->target_cfg, overflow_data);
+			target_cb->write_received(data->target_cfg[data->match_addr_no], overflow_data);
 			data->target_oper_state = I2C_NPCM_OPER_STA_START;
 		} else {
 			/* No Enough DMA data to send */
@@ -610,15 +651,17 @@ static void i2c_npcm_target_isr(const struct device *dev)
 	/* Target STOP occurred                           */
 	/* --------------------------------------------- */
 	if (inst->SMBnST & BIT(NPCM_SMBnST_SLVSTP)) {
+		const struct i2c_target_callbacks *target_cb =
+			data->target_cfg[data->match_addr_no]->callbacks;
 		if (data->target_oper_state == I2C_NPCM_OPER_STA_READ) {
 			len = 0;
 			while (len < i2c_npcm_get_dma_cnt(dev)) {
-				target_cb->write_received(data->target_cfg, data->rx_buf[len]);
+				target_cb->write_received(data->target_cfg[data->match_addr_no], data->rx_buf[len]);
 				len++;
 			}
 		}
 		if (data->target_oper_state != I2C_NPCM_OPER_STA_IDLE) {
-			target_cb->stop(data->target_cfg);
+			target_cb->stop(data->target_cfg[data->match_addr_no]);
 		}
 		data->target_oper_state = I2C_NPCM_OPER_STA_START;
 		/* clear STOP flag */
@@ -626,22 +669,91 @@ static void i2c_npcm_target_isr(const struct device *dev)
 	}
 }
 
-static void i2c_set_target_addr(const struct device *dev, uint8_t target_addr)
+static uint8_t i2c_ret_slave(const struct device *dev, int index)
 {
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 
-	/* set target addr 1 */
-	inst->SMBnADDR1 = (target_addr | BIT(NPCM_SMBnADDR_SAEN));
+	switch (index) {
+		case 0:
+			return inst->SMBnADDR1;
+		case 1:
+			return inst->SMBnADDR2;
+		case 2:
+			return inst->SMBnADDR3;
+		case 3:
+			return inst->SMBnADDR4;
+		case 4:
+			return inst->SMBnADDR5;
+		case 5:
+			return inst->SMBnADDR6;
+		case 6:
+			return inst->SMBnADDR7;
+		case 7:
+			return inst->SMBnADDR8;
+		case 8:
+			return inst->SMBnADDR9;
+		case 9:
+			return inst->SMBnADDR10;
+	}
+
+	return 0;
+}
+
+static void i2c_conf_slave(const struct device *dev, int index, uint8_t value)
+{
+	struct i2c_reg *const inst = I2C_INSTANCE(dev);
+
+	switch (index) {
+		case 0:
+			inst->SMBnADDR1 = value;
+			break;
+		case 1:
+			inst->SMBnADDR2 = value;
+			break;
+		case 2:
+			inst->SMBnADDR3 = value;
+			break;
+		case 3:
+			inst->SMBnADDR4 = value;
+			break;
+		case 4:
+			inst->SMBnADDR5 = value;
+			break;
+		case 5:
+			inst->SMBnADDR6 = value;
+			break;
+		case 6:
+			inst->SMBnADDR7 = value;
+			break;
+		case 7:
+			inst->SMBnADDR8 = value;
+			break;
+		case 8:
+			inst->SMBnADDR9 = value;
+			break;
+		case 9:
+			inst->SMBnADDR10 = value;
+			break;
+	}
+}
+
+static void i2c_set_target_addr(const struct device *dev, int index, uint8_t target_addr)
+{
+	struct i2c_reg *const inst = I2C_INSTANCE(dev);
+
+	/* set slave addr */
+	i2c_conf_slave(dev, index, (target_addr | BIT(NPCM_SMBnADDR_SAEN)));
 
 	/* Enable I2C address match interrupt */
-	inst->SMBnCTL1 |= BIT(NPCM_SMBnCTL1_NMINTE);
+	if (!(inst->SMBnCTL1 & BIT(NPCM_SMBnCTL1_NMINTE)))
+		inst->SMBnCTL1 |= BIT(NPCM_SMBnCTL1_NMINTE);
 }
 
 static int i2c_npcm_target_register(const struct device *dev,
 				      struct i2c_target_config *cfg)
 {
 	struct i2c_npcm_data *data = dev->data;
-	int ret = 0;
+	int ret = 0, free_index = -1, i;
 
 	if (!cfg) {
 		return -EINVAL;
@@ -653,16 +765,29 @@ static int i2c_npcm_target_register(const struct device *dev,
 		return -EBUSY;
 	}
 
-	if (data->target_cfg) {
-		/* target is already registered */
+	for (i = 0; i < I2C_SLAVE_NUM; i++) {
+		if (!data->target_cfg[i]) {
+			if (free_index == -1)
+				free_index = i;
+			continue;
+		}
+
+		if (data->target_cfg[i]->address == cfg->address) {
+			/* slave is already registered */
+			ret = -EBUSY;
+			goto exit;
+		}
+	}
+
+	if (free_index == -1) {
 		ret = -EBUSY;
 		goto exit;
 	}
 
-	data->target_cfg = cfg;
+	data->target_cfg[free_index] = cfg;
 	data->target_oper_state = I2C_NPCM_OPER_STA_START;
 	/* set target addr, cfg->address is 7 bit address */
-	i2c_set_target_addr(dev, cfg->address);
+	i2c_set_target_addr(dev, free_index, cfg->address);
 
 exit:
 	i2c_npcm_mutex_unlock(dev);
@@ -674,11 +799,8 @@ static int i2c_npcm_target_unregister(const struct device *dev,
 {
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 	struct i2c_npcm_data *data = dev->data;
+	int i, found_index = -1;
 
-
-	if (!data->target_cfg) {
-		return -EINVAL;
-	}
 
 	if (data->target_oper_state != I2C_NPCM_OPER_STA_START &&
 	    data->ctrl_oper_state != I2C_NPCM_OPER_STA_IDLE) {
@@ -689,17 +811,41 @@ static int i2c_npcm_target_unregister(const struct device *dev,
 		return -EBUSY;
 	}
 
-	/* clear target addr 1 */
-	inst->SMBnADDR1 = 0;
+	for (i = 0; i < I2C_SLAVE_NUM; i++) {
+		if (!data->target_cfg[i])
+			continue;
 
-	/* Disable I2C address match interrupt */
-	inst->SMBnCTL1 &= ~BIT(NPCM_SMBnCTL1_NMINTE);
+		if (data->target_cfg[i]->address == config->address) {
+			found_index = i;
+			break;
+		}
+	}
+
+	if (found_index == -1) {
+		i2c_npcm_mutex_unlock(dev);
+		return -EINVAL;
+	}
+
+	/* clear slave addr */
+	i2c_conf_slave(dev, found_index, 0);
 
 	/* clear all interrupt status */
 	inst->SMBnST = 0xFF;
 
 	data->target_oper_state = I2C_NPCM_OPER_STA_IDLE;
-	data->target_cfg = NULL;
+	data->target_cfg[found_index] = 0;
+
+	/* Disable I2C address match interrupt
+	 * only if all the slave addresses are
+	 * removed.
+	 */
+	for (i = 0; i < I2C_SLAVE_NUM; i++) {
+		if (data->target_cfg[i])
+			break;
+	}
+
+	if (i == I2C_SLAVE_NUM)
+		inst->SMBnCTL1 &= ~BIT(NPCM_SMBnCTL1_NMINTE);
 
 	i2c_npcm_mutex_unlock(dev);
 
@@ -732,7 +878,7 @@ static int i2c_npcm_init(const struct device *dev)
 	struct i2c_npcm_data *const data = dev->data;
 	const struct device *const clk_dev = DEVICE_DT_GET(DT_NODELABEL(pcc));
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
-	int ret;
+	int ret, i;
 
 	LOG_DBG("Device name: %s", dev->name);
 
@@ -769,7 +915,9 @@ static int i2c_npcm_init(const struct device *dev)
 	/* Initialize driver status machine */
 	data->ctrl_oper_state = I2C_NPCM_OPER_STA_IDLE;
 
-	data->target_cfg = NULL;
+	for (i = 0; i < I2C_SLAVE_NUM; i++) {
+		data->target_cfg[i] = NULL;
+	}
 
 	return 0;
 }
@@ -888,23 +1036,23 @@ int i2c_npcm_recover_bus(const struct device *dev)
 static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 				uint8_t num_msgs, uint16_t addr)
 {
-	uint8_t value;
-	struct i2c_reg *const inst = I2C_INSTANCE(dev);
+	int i, ret;
+	uint8_t value[I2C_SLAVE_NUM];
 
 #if (CONFIG_CONTROLLER_HW_TIMEOUT_EN == 'Y')
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 #endif
 	struct i2c_npcm_data *const data = dev->data;
-	int ret;
 
 	if (i2c_npcm_mutex_lock(dev, I2C_WAITING_TIME) != 0) {
 		return -EBUSY;
 	}
 
-	/* Disable target addr 1 */
-	value = inst->SMBnADDR1;
-	value &= ~BIT(NPCM_SMBnADDR_SAEN);
-	inst->SMBnADDR1 = value;
+	/* save original slave addr setting and disable all the slave devices */
+	for (i = 0; i < I2C_SLAVE_NUM; i++) {
+		value[i] = i2c_ret_slave(dev, i);
+		i2c_conf_slave(dev, i, (value[i] & ~BIT(NPCM_SMBnADDR_SAEN)));
+	}
 
 	/* prepare data to transfer */
 	data->rx_cnt = 0;
@@ -914,10 +1062,10 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 	data->err_code = 0;
 	if (i2c_npcm_combine_msg(dev, msgs, num_msgs) < 0) {
 		i2c_npcm_mutex_unlock(dev);
-		/* Enable target addr 1 */
-		value = inst->SMBnADDR1;
-		value |= BIT(NPCM_SMBnADDR_SAEN);
-		inst->SMBnADDR1 = value;
+		/* restore slave addr setting */
+		for (i = 0; i < I2C_SLAVE_NUM; i++) {
+			i2c_conf_slave(dev, i, value[i]);
+		}
 		return -EPROTONOSUPPORT;
 	}
 
@@ -926,10 +1074,10 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 		if (num_msgs != 1) {
 			/* Quick command must have one msg */
 			i2c_npcm_mutex_unlock(dev);
-			/* Enable target addr 1 */
-			value = inst->SMBnADDR1;
-			value |= BIT(NPCM_SMBnADDR_SAEN);
-			inst->SMBnADDR1 = value;
+			/* restore slave addr setting */
+			for (i = 0; i < I2C_SLAVE_NUM; i++) {
+				i2c_conf_slave(dev, i, value[i]);
+			}
 			return -EPROTONOSUPPORT;
 		}
 		if ((msgs->flags & I2C_MSG_RW_MASK) == I2C_MSG_WRITE) {
@@ -965,10 +1113,10 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 
 	i2c_npcm_mutex_unlock(dev);
 
-	/* Enable target addr 1 */
-	value = inst->SMBnADDR1;
-	value |= BIT(NPCM_SMBnADDR_SAEN);
-	inst->SMBnADDR1 = value;
+	/* restore slave addr setting */
+	for (i = 0; i < I2C_SLAVE_NUM; i++) {
+		i2c_conf_slave(dev, i, value[i]);
+	}
 
 	return ret;
 }
