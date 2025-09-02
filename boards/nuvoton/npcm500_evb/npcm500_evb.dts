@@ -394,6 +394,56 @@
 	pinctrl-0 = <&i2c1a_scl_sda_gpio60_61>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom1: eeprom1@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom2: eeprom2@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom3: eeprom3@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom4: eeprom4@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom5: eeprom5@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom6: eeprom6@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom7: eeprom7@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom8: eeprom8@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom9: eeprom9@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom10: eeprom10@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &i2c2a {
@@ -401,6 +451,56 @@
 	pinctrl-0 = <&i2c2a_scl_sda_gpio11_13>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom11: eeprom11@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom12: eeprom12@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom13: eeprom13@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom14: eeprom14@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom15: eeprom15@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom16: eeprom16@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom17: eeprom17@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom18: eeprom18@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom19: eeprom19@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom20: eeprom20@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &i2c3a {
@@ -408,6 +508,56 @@
 	pinctrl-0 = <&i2c3a_scl_sda_gpioa7_a2>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom21: eeprom21@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom22: eeprom22@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom23: eeprom23@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom24: eeprom24@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom25: eeprom25@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom26: eeprom26@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom27: eeprom27@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom28: eeprom28@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom29: eeprom29@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom30: eeprom30@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &i2c4a {
@@ -415,6 +565,56 @@
 	pinctrl-0 = <&i2c4a_scl_sda_gpio36_37>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom31: eeprom31@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom32: eeprom32@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom33: eeprom33@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom34: eeprom34@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom35: eeprom35@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom36: eeprom36@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom37: eeprom37@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom38: eeprom38@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom39: eeprom39@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom40: eeprom40@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &i2c5a {
@@ -422,6 +622,56 @@
 	pinctrl-0 = <&i2c5a_scl_sda_gpio34_35>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom41: eeprom41@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom42: eeprom42@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom43: eeprom43@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom44: eeprom44@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom45: eeprom45@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom46: eeprom46@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom47: eeprom47@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom48: eeprom48@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom49: eeprom49@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom50: eeprom50@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &i2c6a {
@@ -436,6 +686,56 @@
 	pinctrl-0 = <&i2c7a_scl_sda_gpioc2_c3>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom61: eeprom61@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom62: eeprom62@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom63: eeprom63@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom64: eeprom64@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom65: eeprom65@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom66: eeprom66@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom67: eeprom67@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom68: eeprom68@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom69: eeprom69@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom70: eeprom70@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &i2c8a {
@@ -443,6 +743,56 @@
 	pinctrl-0 = <&i2c8a_scl_sda_gpioc6_c7>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom71: eeprom71@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom72: eeprom72@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom73: eeprom73@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom74: eeprom74@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom75: eeprom75@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom76: eeprom76@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom77: eeprom77@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom78: eeprom78@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom79: eeprom79@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom80: eeprom80@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &i2c9a {
@@ -450,6 +800,56 @@
 	pinctrl-0 = <&i2c9a_scl_sda_gpio32_33>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom81: eeprom81@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom82: eeprom82@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom83: eeprom83@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom84: eeprom84@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom85: eeprom85@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom86: eeprom86@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom87: eeprom87@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom88: eeprom88@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom89: eeprom89@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom90: eeprom90@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &i2c10a {
@@ -457,6 +857,56 @@
 	pinctrl-0 = <&i2c10a_scl_sda_gpiod2_d3>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom91: eeprom91@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom92: eeprom92@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom93: eeprom93@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom94: eeprom94@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom95: eeprom95@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom96: eeprom96@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom97: eeprom97@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom98: eeprom98@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom99: eeprom99@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom100: eeprom100@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &i2c11a {
@@ -464,6 +914,56 @@
 	pinctrl-0 = <&i2c11a_scl_sda_gpiod4_d5>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom101: eeprom101@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom102: eeprom102@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom103: eeprom103@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom104: eeprom104@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom105: eeprom105@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom106: eeprom106@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom107: eeprom107@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom108: eeprom108@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom109: eeprom109@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom110: eeprom110@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &i2c12a {
@@ -471,6 +971,56 @@
 	pinctrl-0 = <&i2c12a_scl_sda_gpiod6_d7>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom111: eeprom111@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom112: eeprom112@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom113: eeprom113@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom114: eeprom114@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom115: eeprom115@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom116: eeprom116@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom117: eeprom117@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom118: eeprom118@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom119: eeprom119@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom120: eeprom120@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &i2c1b {
@@ -488,10 +1038,60 @@
 };
 
 &i2c6b {
-	status = "disabled";
+	status = "okay";
 	pinctrl-0 = <&i2c6b_scl_sda_gpio16_17>;
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_STANDARD>;
+	eeprom51: eeprom51@77 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x77>;
+		size = <256>;
+    };
+	eeprom52: eeprom52@76 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x76>;
+		size = <256>;
+    };
+	eeprom53: eeprom53@75 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x75>;
+		size = <256>;
+    };
+	eeprom54: eeprom54@74 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x74>;
+		size = <256>;
+    };
+	eeprom55: eeprom55@73 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x73>;
+		size = <256>;
+    };
+	eeprom56: eeprom56@72 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x72>;
+		size = <256>;
+    };
+	eeprom57: eeprom57@71 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x71>;
+		size = <256>;
+    };
+	eeprom58: eeprom58@70 {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x70>;
+		size = <256>;
+    };
+	eeprom59: eeprom59@6f {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6f>;
+		size = <256>;
+    };
+	eeprom60: eeprom60@6e {
+		compatible = "zephyr,i2c-target-eeprom";
+		reg = <0x6e>;
+		size = <256>;
+    };
 };
 
 &usbd20 {
