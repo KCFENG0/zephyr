@@ -211,6 +211,7 @@ struct i2c_target_config;
 
 typedef int (*i2c_api_configure_t)(const struct device *dev,
 				   uint32_t dev_config);
+typedef int (*i2c_api_check_reg_t)(const struct device *dev,uint8_t *reg_buf);
 typedef int (*i2c_api_get_config_t)(const struct device *dev,
 				    uint32_t *dev_config);
 typedef int (*i2c_api_full_io_t)(const struct device *dev,
@@ -243,6 +244,7 @@ typedef int (*i2c_api_recover_bus_t)(const struct device *dev);
 
 __subsystem struct i2c_driver_api {
 	i2c_api_configure_t configure;
+	i2c_api_check_reg_t chech_reg;
 	i2c_api_get_config_t get_config;
 	i2c_api_full_io_t transfer;
 	i2c_api_target_register_t target_register;
@@ -1091,6 +1093,19 @@ static inline int z_impl_i2c_recover_bus(const struct device *dev)
 	}
 
 	return api->recover_bus(dev);
+}
+
+__syscall int i2c_check_bus(const struct device *dev,uint8_t *reg_buf);
+
+static inline int z_impl_i2c_check_bus(const struct device *dev,uint8_t *reg_buf)
+{
+	const struct i2c_driver_api *api =
+		(const struct i2c_driver_api *)dev->api;
+
+	if (api->chech_reg == NULL) {
+		return -ENOSYS;
+	}
+	return api->chech_reg(dev,reg_buf);
 }
 
 /**

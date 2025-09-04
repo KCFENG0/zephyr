@@ -81,6 +81,7 @@ struct i2c_npcm_data {
 	int err_code;
 	struct i2c_target_config *target_cfg[I2C_SLAVE_NUM];
 	enum i2c_npcm_slave_addrno match_addr_no;
+	uint8_t reg_buf[15];
 };
 #pragma pack()
 
@@ -317,12 +318,12 @@ static void i2c_npcm_set_baudrate(const struct device *dev, uint32_t bus_freq)
 
 static void i2c_npcm_notify(const struct device *dev, int error)
 {
-#if (CONFIG_CONTROLLER_HW_TIMEOUT_EN == 'Y')
+#ifdef CONFIG_CONTROLLER_HW_TIMEOUT_EN
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 #endif
 	struct i2c_npcm_data *const data = dev->data;
 
-#if (CONFIG_CONTROLLER_HW_TIMEOUT_EN == 'Y')
+#ifdef CONFIG_CONTROLLER_HW_TIMEOUT_EN
 	/* Disable HW Timeout */
 	inst->TIMEOUT_EN &= ~BIT(NPCM_TIMEOUT_EN_TIMEOUT_EN);
 #endif
@@ -370,7 +371,7 @@ static void i2c_npcm_ctrl_isr(const struct device *dev)
 	/* --------------------------------------------- */
 	/* Timeout occurred                              */
 	/* --------------------------------------------- */
-#if (CONFIG_CONTROLLER_HW_TIMEOUT_EN == 'Y')
+#ifdef CONFIG_CONTROLLER_HW_TIMEOUT_EN
 	if (inst->TIMEOUT_ST & BIT(NPCM_TIMEOUT_ST_T_OUTST1)) {
 		/* clear timeout flag */
 		inst->TIMEOUT_ST = BIT(NPCM_TIMEOUT_ST_T_OUTST1);
@@ -495,7 +496,7 @@ static void i2c_npcm_target_isr(const struct device *dev)
 	uint8_t overflow_data;
 
 
-#if (CONFIG_TARGET_HW_TIMEOUT_EN == 'Y')
+#ifdef CONFIG_TARGET_HW_TIMEOUT_EN
 	/* --------------------------------------------- */
 	/* Timeout occurred                              */
 	/* --------------------------------------------- */
@@ -858,6 +859,22 @@ static void i2c_npcm_isr(const struct device *dev)
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 	struct i2c_npcm_data *data = dev->data;
 
+	data->reg_buf[0] |= inst->SMBnST;
+	data->reg_buf[1] |= inst->SMBnCST;
+	data->reg_buf[2] |= inst->SMBnCTL1;
+	data->reg_buf[3] |= inst->TIMEOUT_ST;
+	data->reg_buf[4] |= inst->TIMEOUT_EN;
+	data->reg_buf[5] |= inst->SMBnCTL3;
+	data->reg_buf[6] |= inst->DMA_CTRL;
+	data->reg_buf[7] |= inst->SMBnCST2;
+	data->reg_buf[8] |= inst->SMBnCST3;
+	data->reg_buf[9] |= inst->SMBnCTL4;
+	data->reg_buf[10] |= inst->SMBnCTL5;
+	data->reg_buf[11] |= inst->SMBnSCLLT;
+	data->reg_buf[12] |= inst->SMBnSCLHT;
+	data->reg_buf[13] |= inst->TIMEOUT_CTL1;
+	data->reg_buf[14] |= inst->TIMEOUT_CTL2;
+
 	if (data->ctrl_oper_state != I2C_NPCM_OPER_STA_IDLE) {
 		i2c_npcm_ctrl_isr(dev);
 	} else {
@@ -922,6 +939,14 @@ static int i2c_npcm_init(const struct device *dev)
 	return 0;
 }
 
+static int i2c_npcm_check(const struct device *dev,uint8_t *reg_buf)
+{
+	struct i2c_npcm_data *const data = dev->data;
+
+	memcpy(reg_buf, data->reg_buf, sizeof(data->reg_buf));
+
+	return 0;
+}
 static int i2c_npcm_configure(const struct device *dev, uint32_t dev_config)
 {
 	struct i2c_npcm_data *const data = dev->data;
@@ -1039,7 +1064,7 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 	int i, ret;
 	uint8_t value[I2C_SLAVE_NUM];
 
-#if (CONFIG_CONTROLLER_HW_TIMEOUT_EN == 'Y')
+#ifdef CONFIG_CONTROLLER_HW_TIMEOUT_EN
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 #endif
 	struct i2c_npcm_data *const data = dev->data;
@@ -1089,7 +1114,7 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 		}
 	}
 
-#if (CONFIG_CONTROLLER_HW_TIMEOUT_EN == 'Y')
+#ifdef CONFIG_CONTROLLER_HW_TIMEOUT_EN
 	/* Set I2C HW timeout value */
 	Set_Cumulative_ClockCycle_Timeout(dev, CONFIG_CONTROLLER_HW_TIMEOUT_CLK_CYCLE_TIME);
 	Set_Cumulative_ClockLow_Timeout(dev, CONFIG_CONTROLLER_HW_TIMEOUT_CLK_LOW_TIME);
@@ -1124,6 +1149,7 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 static const struct i2c_driver_api i2c_npcm_driver_api = {
 	.configure = i2c_npcm_configure,
 	.transfer = i2c_npcm_transfer,
+	.chech_reg = i2c_npcm_check,
 	.target_register = i2c_npcm_target_register,
 	.target_unregister = i2c_npcm_target_unregister,
 	.recover_bus = i2c_npcm_recover_bus,
