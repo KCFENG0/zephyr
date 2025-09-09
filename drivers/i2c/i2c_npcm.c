@@ -81,7 +81,7 @@ struct i2c_npcm_data {
 	int err_code;
 	struct i2c_target_config *target_cfg[I2C_SLAVE_NUM];
 	enum i2c_npcm_slave_addrno match_addr_no;
-	uint8_t reg_buf[15];
+	uint8_t reg_buf[16];
 };
 #pragma pack()
 
@@ -131,7 +131,10 @@ static void i2c_npcm_start_DMA(const struct device *dev,
 				  uint32_t addr, uint16_t len)
 {
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
+	struct i2c_npcm_data *data = dev->data;
 
+	inst->DMA_CTRL |= BIT(NPCM_DMA_CTRL_DMA_STALL);
+	data->reg_buf[6] |= inst->DMA_CTRL;
 	/* address */
 	inst->DMA_ADDR1 = (uint8_t)((addr) >> 0);
 	inst->DMA_ADDR2 = (uint8_t)((addr) >> 8);
@@ -744,7 +747,8 @@ static void i2c_set_target_addr(const struct device *dev, int index, uint8_t tar
 
 	/* set slave addr */
 	i2c_conf_slave(dev, index, (target_addr | BIT(NPCM_SMBnADDR_SAEN)));
-
+	inst->SMBnCTL1 |= BIT(NPCM_SMBnCTL1_GCMEN);
+	inst->SMBnCTL3 |= BIT(NPCM_SMBnCTL3_ARPMEN);
 	/* Enable I2C address match interrupt */
 	if (!(inst->SMBnCTL1 & BIT(NPCM_SMBnCTL1_NMINTE)))
 		inst->SMBnCTL1 |= BIT(NPCM_SMBnCTL1_NMINTE);
@@ -874,6 +878,7 @@ static void i2c_npcm_isr(const struct device *dev)
 	data->reg_buf[12] |= inst->SMBnSCLHT;
 	data->reg_buf[13] |= inst->TIMEOUT_CTL1;
 	data->reg_buf[14] |= inst->TIMEOUT_CTL2;
+	data->reg_buf[15] |= inst->SMBnPEC;
 
 	if (data->ctrl_oper_state != I2C_NPCM_OPER_STA_IDLE) {
 		i2c_npcm_ctrl_isr(dev);
@@ -919,6 +924,7 @@ static int i2c_npcm_init(const struct device *dev)
 	data->bitrate = config->default_bitrate;
 	LOG_DBG("bitrate: %d", data->bitrate);
 	i2c_npcm_set_baudrate(dev, data->bitrate);
+	inst->SMBnCTL5=0x07;
 
 	/* Enable I2C module */
 	inst->SMBnCTL2 |= BIT(NPCM_SMBnCTL2_ENABLE);
