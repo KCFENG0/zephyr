@@ -1381,6 +1381,15 @@ struct shm_reg {
 #define NPCM_DP80CTL_ADV                 2
 #define NPCM_DP80CTL_RAA                 3
 #define NPCM_DP80CTL_RFIFO               4
+#define NPCM_DP80IE_ILV                  FIELD(0, 3)
+#define NPCM_DP80IE_FLVIE                4
+#define NPCM_DP80IE_FWRIE                5
+#define NPCM_DP80IE_FNEIE                6
+#define NPCM_DP80IE_FORIE                7
+#define NPCM_DP80BUF_DATA                FIELD(0, 7)
+#define NPCM_DP80BUF_OFFS                FIELD(8, 10)
+#define NPCM_DP80BUF_RNG                 11
+#define NPCM_DP80BUF_BTYE_LEN            FIELD(12, 13)
 
 /*
  * Keyboard and Mouse Controller (KBC) device registers

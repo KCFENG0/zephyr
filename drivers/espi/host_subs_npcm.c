@@ -771,8 +771,9 @@ static void host_port80_init(void)
 	 * SYNC mode (It must be 1 in eSPI mode), Read Auto Advance mode, and
 	 * Port80 module itself.
 	 */
-	inst_shm->DP80CTL = BIT(NPCM_DP80CTL_CIEN) | BIT(NPCM_DP80CTL_RAA)
-			| BIT(NPCM_DP80CTL_DP80EN) | BIT(NPCM_DP80CTL_SYNCEN);
+	inst_shm->DP80CTL = BIT(NPCM_DP80CTL_RAA) | BIT(NPCM_DP80CTL_DP80EN)
+			| BIT(NPCM_DP80CTL_SYNCEN);
+	inst_shm->DP80IE |= BIT(NPCM_DP80IE_FNEIE) | BIT(NPCM_DP80IE_FWRIE);
 }
 #endif
 

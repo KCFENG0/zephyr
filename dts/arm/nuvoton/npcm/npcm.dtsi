@@ -325,7 +325,7 @@
 			/* host sub-module IRQ and priority */
 			interrupts = <4 3>,  /* PMCH Input-Buf-Full (IBF) */
 				     <3 3>,  /* PMCH Output-Buf-Empty (OBE) */
-				     <6 3>;  /* Port80 FIFO Not Empty */
+				     <10 3>;  /* Port80 FIFO Not Empty */
 			interrupt-names = "pmch_ibf", "pmch_obe", "p80_fifo";
 
 			/* WUI map for accessing host sub-modules */
@@ -337,6 +337,14 @@
 				 <&pcc NPCM_CLOCK_SHM>,
 				 <&pcc NPCM_CLOCK_DP80>,
 				 <&pcc NPCM_CLOCK_MSWC>;
+		};
+
+		shm: shm@40010000{
+			compatible = "nuvoton,npcm-shm";
+			reg = <0x40010000 0x2000>;
+			interrupts = <10 3>;
+			interrupt-names = "p80";
+			clocks = <&pcc NPCM_CLOCK_SHM>;
 		};
 
 		kcs1: kcs@400c9000 {

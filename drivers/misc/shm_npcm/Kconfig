@@ -1,0 +1,13 @@
+# NPCM misc. driver options
+
+# Copyright (c) 2024 Nuvoton
+# SPDX-License-Identifier: Apache-2.0
+
+config SHM_NPCM
+	bool "NPCM host modules share memory driver"
+	depends on SOC_FAMILY_NPCM
+	help
+	  This option enables the host module share memory driver
+	  for NPCM SoCs.
+	  Say y if you wish to access host modules
+	  on NPCM SMC.
