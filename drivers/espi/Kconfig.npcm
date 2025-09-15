@@ -49,27 +49,11 @@ config ESPI_NPCM_PERIPHERAL_DEBUG_PORT_80_RING_BUF_SIZE
 
 config ESPI_TAF_NPCM
 	bool "Nuvoton NPCM embedded controller (EC) ESPI TAF driver"
-	depends on (SOC_SERIES_NPCM5 || SOC_SERIES_NPCM4)
+	depends on SOC_SERIES_NPCM5 || SOC_SERIES_NPCM4
 	depends on FLASH
 	help
 	  This option enables the Intel Enhanced Serial Peripheral Interface
 	  Target Attached Flash (eSPI TAF) for NPCM family of processors.
-
-choice ESPI_TAF_ACCESS_MODE_CHOICE
-	prompt "eSPI TAF Read Access Mode"
-	default ESPI_TAF_AUTO_MODE
-
-config ESPI_TAF_AUTO_MODE
-	bool "eSPI TAF Automatic Mode"
-	help
-	  This is the setting to use auto mode for eSPI TAF read.
-
-config ESPI_TAF_MANUAL_MODE
-	bool "eSPI TAF Manual Mode"
-	help
-	  This is the setting to use manual mode for eSPI TAF read.
-
-endchoice
 
 config ESPI_TAF_PR_NUM
 	int "Sets of protection region settings"
@@ -78,11 +62,22 @@ config ESPI_TAF_PR_NUM
 	  This size is display how many group of slave attached flash protection
 	  region.
 
+config ESPI_NPCM_FLASH_SAFS_HW_MODE
+	bool "ESPI FLASH SAFS hardware mode"
+	default n
+	help
+	  Enable hardware-based Serial Advanced Flash Storage (SAFS) mode for the
+	  eSPI flash channel in the NPCM series. This mode provides enhanced
+	  performance for flash communication over the eSPI interface.
+
 # The default value 'y' for the existing options if ESPI_NPCM is selected.
 if ESPI_NPCM
 
+config ESPI_FLASH_CHANNEL
+	default y
+
 config ESPI_OOB_CHANNEL
-	default n
+	default y
 
 config ESPI_PERIPHERAL_8042_KBC
 	default n
@@ -102,17 +97,23 @@ config ESPI_PERIPHERAL_ACPI_SHM_REGION
 config ESPI_PERIPHERAL_CUSTOM_OPCODE
 	default n
 
+config ESPI_PERIPHERAL_PMCH3
+	bool "NPCM PMCH3 Support"
+	default y
+	help
+	  Enables PM channel 3 for eSPI peripheral channel.
+
+config ESPI_PERIPHERAL_PMCH4
+	bool "NPCM PMCH4 Support"
+	default y
+	help
+	  Enables PM channel 4 for eSPI peripheral channel."
+
 config ESPI_NPCM_SUPP_VW_GPIO
 	bool "Indicates that the eSPI hardware supports virtual wire GPIOs"
 	default n if SOC_SERIES_NPCM5 || SOC_SERIES_NPCM4
 	help
 	  Selected if NPCM series supports virtual wire GPIOs in eSPI module.
-
-config ESPI_NPCM_CAF_GLOBAL_RESET_WORKAROUND
-	bool
-	default n if (SOC_SERIES_NPCM5 || SOC_SERIES_NPCM4) && ESPI_FLASH_CHANNEL
-	help
-	  Workaround the issue "Global Reset" in the npcm4 SoC errata.
 
 config ESPI_RTC_SUPP
 	bool

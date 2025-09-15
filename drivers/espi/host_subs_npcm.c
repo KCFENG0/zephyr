@@ -397,7 +397,7 @@ static void host_acpi_init(void)
 #endif
 
 #if defined(CONFIG_ESPI_PERIPHERAL_PMCH3)
-#if !defined(CONFIG_IPMI_KCS_NPCM4)
+#if !defined(CONFIG_IPMI_KCS_NPCM)
 static void host_pmch3_process_input_data(uint8_t data)
 {
 	struct pmch_reg *const inst_pmch3 = host_sub_cfg.inst_pmch3;

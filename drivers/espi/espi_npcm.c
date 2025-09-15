@@ -9,10 +9,10 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <zephyr/drivers/espi.h>
+#include <zephyr/drivers/espi_npcm.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/dt-bindings/clock/npcm_clock.h>
 #include <zephyr/drivers/clock_control.h>
-#include <zephyr/drivers/pinctrl.h>
 #include <zephyr/dt-bindings/espi/npcm_espi.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/byteorder.h>
@@ -29,7 +29,6 @@ LOG_MODULE_REGISTER(espi, CONFIG_ESPI_LOG_LEVEL);
 struct espi_npcm_config {
 	uintptr_t base;
 	/* clock configuration */
-	//struct npcm_clk_cfg clk_cfg;
 	uint32_t clk_cfg;
 	/* mapping table between eSPI reset signal and wake-up input */
 	struct npcm_wui espi_rst_wui;
@@ -44,11 +43,12 @@ struct espi_npcm_data {
 	struct k_sem oob_rx_lock;
 #endif
 #if defined(CONFIG_ESPI_FLASH_CHANNEL)
+	/* Controller Attached Flash Sharing */
 	struct k_sem flash_rx_lock;
-#endif
-#ifdef CONFIG_ESPI_NPCM_CAF_GLOBAL_RESET_WORKAROUND
-	/* tell the interrupt handler that it is a fake request */
-	bool fake_req_flag;
+	/* Target Attached Flash Sharing */
+	struct k_sem tafs_rx_lock;
+	struct k_sem tafs_tx_lock;
+	struct k_sem tafs_rx_ready;
 #endif
 };
 
@@ -83,17 +83,11 @@ struct espi_npcm_data {
 #define NPCM_ESPI_FLASH_MAX_RX_PAYLOAD DT_INST_PROP(0, rx_plsize)
 #define NPCM_ESPI_FLASH_MAX_TX_PAYLOAD DT_INST_PROP(0, tx_plsize)
 
-/* eSPI cycle type field for OOB and FLASH channels */
-#define ESPI_FLASH_READ_CYCLE_TYPE                 0x00
-#define ESPI_FLASH_WRITE_CYCLE_TYPE                0x01
-#define ESPI_FLASH_ERASE_CYCLE_TYPE                0x02
-#define ESPI_FLASH_SUCCESS_WITH_DATA_CYCLE_TYPE    0x0f
-#define ESPI_FLASH_SUCCESS_WITHOUT_DATA_CYCLE_TYPE 0x06
 #define ESPI_FLASH_HEADER_PCKT_SIZE                0x07
 #define ESPI_FLASH_MAX_TIMEOUT                     1000ul /* 1000 ms */
 #define ESPI_OOB_GET_CYCLE_TYPE                    0x21
 #define ESPI_OOB_TAG                               0x00
-#define ESPI_OOB_MAX_TIMEOUT                       500ul /* 500 ms */
+#define ESPI_OOB_MAX_TIMEOUT                       1000ul /* 1000 ms */
 
 #define VWGPMS_DIRECTION	7
 
@@ -202,6 +196,128 @@ static int espi_npcm_flash_parse_completion_with_data(const struct device *dev,
 						      struct espi_flash_packet *pckt);
 static void espi_npcm_flash_prepare_tx_header(const struct device *dev, int cyc_type,
 					      int flash_addr, int flash_len, int tx_payload);
+
+int espi_npcm_flash_get_rx(const struct device *dev,
+			   struct espi_npcm_ioc *ioc, bool blocking)
+{
+	int i, rc, count;
+	uint32_t cyc, tag, len;
+	uint32_t *tmp;
+	struct espi_comm_hdr *hdr = (struct espi_comm_hdr *)ioc->pkt;
+	struct espi_reg *const inst = HAL_INSTANCE(dev);
+	struct espi_npcm_data *data = (struct espi_npcm_data *)dev->data;
+
+	rc = k_sem_take(&data->tafs_rx_lock, (blocking) ? K_FOREVER : K_NO_WAIT);
+	if (rc)
+		return rc;
+
+	rc = k_sem_take(&data->tafs_rx_ready, (blocking) ? K_FOREVER : K_NO_WAIT);
+	if (rc)
+		goto unlock_n_out;
+
+	cyc = GET_FIELD(inst->FLASHRXBUF[0], NPCM_FLASH_RX_CYC);
+	tag = GET_FIELD(inst->FLASHRXBUF[0], NPCM_FLASH_RX_TAG);
+	len = GET_FIELD(inst->FLASHRXBUF[0], NPCM_FLASH_RX_LEN_L) |
+		(GET_FIELD(inst->FLASHRXBUF[0], NPCM_FLASH_RX_LEN_H)
+		 << NPCM_FLASH_RX_LEN_H_SHIFT);
+
+	switch (cyc) {
+		case ESPI_FLASH_READ_CYCLE_TYPE:
+		case ESPI_FLASH_ERASE_CYCLE_TYPE:
+			ioc->pkt_len = 7;
+			break;
+		case ESPI_FLASH_WRITE_CYCLE_TYPE:
+			ioc->pkt_len = ((len) ? len : ESPI_PLD_LEN_MAX) + sizeof(struct espi_flash_rwe);
+			break;
+		case ESPI_FLASH_SUC_CMPLT:
+		case ESPI_FLASH_UNSUC_CMPLT:
+			ioc->pkt_len = len + sizeof(struct espi_flash_cmplt);
+			break;
+		default:
+			__ASSERT(0, "Unrecognized eSPI flash packet");
+
+			k_sem_give(&data->tafs_rx_ready);
+			rc = -EFAULT;
+			goto unlock_n_out;
+	}
+
+	hdr->cyc = cyc;
+	hdr->tag = tag;
+	hdr->len_h = len >> 8;
+	hdr->len_l = len & 0xff;
+
+	/* Store flash access address 4 bytes */
+	tmp = (uint32_t *)(&(ioc->pkt[sizeof(struct espi_comm_hdr)]));
+	*tmp = inst->FLASHRXBUF[1];
+
+	count = len / 4;
+	if (count % 4)
+		count++;
+
+	/* RX buffer is 64 bytes max */
+	if (count > 16)
+		count = 16;
+
+	/* Store flash access data */
+	tmp = (uint32_t *)(&(ioc->pkt[sizeof(struct espi_comm_hdr) + sizeof(uint32_t)]));
+	for (i = 0; i < count; i++) {
+		*tmp = inst->FLASHRXBUF[2+i];
+		tmp++;
+	}
+
+unlock_n_out:
+	k_sem_give(&data->tafs_rx_lock);
+
+	return rc;
+}
+
+int espi_npcm_flash_put_tx(const struct device *dev, struct espi_npcm_ioc *ioc)
+{
+	struct espi_npcm_data *data = (struct espi_npcm_data *)dev->data;
+	struct espi_comm_hdr *hdr = (struct espi_comm_hdr *)(&ioc->pkt[1]);
+	struct espi_reg *const inst = HAL_INSTANCE(dev);
+	uint32_t reg, len, *tmp;
+	int i, count, rc = 0;
+
+	rc = k_sem_take(&data->tafs_tx_lock, K_MSEC(500));
+	if (rc)
+		return rc;
+
+	len = (hdr->len_h << 8) | (hdr->len_l & 0xff);
+
+	inst->FLASHTXBUF[0] = ((uint32_t)ioc->pkt[3]) << 24 |
+		((uint32_t)ioc->pkt[2]) << 16 |
+		((uint32_t)ioc->pkt[1]) << 8 |
+		ioc->pkt[0];
+
+	if (ioc->pkt[0] > ESPI_FLASH_RESP_LEN) {
+		count = len / 4;
+		if (count % 4)
+			count++;
+
+		/* TX buffer is 64 bytes max */
+		if (count > 16)
+			count = 16;
+
+		/* TX response data */
+		tmp = (uint32_t *)(&(ioc->pkt[4]));
+		for (i = 0; i < count; i++) {
+			inst->FLASHTXBUF[1+i] = *tmp;
+			tmp++;
+		}
+	}
+
+	/*
+	 * Notify host a flash tx packet is ready. Please don't write FLASH_ACC_NP_FREE
+	 * to 1 at the same tiem in case clear it unexpectedly.
+	 */
+	reg = inst->FLASHCTL;
+	reg &= ~BIT(NPCM_FLASHCTL_FLASH_NP_FREE);
+	reg |= BIT(NPCM_FLASHCTL_FLASH_TX_AVAIL);
+	inst->FLASHCTL = reg;
+
+	return rc;
+}
 #endif
 
 /* eSPI local initialization functions */
@@ -233,6 +349,11 @@ static void espi_bus_err_isr(const struct device *dev)
 	LOG_ERR("eSPI Bus Error %08X", err);
 	/* Clear error status bits */
 	inst->ESPIERR = err;
+
+#if defined(CONFIG_ESPI_FLASH_CHANNEL)
+	struct espi_npcm_data *const data = dev->data;
+	k_sem_give(&data->tafs_tx_lock);
+#endif
 }
 
 static void espi_bus_inband_rst_isr(const struct device *dev)
@@ -243,24 +364,22 @@ static void espi_bus_inband_rst_isr(const struct device *dev)
 
 static void espi_bus_reset_isr(const struct device *dev)
 {
-	ARG_UNUSED(dev);
-	LOG_DBG("%s issued", __func__);
-	/* Do nothing! This signal is handled in ESPI_RST VW signal ISR */
-}
-
-#if defined(CONFIG_ESPI_NPCM_CAF_GLOBAL_RESET_WORKAROUND)
-static void espi_npcm_flash_fake_request(const struct device *dev)
-{
 	struct espi_reg *const inst = HAL_INSTANCE(dev);
-	struct espi_npcm_data *const data = dev->data;
+	LOG_DBG("%s issued", __func__);
 
-	inst->FLASHCTL &= ~BIT(NPCM_FLASHCTL_AMTEN);
-
-	data->fake_req_flag = true;
-
-	espi_npcm_flash_prepare_tx_header(dev, ESPI_FLASH_READ_CYCLE_TYPE, 0, 16, 0);
-}
+#ifdef CONFIG_ESPI_FLASH_CHANNEL
+	/* Configure TAFS */
+	SET_FIELD(inst->FLASHCFG, NPCM_FLASHCFG_FLCAPA,
+			NPCM_FLASHCFG_BOTH_TAFS_CAFS);
+	SET_FIELD(inst->FLASHCFG, NPCM_FLASHCFG_TRGFLEBLKSIZE,
+			NPCM_FLASHCFG_TRGLKSIZE_DEF);
+#if !defined(CONFIG_ESPI_NPCM_FLASH_SAFS_HW_MODE)
+	inst->FLASHCTL &= ~BIT(NPCM_FLASHCTL_SAF_AUTO_READ);
+#else
+	inst->FLASHBASE = 0x70000000;
 #endif
+#endif
+}
 
 static void espi_bus_cfg_update_isr(const struct device *dev)
 {
@@ -289,13 +408,6 @@ static void espi_bus_cfg_update_isr(const struct device *dev)
 						NPCM_ESPI_HOST_CH_EN(chan));
 			evt.evt_details = BIT(chan);
 
-#if defined(CONFIG_ESPI_NPCM_CAF_GLOBAL_RESET_WORKAROUND)
-			if (chan == NPCM_ESPI_CH_FLASH && evt.evt_data == 1 &&
-			    NPCM_IS_BIT_SET(inst->FLASHCTL, NPCM_FLASHCTL_FLASH_TX_AVAIL)) {
-				espi_npcm_flash_fake_request(dev);
-			}
-#endif
-
 			if (evt.evt_data) {
 				inst->ESPICFG |= BIT(chan);
 			} else {
@@ -314,16 +426,29 @@ static void espi_bus_cfg_update_isr(const struct device *dev)
 		espi_vw_send_bootload_done(dev);
 	}
 
-#if (defined(CONFIG_ESPI_FLASH_CHANNEL) && defined(CONFIG_ESPI_SAF))
-	/* If CONFIG_ESPI_SAF is set, set to auto or manual mode accroding
-	 * to configuration.
-	 */
-	if (NPCM_IS_BIT_SET(inst->ESPICFG, NPCM_ESPICFG_FLCHANMODE)) {
-#if defined(CONFIG_ESPI_TAF_AUTO_MODE)
-		inst->FLASHCTL |= BIT(NPCM_FLASHCTL_SAF_AUTO_READ);
-#else
+#ifdef CONFIG_ESPI_FLASH_CHANNEL
+	if ((chg_mask & BIT(NPCM_ESPI_CH_FLASH)) && NPCM_IS_BIT_SET(inst->ESPICFG,
+				NPCM_ESPI_HOST_CH_EN(NPCM_ESPI_CH_FLASH))) {
+		/* Configure TAFS */
+		SET_FIELD(inst->FLASHCFG, NPCM_FLASHCFG_FLCAPA,
+				NPCM_FLASHCFG_BOTH_TAFS_CAFS);
+		SET_FIELD(inst->FLASHCFG, NPCM_FLASHCFG_TRGFLEBLKSIZE,
+				NPCM_FLASHCFG_TRGLKSIZE_DEF);
+
+#if !defined(CONFIG_ESPI_NPCM_FLASH_SAFS_HW_MODE)
 		inst->FLASHCTL &= ~BIT(NPCM_FLASHCTL_SAF_AUTO_READ);
+		for (int i = 0; i < 3; i++)
+		{
+			if (!(inst->FLASHCTL & BIT(NPCM_FLASHCTL_SAF_AUTO_READ)))
+				break;
+			k_busy_wait(10);
+			LOG_INF("FLASHCTL 0x%x", inst->FLASHCTL);
+		}
+#else
+		inst->FLASHBASE = 0x70000000;
 #endif
+		if (0 == k_sem_count_get(&data->tafs_tx_lock))
+			k_sem_give(&data->tafs_tx_lock);
 	}
 #endif
 }
@@ -363,101 +488,45 @@ static void espi_bus_oob_rx_isr(const struct device *dev)
 	evt.evt_details = NPCM_OOB_RX_PACKAGE_LEN(inst->OOBRXBUF[0]);
 	espi_send_callbacks(&data->callbacks, dev, evt);
 #else
-
-	LOG_DBG("%s", __func__);
+	struct espi_event evt = { .evt_type = ESPI_BUS_EVENT_OOB_RECEIVED,
+				  .evt_details = 0,
+				  .evt_data = 0 };
 	k_sem_give(&data->oob_rx_lock);
+	espi_send_callbacks(&data->callbacks, dev, evt);
 #endif
 }
 #endif
 
 #if defined(CONFIG_ESPI_FLASH_CHANNEL)
-#if defined(CONFIG_ESPI_SAF)
-static struct espi_taf_pckt taf_pckt;
-
-static uint32_t espi_taf_parse(const struct device *dev)
-{
-	struct espi_reg *const inst = HAL_INSTANCE(dev);
-	struct npcm_taf_head taf_head;
-	uint32_t taf_addr;
-	uint8_t i, roundsize;
-
-	/* Get type, length and tag from RX buffer */
-	memcpy(&taf_head, (void *)&inst->FLASHRXBUF[0], sizeof(taf_head));
-	taf_pckt.type = taf_head.type;
-	taf_pckt.len = (((uint16_t)taf_head.tag_hlen & 0xF) << 8) | taf_head.llen;
-	taf_pckt.tag = taf_head.tag_hlen >> 4;
-
-	if ((taf_pckt.len == 0) && ((taf_pckt.type & 0xF) == NPCM_ESPI_TAF_REQ_READ)) {
-		taf_pckt.len = KB(4);
-	}
-
-	/* Get address from RX buffer */
-	taf_addr = inst->FLASHRXBUF[1];
-	taf_pckt.addr = sys_cpu_to_be32(taf_addr);
-
-	/* Get written data if eSPI TAF write */
-	if ((taf_pckt.type & 0xF) == NPCM_ESPI_TAF_REQ_WRITE) {
-		roundsize = DIV_ROUND_UP(taf_pckt.len, sizeof(uint32_t));
-		for (i = 0; i < roundsize; i++) {
-			taf_pckt.src[i] = inst->FLASHRXBUF[2 + i];
-		}
-	}
-
-	return (uint32_t)&taf_pckt;
-}
-#endif /* CONFIG_ESPI_SAF */
-
-static void espi_bus_flash_rx_isr(const struct device *dev)
+static void espi_bus_flashrx_update_isr(const struct device *dev)
 {
 	struct espi_reg *const inst = HAL_INSTANCE(dev);
 	struct espi_npcm_data *const data = dev->data;
 
 	/* Controller Attached Flash Access */
 	if ((inst->ESPICFG & BIT(NPCM_ESPICFG_FLCHANMODE)) == 0) {
-#ifdef CONFIG_ESPI_NPCM_CAF_GLOBAL_RESET_WORKAROUND
-		if (data->fake_req_flag == true) {
-			uint8_t pckt_buf[16];
-			struct espi_flash_packet pckt;
-
-			pckt.buf = &pckt_buf[0];
-			espi_npcm_flash_parse_completion_with_data(dev, &pckt);
-			data->fake_req_flag = false;
-			return;
-		}
-#endif
 		k_sem_give(&data->flash_rx_lock);
 	} else { /* Target Attached Flash Access */
-#if defined(CONFIG_ESPI_SAF)
-		struct espi_event evt = {
-			.evt_type = ESPI_BUS_SAF_NOTIFICATION,
-			.evt_details = ESPI_CHANNEL_FLASH,
-			.evt_data = espi_taf_parse(dev),
-		};
+		/* NOTE: evt_type is ESPI_BUS_EVENT_FLASH_RECEIVED in 2.6 */
+		struct espi_event evt = { .evt_type = ESPI_BUS_SAF_NOTIFICATION,
+					  .evt_details = 0,
+					  .evt_data = 0 };
 		espi_send_callbacks(&data->callbacks, dev, evt);
-#else
-		LOG_WRN("ESPI TAF not supported");
-#endif
+		k_sem_give(&data->tafs_rx_ready);
 	}
 }
 
-static void espi_bus_completion_sent_isr(const struct device *dev)
+static void espi_bus_sflashrd_update_isr(const struct device *dev)
 {
 	struct espi_reg *const inst = HAL_INSTANCE(dev);
+	struct espi_npcm_data *const data = dev->data;
+	uint32_t reg;
 
-	/* check that ESPISTS.FLNACS is clear. */
-	if (NPCM_IS_BIT_SET(inst->ESPISTS, NPCM_ESPISTS_FLNACS)) {
-		LOG_ERR("ESPISTS_FLNACS not clear\r\n");
-	}
-
-	/* flash operation is done, Make sure the TAFS transmit buffer is empty */
-	if (NPCM_IS_BIT_SET(inst->FLASHCTL, NPCM_FLASHCTL_FLASH_TX_AVAIL)) {
-		LOG_ERR("FLASH_TX_AVAIL not clear\r\n");
-	}
-
-	/* In auto mode, release FLASH_NP_FREE here to get next SAF request.*/
-	if (NPCM_IS_BIT_SET(inst->FLASHCTL, NPCM_FLASHCTL_SAF_AUTO_READ)) {
-		inst->FLASHCTL |= BIT(NPCM_FLASHCTL_FLASH_NP_FREE);
-	}
+	k_sem_give(&data->tafs_tx_lock);
+	reg = inst->FLASHCTL;
+	reg &= ~BIT(NPCM_FLASHCTL_FLASH_TX_AVAIL);
+	reg |= BIT(NPCM_FLASHCTL_FLASH_NP_FREE);
+	inst->FLASHCTL = reg;
 }
 #endif
 
@@ -471,8 +540,8 @@ const struct espi_bus_isr espi_bus_isr_tbl[] = {
 	NPCM_ESPI_BUS_INT_ITEM(OOBRX, espi_bus_oob_rx_isr),
 #endif
 #if defined(CONFIG_ESPI_FLASH_CHANNEL)
-	NPCM_ESPI_BUS_INT_ITEM(FLASHRX, espi_bus_flash_rx_isr),
-	NPCM_ESPI_BUS_INT_ITEM(FLNACS, espi_bus_completion_sent_isr),
+	NPCM_ESPI_BUS_INT_ITEM(FLASHRX, espi_bus_flashrx_update_isr),
+	NPCM_ESPI_BUS_INT_ITEM(SFLASHRD, espi_bus_sflashrd_update_isr),
 #endif
 };
 
@@ -571,7 +640,9 @@ static void espi_vw_notify_system_state(const struct device *dev,
 				enum espi_vwire_signal signal)
 {
 	struct espi_npcm_data *const data = dev->data;
-	//struct espi_event evt = { ESPI_BUS_EVENT_VWIRE_RECEIVED, 0, 0 };
+	struct espi_event evt = { .evt_type = ESPI_BUS_EVENT_VWIRE_RECEIVED,
+				  .evt_details = 0,
+				  .evt_data = 0 };
 	uint8_t wire = 0;
 
 	espi_npcm_receive_vwire(dev, signal, &wire);
@@ -579,14 +650,18 @@ static void espi_vw_notify_system_state(const struct device *dev,
 		data->sx_state = signal;
 	}
 
-	//evt.evt_details = signal;
-	//evt.evt_data = wire;
-	//espi_send_callbacks(&data->callbacks, dev, evt);
+	evt.evt_details = signal;
+	evt.evt_data = wire;
+	espi_send_callbacks(&data->callbacks, dev, evt);
 }
 
 static void espi_vw_notify_host_warning(const struct device *dev,
 				enum espi_vwire_signal signal)
 {
+	struct espi_npcm_data *const data = dev->data;
+	struct espi_event evt = { .evt_type = ESPI_BUS_EVENT_VWIRE_RECEIVED,
+				  .evt_details = signal,
+				  .evt_data = 0 };
 	uint8_t wire;
 
 	espi_npcm_receive_vwire(dev, signal, &wire);
@@ -609,15 +684,18 @@ static void espi_vw_notify_host_warning(const struct device *dev,
 	default:
 		break;
 	}
+
+	evt.evt_data = wire;
+	espi_send_callbacks(&data->callbacks, dev, evt);
 }
 
 static void espi_vw_notify_plt_rst(const struct device *dev)
 {
 	struct espi_npcm_data *const data = dev->data;
 	struct espi_reg *const inst = HAL_INSTANCE(dev);
-	//struct espi_event evt = { ESPI_BUS_EVENT_VWIRE_RECEIVED,
-	//	ESPI_VWIRE_SIGNAL_PLTRST, 0
-	//};
+	struct espi_event evt = { .evt_type = ESPI_BUS_EVENT_VWIRE_RECEIVED,
+				  .evt_details = ESPI_VWIRE_SIGNAL_PLTRST,
+				  .evt_data = 0 };
 	uint8_t wire = 0;
 
 	espi_npcm_receive_vwire(dev, ESPI_VWIRE_SIGNAL_PLTRST, &wire);
@@ -632,8 +710,8 @@ static void espi_vw_notify_plt_rst(const struct device *dev)
 	/* PLT_RST will be received several times */
 	if (wire != data->plt_rst_asserted) {
 		data->plt_rst_asserted = wire;
-		//evt.evt_data = wire;
-		//espi_send_callbacks(&data->callbacks, dev, evt);
+		evt.evt_data = wire;
+		espi_send_callbacks(&data->callbacks, dev, evt);
 	}
 }
 
@@ -757,8 +835,22 @@ static int espi_npcm_configure(const struct device *dev, struct espi_cfg *cfg)
 	if (cfg->channel_caps & ESPI_CHANNEL_OOB)
 		inst->ESPICFG |= BIT(NPCM_ESPICFG_OOBCHN_SUPP);
 
-	if (cfg->channel_caps & ESPI_CHANNEL_FLASH)
+	if (cfg->channel_caps & ESPI_CHANNEL_FLASH) {
 		inst->ESPICFG |= BIT(NPCM_ESPICFG_FLASHCHN_SUPP);
+#if defined(CONFIG_ESPI_FLASH_CHANNEL)
+		/* Configure TAFS */
+		SET_FIELD(inst->FLASHCFG, NPCM_FLASHCFG_FLCAPA,
+				NPCM_FLASHCFG_BOTH_TAFS_CAFS);
+		SET_FIELD(inst->FLASHCFG, NPCM_FLASHCFG_TRGFLEBLKSIZE,
+				NPCM_FLASHCFG_TRGLKSIZE_DEF);
+
+#if !defined(CONFIG_ESPI_NPCM_FLASH_SAFS_HW_MODE)
+		inst->FLASHCTL &= ~BIT(NPCM_FLASHCTL_SAF_AUTO_READ);
+#else
+		inst->FLASHBASE = 0x70000000;
+#endif
+#endif
+	}
 
 	LOG_DBG("%s: %d %d ESPICFG: 0x%08X", __func__,
 				max_freq, io_mode, inst->ESPICFG);
@@ -950,7 +1042,7 @@ static int espi_npcm_send_oob(const struct device *dev,
 	 * [20:23] - TAG          Tag of GET_OOB
 	 * [16:19] - LEN[8:11]    Ignore it since max payload is 64 bytes
 	 * [8:15]  - CYCLE_TYPE   Cycle type of GET_OOB
-	 * [0:7]   - SZ_PACK      Package size plus 3 bytes header. (Npcx only)
+	 * [0:7]   - SZ_PACK      Package size plus 3 bytes header. (npcm only)
 	 */
 	inst->OOBTXBUF[0] = (sz_oob_tx + 3)
 			  | (ESPI_OOB_GET_CYCLE_TYPE << 8)
@@ -1023,7 +1115,7 @@ static int espi_npcm_receive_oob(const struct device *dev,
 	 * [20:23] - TAG          Tag of PUT_OOB
 	 * [16:19] - LEN[8:11]    Data length of PUT_OOB request package
 	 * [8:15]  - CYCLE_TYPE   Cycle type of PUT_OOB
-	 * [0:7]   - SZ_PACK      Reserved. (Npcx only)
+	 * [0:7]   - SZ_PACK      Reserved. (npcm only)
 	 */
 	oob_data = inst->OOBRXBUF[0];
 	/* Get received package length first */
@@ -1073,9 +1165,9 @@ static void espi_npcm_flash_prepare_tx_header(const struct device *dev,
 	 * First 3 bytes of flash cycle command header in tx buffer
 	 *
 	 * [24:31] - LEN[0:7]   = n  Data length of flash cycle request
-	 * [16:23] - LEN[8:15]  = 0  Ignore it since max buffer size is 64 bytes
-	 * [12:15] - TAG        = 0  Tag of flash cycle command is always 0 here
-	 * [8:11]  - CYCLE_TYPE = 0  Cycle type of flash command
+	 * [20:23] - TAG        = 0  Tag of flash cycle command is always 0 here
+	 * [16:19] - LEN[8:11]  = 0  Ignore it since max buffer size is 64 bytes
+	 * [8:15]  - CYCLE_TYPE = 0  Cycle type of flash command
 	 * [0:7]   - SZ_PACK    = 7  Overall tx package size. (Used internally.)
 	 */
 	inst->FLASHTXBUF[0] = (flash_len << 24) |
@@ -1083,7 +1175,7 @@ static void espi_npcm_flash_prepare_tx_header(const struct device *dev,
 			      (tx_payload + ESPI_FLASH_HEADER_PCKT_SIZE);
 
 	/*
-	 * Following 4 bytes of tager flash address in tx buffer
+	 * Following 4 bytes of target flash address in tx buffer
 	 *
 	 * [24:31] - ADDR[0:7]   Start address of flash cycle command request
 	 * [16:23] - ADDR[15:8]
@@ -1103,13 +1195,13 @@ static int espi_npcm_flash_parse_completion(const struct device *dev)
 	 * First 3 bytes of flash cycle completion header in rx buffer
 	 *
 	 * [24:31] - LEN[0:7]   Data length of flash cycle completion package
-	 * [16:23] - LEN[8:15]  Ignore it since rx bufer size is 64 bytes
-	 * [12:15] - TAG        Tag of flash cycle completion package
-	 * [8:11]  - CYCLE_TYPE Cycle type of flash completion
+	 * [20:23] - TAG        Tag of flash cycle completion package
+	 * [16:19] - LEN[8:11]  Ignore it since rx bufer size is 64 bytes
+	 * [8:15]  - CYCLE_TYPE Cycle type of flash completion
 	 * [0:7]   - Reserved
 	 */
 	cycle_type = (inst->FLASHRXBUF[0] & 0xff00) >> 8;
-	if (cycle_type == ESPI_FLASH_SUCCESS_WITHOUT_DATA_CYCLE_TYPE) {
+	if (cycle_type == ESPI_FLASH_SUC_CMPLT) {
 		return 0;
 	}
 
@@ -1126,16 +1218,16 @@ static int espi_npcm_flash_parse_completion_with_data(const struct device *dev,
 	 * First 3 bytes of flash cycle completion header in rx buffer
 	 *
 	 * [24:31] - LEN[0:7]   Data length of flash cycle completion package
-	 * [16:23] - LEN[8:15]  Ignore it since rx bufer size is 64 bytes
-	 * [12:15] - TAG        Tag of flash cycle completion package
-	 * [8:11]  - CYCLE_TYPE Cycle type of flash completion
+	 * [20:23] - TAG        Tag of flash cycle completion package
+	 * [16:19] - LEN[8:11]  Ignore it since rx bufer size is 64 bytes
+	 * [8:15]  - CYCLE_TYPE Cycle type of flash completion
 	 * [0:7]   - Reserved
 	 *
 	 * The following is flash data/
 	 */
 	cycle_type = (inst->FLASHRXBUF[0] & 0xff00) >> 8;
 	sz_rx_payload  = inst->FLASHRXBUF[0] >> 24;
-	if (cycle_type == ESPI_FLASH_SUCCESS_WITH_DATA_CYCLE_TYPE) {
+	if (cycle_type == ESPI_FLASH_SUC_CMPLT_D_ONLY) {
 		volatile uint32_t *rx_buf = &inst->FLASHRXBUF[1];
 		uint8_t *buf = pckt->buf;
 		uint32_t data;
@@ -1354,7 +1446,6 @@ static const struct espi_driver_api espi_npcm_driver_api = {
 
 static struct espi_npcm_data espi_npcm_data;
 
-//PINCTRL_DT_INST_DEFINE(0);
 BUILD_ASSERT(DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) == 1,
 	"only one 'nuvoton_npcm_espi' compatible node may be present");
 
@@ -1430,6 +1521,9 @@ static int espi_npcm_init(const struct device *dev)
 
 #if defined(CONFIG_ESPI_FLASH_CHANNEL)
 	k_sem_init(&data->flash_rx_lock, 0, 1);
+	k_sem_init(&data->tafs_tx_lock, 1, 1);
+	k_sem_init(&data->tafs_rx_lock, 1, 1);
+	k_sem_init(&data->tafs_rx_ready, 0, 1);
 #endif
 
 	/* Configure Virtual Wire input signals */
