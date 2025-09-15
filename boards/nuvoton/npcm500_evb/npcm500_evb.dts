@@ -559,6 +559,12 @@
 
 &espi0 {
 	status = "okay";
+
+	espi_taf: espitaf@4000a000 {
+		mapped-addr = <0x70000000>;
+		max-read-sz = "NPCM_ESPI_TAF_MAX_READ_REQ_64B";
+		erase-sz = "NPCM_ESPI_TAF_ERASE_BLOCK_SIZE_4KB";
+	};
 };
 
 &host_sub {
