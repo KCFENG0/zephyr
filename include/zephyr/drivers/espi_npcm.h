@@ -28,6 +28,14 @@ struct espi_flash_rwe {
 	uint8_t data[];
 } __packed;
 
+struct espi_flash_rpmc {
+	uint8_t cyc;
+	uint8_t len_h : 4;
+	uint8_t tag : 4;
+	uint8_t len_l;
+	uint8_t data[];
+} __packed;
+
 struct espi_flash_cmplt {
 	uint8_t cyc;
 	uint8_t len_h : 4;
@@ -46,6 +54,8 @@ struct espi_flash_cmplt {
 #define ESPI_FLASH_READ_CYCLE_TYPE                 0x00
 #define ESPI_FLASH_WRITE_CYCLE_TYPE                0x01
 #define ESPI_FLASH_ERASE_CYCLE_TYPE                0x02
+#define ESPI_FLASH_RPMC_OP1_CYCLE_TYPE             0x03
+#define ESPI_FLASH_RPMC_OP2_CYCLE_TYPE             0x04
 #define ESPI_FLASH_SUC_CMPLT                       0x06
 #define ESPI_FLASH_UNSUC_CMPLT                     0x0c
 #define ESPI_FLASH_SUC_CMPLT_D_ONLY                0x0f
@@ -58,6 +68,8 @@ struct espi_flash_cmplt {
 #define ESPI_FLASH_ERASE_4K   0x00
 #define ESPI_FLASH_ERASE_32K  0x01
 #define ESPI_FLASH_ERASE_64K  0x02
+
+#define RPMC_FLASH_DEV_MASK   0x60
 
 int espi_npcm_flash_get_rx(const struct device *dev, struct espi_npcm_ioc *ioc, bool blocking);
 int espi_npcm_flash_put_tx(const struct device *dev, struct espi_npcm_ioc *ioc);

@@ -293,6 +293,8 @@
 									0),    \
 	  .bitmask = DT_PROP_BY_IDX(NPCM_DT_NODE_FROM_VWTABLE(name), vw_reg,   \
 									1),    \
+	  .init_level = DT_PROP_BY_IDX(NPCM_DT_NODE_FROM_VWTABLE(name), vw_reg,\
+									2),    \
 	}
 
 /**

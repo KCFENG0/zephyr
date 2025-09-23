@@ -1086,7 +1086,7 @@ struct espi_reg {
 #define NPCM_VWEVMS_WIRE                 FIELD(0, 4)
 #define NPCM_VWEVMS_VALID                FIELD(4, 4)
 #define NPCM_VWEVMS_IE                   18
-#define NPCM_VWEVMS_WE                   20
+#define NPCM_VWEVMS_WE                   24
 #define NPCM_VWEVSM_WIRE                 FIELD(0, 4)
 #define NPCM_VWEVSM_VALID                FIELD(4, 4)
 #define NPCM_VWEVSM_BIT_VALID(n)         (4+n)
@@ -1102,6 +1102,7 @@ struct espi_reg {
 #define NPCM_VWGPMS_MODIFIED             16
 #define NPCM_VWGPMS_IE                   18
 #define NPCM_VWGPMS_ENESPIRST            19
+#define NPCM_VWGPMS_WE                   20
 #define NPCM_VWGP_S_TO_M                 0
 #define NPCM_VWGP_M_TO_S                 1
 #define NPCM_OOBCTL_OOB_FREE             0
@@ -1129,6 +1130,15 @@ struct espi_reg {
 #define NPCM_FLASHCTL_SAF_AUTO_READ      18
 #define NPCM_FLASHCTL_SAF_PROT_LOCK      19
 #define NPCM_FLASHCTL_SAF_AUTO_RSTA      20
+#define NPCM_FLASHCFG2_TRGRPMCDEV        FIELD(6, 2)
+#define NPCM_FLASHCFG2_RPMC1COUNT        FIELD(20, 4)
+#define NPCM_FLASHCFG2_RPMC1OP1CODE      FIELD(24, 8)
+#define NPCM_FLASHCFG3_RPMC2COUNT        FIELD(20, 4)
+#define NPCM_FLASHCFG3_RPMC2OP1CODE      FIELD(24, 8)
+#define NPCM_FLASHCFG4_RPMC3COUNT        FIELD(4, 4)
+#define NPCM_FLASHCFG4_RPMC3OP1CODE      FIELD(8, 8)
+#define NPCM_FLASHCFG4_RPMC4COUNT        FIELD(20, 4)
+#define NPCM_FLASHCFG4_RPMC4OP1CODE      FIELD(24, 8)
 #define NPCM_FLASHBASE_FLBASE_ADDR       FIELD(12, 17)
 #define NPCM_FLASH_PRTR_BADDR            FIELD(12, 17)
 #define NPCM_FRGN_RPR                    30

@@ -8,15 +8,18 @@
 #include <nuvoton/npcm/npcm-espi-vws-map.dtsi>
 
 /*
- *   Specific eSPI Virtual Wire (VW) mapping configurations in npcm4 series
- * |--------------------------------------------------------------------------|
- * | VW idx | SLV reg | Wire Bit 3   | Wire Bit 2   | Wire Bit 1| Wire Bit 0  |
- * |--------------------------------------------------------------------------|
- * |       Output (Slave-to-Master) Virtual Wires (High at reset state)       |
- * |--------------------------------------------------------------------------|
- * | 50h[P] | VWGPSM0 | SLV_GPIO_3   | SLV_GPIO_2   | SLV_GPIO_1| SLV_GPIO_0  |
- * | 51h[P] | VWGPSM1 | SLV_GPIO_7   | SLV_GPIO_6   | SLV_GPIO_5| SLV_GPIO_4  |
- * |--------------------------------------------------------------------------|
+ *   Specific eSPI Virtual Wire (VW) mapping configurations in npcm series
+ * |-----------------------------------------------------------------------------|
+ * | VW idx | SLV reg  | Wire Bit 3   | Wire Bit 2   | Wire Bit 1  | Wire Bit 0  |
+ * |-----------------------------------------------------------------------------|
+ * |                  Input (Master-to-Slave) Virtual Wires                      |
+ * |-----------------------------------------------------------------------------|
+ * | 9Fh[P] | VWGPMS15 | SLV_GPIO_127 | SLV_GPIO_126 | SLV_GPIO_125| SLV_GPIO_124|
+ * |-----------------------------------------------------------------------------|
+ * |        Output (Slave-to-Master) Virtual Wires (High at reset state)         |
+ * |-----------------------------------------------------------------------------|
+ * | 80h[P] | VWGPSM0  | SLV_GPIO_3   | SLV_GPIO_2   | SLV_GPIO_1  | SLV_GPIO_0  |
+ * |-----------------------------------------------------------------------------|
  *  [S] System-/[P] Platform-Specific Virtual Wires
  */
 
@@ -25,34 +28,38 @@
 		compatible = "nuvoton,npcm-espi-vw-conf";
 
 		/*
-		 * Virtual wires for platform level usage (High at Reset state)
+		 * Virtual wires for platform level usage
 		 */
-		/* index 50h (Out) */
-		vw_slv_gpio_0 {
-			vw-reg = <NPCM_VWGPSM0 0x01>;
+		/* index 9Fh (In) */
+		vw_slv_gpio_124 {
+			vw-reg = <NPCM_VWGPMS15 0x01>;
+			vw-wui = <&wui_none>;
 		};
-		vw_slv_gpio_1 {
-			vw-reg = <NPCM_VWGPSM0 0x02>;
+		vw_slv_gpio_125 {
+			vw-reg = <NPCM_VWGPMS15 0x02>;
+			vw-wui = <&wui_none>;
 		};
-		vw_slv_gpio_2 {
-			vw-reg = <NPCM_VWGPSM0 0x04>;
+		vw_slv_gpio_126 {
+			vw-reg = <NPCM_VWGPMS15 0x04>;
+			vw-wui = <&wui_none>;
 		};
-		vw_slv_gpio_3 {
-			vw-reg = <NPCM_VWGPSM0 0x08>;
+		vw_slv_gpio_127 {
+			vw-reg = <NPCM_VWGPMS15 0x08>;
+			vw-wui = <&wui_none>;
 		};
 
-		/* index 51h (Out) */
-		vw_slv_gpio_4 {
-			vw-reg = <NPCM_VWGPSM1 0x01>;
+		/* index 80h (Out) */
+		vw_slv_gpio_0 {
+			vw-reg = <NPCM_VWGPSM0 0x01 0x00>;
 		};
-		vw_slv_gpio_5 {
-			vw-reg = <NPCM_VWGPSM1 0x02>;
+		vw_slv_gpio_1 {
+			vw-reg = <NPCM_VWGPSM0 0x02 0x00>;
 		};
-		vw_slv_gpio_6 {
-			vw-reg = <NPCM_VWGPSM1 0x04>;
+		vw_slv_gpio_2 {
+			vw-reg = <NPCM_VWGPSM0 0x04 0x01>;
 		};
-		vw_slv_gpio_7 {
-			vw-reg = <NPCM_VWGPSM1 0x08>;
+		vw_slv_gpio_3 {
+			vw-reg = <NPCM_VWGPSM0 0x08 0x00>;
 		};
 	};
 };
