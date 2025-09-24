@@ -187,6 +187,36 @@ static inline void qspi_npcm_config_dra_4byte_mode(const struct device *dev,
 #endif /* CONFIG_FLASH_NPCM_FIU_SUPP_DRA_4B_ADDR */
 }
 
+int flash_npcm_fiu_set_4b_mode(const struct device *dev, bool enable)
+{
+
+#if defined(CONFIG_FLASH_NPCM_FIU_SUPP_DRA_4B_ADDR)
+    struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
+    struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
+    struct npcm_qspi_data *qspi_data = dev->data;
+    const struct npcm_qspi_cfg *qspi_cfg = qspi_data->cur_cfg;
+    uint8_t addr_4b_en_mask;
+
+    if (qspi_cfg == NULL) {
+        return -EINVAL;
+    }
+
+    addr_4b_en_mask = (qspi_cfg->flags & NPCM_QSPI_SW_CS_MASK) << 4;
+
+    /* Directly set or clear the ADDR_4B_EN bits */
+    if (enable) {
+        core_inst->ADDR_4B_EN |= addr_4b_en_mask;
+        host_inst->ADDR_4B_EN |= addr_4b_en_mask;
+    } else {
+        core_inst->ADDR_4B_EN &= ~addr_4b_en_mask;
+        host_inst->ADDR_4B_EN &= ~addr_4b_en_mask;
+    }
+#else
+#endif /* CONFIG_FLASH_NPCM_FIU_SUPP_DRA_4B_ADDR */
+
+    return 0;
+}
+
 static inline void qspi_npcm_config_dra_mode(const struct device *dev,
 					     const struct npcm_qspi_cfg *qspi_cfg)
 {

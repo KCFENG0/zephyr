@@ -37,6 +37,15 @@ enum flash_npcm_ex_ops {
 	 * It returns current specific operation for Quad-SPI nor flash.
 	 */
 	FLASH_NPCM_EX_OP_GET_QSPI_OPER,
+	/*
+	 * NPCM Set 4-byte addressing mode for flash devices.
+	 *
+	 * Configure flash controller to enable or disable 4-byte addressing
+	 * mode. This operation synchronizes both the flash chip addressing mode
+	 * and the hardware controller registers to ensure DRA (Direct Read Access)
+	 * operations work correctly in the selected addressing mode.
+	 */
+	FLASH_NPCM_EX_OP_SET_4B_MODE,
 };
 
 /* Structures used by FLASH_NPCM_EX_OP_EXEC_TRANSCEIVE */
@@ -62,6 +71,11 @@ struct npcm_ex_ops_qspi_oper_in {
 /* Structures used by FLASH_NPCM_EX_OP_GET_QSPI_OPER */
 struct npcm_ex_ops_qspi_oper_out {
 	uint32_t oper;
+};
+
+/* Structures used by FLASH_NPCM_EX_OP_SET_4B_MODE */
+struct npcm_ex_ops_set_4b_mode_in {
+    bool enable;  /* true = enable 4-byte mode, false = disable (3-byte mode) */
 };
 
 /* Specific NPCM QSPI devices control bits */

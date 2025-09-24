@@ -81,6 +81,8 @@ typedef void (*qspi_npcm_mutex_lock_configure)(const struct device *dev,
  */
 typedef void (*qspi_npcm_mutex_unlock)(const struct device *dev);
 
+int flash_npcm_fiu_set_4b_mode(const struct device *dev, bool enable);
+
 struct npcm_qspi_ops {
 	qspi_npcm_mutex_lock_configure lock_configure;
 	qspi_npcm_mutex_unlock unlock;

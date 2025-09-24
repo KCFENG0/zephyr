@@ -393,6 +393,20 @@ flash_npcm_nor_get_parameters(const struct device *dev)
 };
 
 #ifdef CONFIG_FLASH_EX_OP_ENABLED
+static int flash_npcm_nor_set_4b_mode(const struct device *dev, bool enable)
+{
+    const struct flash_npcm_nor_config *config = dev->config;
+
+    /* Get the FIU device from qspi_bus */
+    const struct device *fiu_dev = config->qspi_bus;
+    if (!fiu_dev) {
+        return -ENODEV;
+    }
+
+    /* Call the FIU function to set 4-byte mode directly */
+    return flash_npcm_fiu_set_4b_mode(fiu_dev, enable);
+}
+
 static int flash_npcm_nor_ex_exec_transceive(const struct device *dev,
 				      const struct npcm_ex_ops_transceive_in *op_in,
 				      const struct npcm_ex_ops_transceive_out *op_out)
@@ -515,6 +529,18 @@ static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code,
 		}
 #endif
 		break;
+	}
+	case FLASH_NPCM_EX_OP_SET_4B_MODE:
+	{
+		const struct npcm_ex_ops_set_4b_mode_in *set_4b_in =
+			(const struct npcm_ex_ops_set_4b_mode_in *)in;
+
+		if (set_4b_in == NULL) {
+			return -EINVAL;
+		}
+
+		// Call the FIU driver function to set 4-byte mode
+		return flash_npcm_nor_set_4b_mode(dev, set_4b_in->enable);
 	}
 	default:
 		ret = -ENOTSUP;
