@@ -36,6 +36,7 @@ struct npcm_transceive_cfg {
 		uint32_t u32;
 		uint8_t u8[4];
 	} addr;
+	size_t addr_count;
 };
 
 /* QSPI bus configuration for a SPI device */
@@ -84,9 +85,13 @@ typedef void (*qspi_npcm_mutex_unlock)(const struct device *dev);
 int flash_npcm_fiu_set_4b_mode(const struct device *dev, bool enable);
 
 struct npcm_qspi_ops {
-	qspi_npcm_mutex_lock_configure lock_configure;
-	qspi_npcm_mutex_unlock unlock;
-	qspi_npcm_transceive transceive;
+    void (*lock_configure)(const struct device *dev, const struct npcm_qspi_cfg *cfg,
+                          const uint32_t operation);
+    void (*unlock)(const struct device *dev);
+    int (*transceive)(const struct device *dev, struct npcm_transceive_cfg *cfg,
+                     uint32_t flags);
+    int (*set_read_mode)(const struct device *dev, uint8_t rd_mode);
+    int (*get_read_mode)(const struct device *dev, uint8_t *rd_mode);
 };
 
 /* Device data */

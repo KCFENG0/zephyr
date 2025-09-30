@@ -93,7 +93,7 @@ static int flash_npcm_transceive(const struct device *dev, struct npcm_transceiv
 /* NPCM functions for SPI NOR flash */
 static int flash_npcm_transceive_cmd_only(const struct device *dev, uint8_t opcode)
 {
-	struct npcm_transceive_cfg cfg = { .opcode = opcode};
+	struct npcm_transceive_cfg cfg = { .opcode = opcode, .addr_count = 0};
 
 	return flash_npcm_transceive(dev, &cfg, 0); /* opcode only */
 }
@@ -101,7 +101,7 @@ static int flash_npcm_transceive_cmd_only(const struct device *dev, uint8_t opco
 static int flash_npcm_transceive_cmd_by_addr(const struct device *dev, uint8_t opcode,
 					     uint32_t addr)
 {
-	struct npcm_transceive_cfg cfg = { .opcode = opcode};
+	struct npcm_transceive_cfg cfg = { .opcode = opcode, .addr_count = 3};
 
 	cfg.addr.u32 = sys_cpu_to_be32(addr);
 	return flash_npcm_transceive(dev, &cfg, NPCM_TRANSCEIVE_ACCESS_ADDR);
@@ -112,7 +112,8 @@ static int flash_npcm_transceive_read_by_addr(const struct device *dev, uint8_t 
 {
 	struct npcm_transceive_cfg cfg = { .opcode = opcode,
 					  .rx_buf = dst,
-					  .rx_count = size};
+                      .rx_count = size,
+                      .addr_count = 3};
 
 	cfg.addr.u32 = sys_cpu_to_be32(addr);
 	return flash_npcm_transceive(dev, &cfg, NPCM_TRANSCEIVE_ACCESS_READ |
@@ -124,7 +125,8 @@ static int flash_npcm_transceive_read(const struct device *dev, uint8_t opcode,
 {
 	struct npcm_transceive_cfg cfg = { .opcode = opcode,
 					  .rx_buf = dst,
-					  .rx_count = size};
+                      .rx_count = size,
+                      .addr_count = 0};
 
 	return flash_npcm_transceive(dev, &cfg, NPCM_TRANSCEIVE_ACCESS_READ);
 }
@@ -134,7 +136,8 @@ static int flash_npcm_transceive_write(const struct device *dev, uint8_t opcode,
 {
 	struct npcm_transceive_cfg cfg = { .opcode = opcode,
 				    .tx_buf = src,
-				    .tx_count = size};
+                    .tx_count = size,
+                    .addr_count = 0};
 
 	return flash_npcm_transceive(dev, &cfg, NPCM_TRANSCEIVE_ACCESS_WRITE);
 }
@@ -144,7 +147,8 @@ static int flash_npcm_transceive_write_by_addr(const struct device *dev, uint8_t
 {
 	struct npcm_transceive_cfg cfg = { .opcode = opcode,
 					.tx_buf = src,
-					.tx_count = size};
+                    .tx_count = size,
+                    .addr_count = 3};
 
 	cfg.addr.u32 = sys_cpu_to_be32(addr);
 	return flash_npcm_transceive(dev, &cfg, NPCM_TRANSCEIVE_ACCESS_WRITE |
@@ -218,7 +222,8 @@ static int flash_npcm_nor_read_sfdp(const struct device *dev, off_t addr,
 					.tx_buf = sfdp_addr,
 					.tx_count = 4,
 					.rx_buf = data,
-					.rx_count = size};
+                    .rx_count = size,
+                    .addr_count = 0};
 
 	if (data == NULL) {
 		return -EINVAL;
@@ -413,6 +418,7 @@ static int flash_npcm_nor_ex_exec_transceive(const struct device *dev,
 {
 	int flag = 0;
 	struct npcm_transceive_cfg cfg;
+    int ret;
 
 	if (op_in == NULL) {
 		return -EINVAL;
@@ -428,6 +434,7 @@ static int flash_npcm_nor_ex_exec_transceive(const struct device *dev,
 
 	if (op_in->addr_count != 0) {
 		cfg.addr.u32 = sys_cpu_to_be32(op_in->addr);
+		cfg.addr_count = op_in->addr_count;
 		flag |= NPCM_TRANSCEIVE_ACCESS_ADDR;
 	}
 
@@ -437,7 +444,8 @@ static int flash_npcm_nor_ex_exec_transceive(const struct device *dev,
 		flag |= NPCM_TRANSCEIVE_ACCESS_READ;
 	}
 
-	return flash_npcm_transceive(dev, &cfg, flag);
+    ret = flash_npcm_transceive(dev, &cfg, flag);
+    return ret;
 }
 
 static int flash_npcm_nor_ex_set_spi_spec(const struct device *dev,

@@ -167,6 +167,80 @@ static inline void qspi_npcm_config_uma_mode(const struct device *dev,
 	}
 }
 
+static inline void qspi_npcm_fiu_uma_release(const struct device *dev)
+{
+	struct fiu_reg *const inst = HAL_INSTANCE(dev);
+
+	inst->FIU_MSR_IE_CFG &= ~BIT(NPCM_FIU_MSR_IE_CFG_UMA_BLOCK);
+}
+
+static inline int qspi_npcm_fiu_uma_lock(const struct device *dev)
+{
+	struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
+	struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
+
+	if (WAIT_FOR(NPCM_IS_BIT_SET(host_inst->FIU_MSR_STS, NPCM_FIU_MSR_STS_MSTR_INACT),
+			NPCM_FIU_CHK_TIMEOUT_US, NULL) == false) {
+		LOG_ERR("wait host fiu inactive timeout");
+		return -ETIMEDOUT;
+	}
+
+	core_inst->FIU_MSR_IE_CFG |= BIT(NPCM_FIU_MSR_IE_CFG_UMA_BLOCK);
+
+	return 0;
+}
+
+/* Enhanced function to read flash ADS of Status Register 3 according to W25Q256JV datasheet */
+static inline bool qspi_npcm_read_flash_4b_en_status(const struct device *dev,
+                                                     const struct npcm_qspi_cfg *qspi_cfg)
+{
+    struct npcm_qspi_data *const qspi_data = dev->data;
+    const struct npcm_qspi_cfg *saved_cfg = qspi_data->cur_cfg;
+    uint8_t status_reg3 = 0;
+    bool flash_4b_en = false;
+    int ret;
+
+    /* Temporarily set configuration for status read */
+    qspi_data->cur_cfg = qspi_cfg;
+    qspi_data->sw_cs = find_lsb_set(qspi_cfg->flags & NPCM_QSPI_SW_CS_MASK) - 1;
+
+    /* Configure UMA mode for status register read */
+    qspi_npcm_config_uma_mode(dev, qspi_cfg);
+
+    /* Lock UMA for status read */
+    ret = qspi_npcm_fiu_uma_lock(dev);
+    if (ret != 0) {
+        goto cleanup;
+    }
+
+    /* Assert chip select */
+    qspi_npcm_uma_cs_level(dev, qspi_data->sw_cs, false);
+
+    /* Send Read Status Register 3 command (0x15) */
+    qspi_npcm_uma_write_byte(dev, 0x15);
+
+    /* Read status register 3 */
+    qspi_npcm_uma_read_byte(dev, &status_reg3);
+
+    /* De-assert chip select */
+    qspi_npcm_uma_cs_level(dev, qspi_data->sw_cs, true);
+
+    /* Release UMA */
+    qspi_npcm_fiu_uma_release(dev);
+
+    /* Check ADS bit (bit 0 in Status Register 3) - Current Address Mode */
+    flash_4b_en = (status_reg3 & BIT(0)) != 0;
+
+cleanup:
+    /* Restore previous configuration */
+    qspi_data->cur_cfg = saved_cfg;
+    if (saved_cfg) {
+        qspi_data->sw_cs = find_lsb_set(saved_cfg->flags & NPCM_QSPI_SW_CS_MASK) - 1;
+    }
+
+    return flash_4b_en;
+}
+
 static inline void qspi_npcm_config_dra_4byte_mode(const struct device *dev,
 						   const struct npcm_qspi_cfg *qspi_cfg)
 {
@@ -174,10 +248,15 @@ static inline void qspi_npcm_config_dra_4byte_mode(const struct device *dev,
 	struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
 	struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
 	uint8_t addr_4b_en;
+    bool flash_4b_en_status;
 
 	addr_4b_en = (qspi_cfg->flags & NPCM_QSPI_SW_CS_MASK) << 4;
 
-	if (qspi_cfg->enter_4ba != 0) {
+    /* Read actual flash chip ADS status */
+    flash_4b_en_status = qspi_npcm_read_flash_4b_en_status(dev, qspi_cfg);
+
+    /* Configure hardware ADDR_4B_EN based on actual flash chip status */
+    if (flash_4b_en_status) {
 		core_inst->ADDR_4B_EN |= addr_4b_en;
 		host_inst->ADDR_4B_EN |= addr_4b_en;
 	} else {
@@ -269,45 +348,23 @@ static inline void qspi_npcm_fiu_set_operation(const struct device *dev, uint32_
 	}
 }
 
-static inline int qspi_npcm_fiu_uma_lock(const struct device *dev)
-{
-	struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
-	struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
-
-	if (WAIT_FOR(NPCM_IS_BIT_SET(host_inst->FIU_MSR_STS, NPCM_FIU_MSR_STS_MSTR_INACT),
-			NPCM_FIU_CHK_TIMEOUT_US, NULL) == false) {
-		LOG_ERR("wait host fiu inactive timeout");
-		return -ETIMEDOUT;
-	}
-
-	core_inst->FIU_MSR_IE_CFG |= BIT(NPCM_FIU_MSR_IE_CFG_UMA_BLOCK);
-
-	return 0;
-}
-
-static inline void qspi_npcm_fiu_uma_release(const struct device *dev)
-{
-	struct fiu_reg *const inst = HAL_INSTANCE(dev);
-
-	inst->FIU_MSR_IE_CFG &= ~BIT(NPCM_FIU_MSR_IE_CFG_UMA_BLOCK);
-}
-
 /* NPCM specific QSPI-FIU controller functions */
 static int qspi_npcm_fiu_uma_transceive(const struct device *dev, struct npcm_transceive_cfg *cfg,
 				     uint32_t flags)
 {
 	struct npcm_qspi_data *const data = dev->data;
-	int ret;
+    int ret = 0;
 
 	/* Transaction is permitted? */
 	if ((data->operation & NPCM_EX_OP_LOCK_TRANSCEIVE) != 0) {
-		return -EPERM;
+        ret = -EPERM;
+        goto exit;
 	}
 
 	/* UMA block */
 	ret = qspi_npcm_fiu_uma_lock(dev);
 	if (ret) {
-		return ret;
+        goto exit;
 	}
 
 	/* Assert chip select */
@@ -317,8 +374,19 @@ static int qspi_npcm_fiu_uma_transceive(const struct device *dev, struct npcm_tr
 	qspi_npcm_uma_write_byte(dev, cfg->opcode);
 
 	if ((flags & NPCM_TRANSCEIVE_ACCESS_ADDR) != 0) {
-		/* 3-byte or 4-byte address? */
-		const int addr_start = (data->cur_cfg->enter_4ba != 0) ? 0 : 1;
+        size_t addr_bytes;
+        const struct npcm_qspi_cfg *qspi_cfg = data->cur_cfg;
+
+        if (qspi_cfg->enter_4ba != 0) {
+            addr_bytes = 4;
+        } else if (cfg->addr_count > 0) {
+            addr_bytes = cfg->addr_count;
+        } else {
+            addr_bytes = 3;  /* Default to 3-byte addressing */
+        }
+
+        /* Calculate starting index for address bytes */
+        const int addr_start = 4 - addr_bytes;
 
 		for (size_t i = addr_start; i < 4; i++) {
 			LOG_DBG("addr %d, %02x", i, cfg->addr.u8[i]);
@@ -328,7 +396,8 @@ static int qspi_npcm_fiu_uma_transceive(const struct device *dev, struct npcm_tr
 
 	if ((flags & NPCM_TRANSCEIVE_ACCESS_WRITE) != 0) {
 		if (cfg->tx_buf == NULL) {
-			return -EINVAL;
+            ret = -EINVAL;
+            goto release_and_exit;
 		}
 		for (size_t i = 0; i < cfg->tx_count; i++) {
 			qspi_npcm_uma_write_byte(dev, cfg->tx_buf[i]);
@@ -344,13 +413,15 @@ static int qspi_npcm_fiu_uma_transceive(const struct device *dev, struct npcm_tr
 		}
 	}
 
+release_and_exit:
 	/* De-assert chip select */
 	qspi_npcm_uma_cs_level(dev, data->sw_cs, true);
 
 	/* UMA unblock */
 	qspi_npcm_fiu_uma_release(dev);
 
-	return 0;
+exit:
+    return ret;
 }
 
 static void qspi_npcm_fiu_mutex_lock_configure(const struct device *dev,
@@ -392,10 +463,117 @@ static void qspi_npcm_fiu_mutex_unlock(const struct device *dev)
 	k_sem_give(&data->lock_sem);
 }
 
+/* Enhanced RD_MODE configuration function */
+static int qspi_npcm_fiu_set_read_mode(const struct device *dev, uint8_t rd_mode)
+{
+    struct npcm_qspi_data *const data = dev->data;
+    struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
+    struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
+    uint8_t hw_rd_mode;
+    int ret = 0;
+
+    /* Validate read mode parameter */
+    switch (rd_mode) {
+        case NPCM_RD_MODE_NORMAL:
+            hw_rd_mode = NPCM_SPI_FL_CFG_RD_MODE_NORMAL;
+            break;
+        case NPCM_RD_MODE_FAST:
+            hw_rd_mode = NPCM_SPI_FL_CFG_RD_MODE_FAST;
+            break;
+        case NPCM_RD_MODE_FAST_DUAL:
+            hw_rd_mode = NPCM_SPI_FL_CFG_RD_MODE_FAST_DUAL;
+            break;
+        case NPCM_RD_MODE_QUAD:
+            hw_rd_mode = NPCM_SPI_FL_CFG_RD_MODE_FAST_DUAL; /* QUAD uses same as FAST_DUAL */
+            break;
+        default:
+            ret = -EINVAL;
+            goto exit;
+    }
+
+    /* Take semaphore to ensure atomic configuration */
+    k_sem_take(&data->lock_sem, K_FOREVER);
+
+    /* Update SPI_FL_CFG register RD_MODE field */
+    SET_FIELD(core_inst->SPI_FL_CFG, NPCM_SPI_FL_CFG_RD_MODE, hw_rd_mode);
+    SET_FIELD(host_inst->SPI_FL_CFG, NPCM_SPI_FL_CFG_RD_MODE, hw_rd_mode);
+
+    /* Configure QUAD mode specific settings */
+    if (rd_mode == NPCM_RD_MODE_QUAD) {
+        core_inst->RESP_CFG |= BIT(NPCM_RESP_CFG_QUAD_EN);
+        host_inst->RESP_CFG |= BIT(NPCM_RESP_CFG_QUAD_EN);
+    } else {
+        core_inst->RESP_CFG &= ~BIT(NPCM_RESP_CFG_QUAD_EN);
+        host_inst->RESP_CFG &= ~BIT(NPCM_RESP_CFG_QUAD_EN);
+    }
+
+    /* Update current configuration if available */
+    if (data->cur_cfg != NULL) {
+        struct npcm_qspi_cfg *cfg = (struct npcm_qspi_cfg *)data->cur_cfg;
+        cfg->rd_mode = rd_mode;
+    }
+
+    k_sem_give(&data->lock_sem);
+
+exit:
+    return ret;
+}
+
+/* Enhanced function to get current read mode */
+static int qspi_npcm_fiu_get_read_mode(const struct device *dev, uint8_t *rd_mode)
+{
+    struct npcm_qspi_data *const data = dev->data;
+    struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
+    uint8_t hw_rd_mode;
+    int ret = 0;
+
+    if (rd_mode == NULL) {
+        ret = -EINVAL;
+        goto exit;
+    }
+
+    /* Take semaphore for consistent read */
+    k_sem_take(&data->lock_sem, K_FOREVER);
+
+    /* Read current RD_MODE from SPI_FL_CFG register */
+    hw_rd_mode = GET_FIELD(core_inst->SPI_FL_CFG, NPCM_SPI_FL_CFG_RD_MODE);
+
+    /* Check if QUAD mode is enabled */
+    bool quad_enabled = (core_inst->RESP_CFG & BIT(NPCM_RESP_CFG_QUAD_EN)) != 0;
+
+    /* Convert hardware value to logical mode */
+    if (quad_enabled && hw_rd_mode == NPCM_SPI_FL_CFG_RD_MODE_FAST_DUAL) {
+        *rd_mode = NPCM_RD_MODE_QUAD;
+    } else {
+        switch (hw_rd_mode) {
+            case NPCM_SPI_FL_CFG_RD_MODE_NORMAL:
+                *rd_mode = NPCM_RD_MODE_NORMAL;
+                break;
+            case NPCM_SPI_FL_CFG_RD_MODE_FAST:
+                *rd_mode = NPCM_RD_MODE_FAST;
+                break;
+            case NPCM_SPI_FL_CFG_RD_MODE_FAST_DUAL:
+                *rd_mode = NPCM_RD_MODE_FAST_DUAL;
+                break;
+            default:
+                *rd_mode = NPCM_RD_MODE_NORMAL; /* Default fallback */
+                ret = -EIO;
+                break;
+        }
+    }
+
+    k_sem_give(&data->lock_sem);
+
+exit:
+    return ret;
+}
+
 struct npcm_qspi_ops npcm_qspi_fiu_ops = {
 	.lock_configure = qspi_npcm_fiu_mutex_lock_configure,
         .unlock = qspi_npcm_fiu_mutex_unlock,
         .transceive = qspi_npcm_fiu_uma_transceive,
+        .set_read_mode = qspi_npcm_fiu_set_read_mode,
+        .get_read_mode = qspi_npcm_fiu_get_read_mode,
 };
 
 static int qspi_npcm_fiu_init(const struct device *dev)
@@ -407,7 +585,8 @@ static int qspi_npcm_fiu_init(const struct device *dev)
 
 	if (!device_is_ready(clk_dev)) {
 		LOG_ERR("%s device not ready", clk_dev->name);
-		return -ENODEV;
+        ret = -ENODEV;
+        goto exit;
 	}
 
 	/* Turn on device clock first and get source clock freq. */
@@ -415,13 +594,14 @@ static int qspi_npcm_fiu_init(const struct device *dev)
 			       (clock_control_subsys_t)config->clk_cfg);
 	if (ret < 0) {
 		LOG_ERR("Turn on FIU clock fail %d", ret);
-		return ret;
+        goto exit;
 	}
 
 	/* initialize mutex for qspi controller */
 	k_sem_init(&data->lock_sem, 1, 1);
 
-	return 0;
+exit:
+    return ret;
 }
 
 #define NPCM_SPI_FIU_INIT(n)							\
