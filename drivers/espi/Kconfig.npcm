@@ -107,7 +107,13 @@ config ESPI_PERIPHERAL_PMCH4
 	bool "NPCM PMCH4 Support"
 	default y
 	help
-	  Enables PM channel 4 for eSPI peripheral channel."
+	  Enables PM channel 4 for eSPI peripheral channel.
+
+config ESPI_PERIPHERAL_SHM_MBI
+	bool "NPCM SHM and Mailbox Support"
+	default n
+	help
+	  Enable SHM and Mailbox for eSPI peripheral channel.
 
 config ESPI_NPCM_SUPP_VW_GPIO
 	bool "Indicates that the eSPI hardware supports virtual wire GPIOs"

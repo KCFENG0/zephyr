@@ -318,15 +318,17 @@
 			       0x400c9000 0x2000
 			       0x400cb000 0x2000
 			       0x400cd000 0x2000
-			       0x400cf000 0x1000>;
+			       0x400cf000 0x1000
+			       0x400a1000 0x1000>;
 			reg-names = "mswc", "shm", "c2h", "kbc", "pm_acpi",
-				    "pm_hcmd", "pmch3", "pmch4";
+				    "pm_hcmd", "pmch3", "pmch4", "mbi";
 
 			/* host sub-module IRQ and priority */
 			interrupts = <4 3>,  /* PMCH Input-Buf-Full (IBF) */
 				     <3 3>,  /* PMCH Output-Buf-Empty (OBE) */
+				     <7 3>,  /* SHM or MBI */
 				     <10 3>;  /* Port80 FIFO Not Empty */
-			interrupt-names = "pmch_ibf", "pmch_obe", "p80_fifo";
+			interrupt-names = "pmch_ibf", "pmch_obe", "shm_mbi", "p80_fifo";
 
 			/* WUI map for accessing host sub-modules */
 			host-acc-wui = <&wui_host_acc>;

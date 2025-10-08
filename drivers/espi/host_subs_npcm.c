@@ -141,6 +141,7 @@ struct host_sub_npcm_config {
 	struct pmch_reg *const inst_pm_hcmd;
 	struct pmch_reg *const inst_pmch3;
 	struct pmch_reg *const inst_pmch4;
+	struct mbi_reg *const inst_mbi;
 	/* clock configuration */
 	const uint8_t clks_size;
 	const uint32_t *clks_list;
@@ -178,6 +179,7 @@ struct host_sub_npcm_config host_sub_cfg = {
 	.inst_pm_hcmd = (struct pmch_reg *)DT_INST_REG_ADDR_BY_NAME(0, pm_hcmd),
 	.inst_pmch3 = (struct pmch_reg *)DT_INST_REG_ADDR_BY_NAME(0, pmch3),
 	.inst_pmch4 = (struct pmch_reg *)DT_INST_REG_ADDR_BY_NAME(0, pmch4),
+	.inst_mbi = (struct mbi_reg *)DT_INST_REG_ADDR_BY_NAME(0, mbi),
 	.host_acc_wui = NPCM_DT_WUI_ITEM_BY_NAME(0, host_acc_wui),
 	.clks_size = ARRAY_SIZE(host_dev_clk_cfg),
 	.clks_list = host_dev_clk_cfg,
@@ -833,6 +835,51 @@ static void host_cus_opcode_disable_interrupts(void)
 }
 #endif /* CONFIG_ESPI_PERIPHERAL_CUSTOM_OPCODE */
 
+#if defined(CONFIG_ESPI_PERIPHERAL_SHM_MBI)
+static void host_mbi_isr(void)
+{
+	struct mbi_reg *const inst_mbi = host_sub_cfg.inst_mbi;
+	uint8_t status = inst_mbi->MBICCON;
+
+	struct espi_event evt = { ESPI_BUS_PERIPHERAL_NOTIFICATION,
+		ESPI_PERIPHERAL_HOST_IO, ESPI_PERIPHERAL_NODATA
+	};
+
+	struct espi_evt_data_mbi *mbi_evt =
+		(struct espi_evt_data_mbi *)&evt.evt_data;
+
+	if (status & BIT(NPCM_MBICCON_IBF)) {
+		mbi_evt->evt = HOST_MBI_EVT_IBF;
+		mbi_evt->data = inst_mbi->HTS;
+	} else if (status &  BIT(NPCM_MBICCON_OBE)) {
+		mbi_evt->evt = HOST_MBI_EVT_OBE;
+		mbi_evt->data = inst_mbi->STH;
+	}
+
+	espi_send_callbacks(host_sub_data.callbacks,
+			    host_sub_data.host_bus_dev, evt);
+}
+
+static void host_shm_mbi_isr(const void *arg)
+{
+	ARG_UNUSED(arg);
+
+	host_mbi_isr();
+}
+
+void host_mbi_init(void)
+{
+	struct mbi_reg *const inst_mbi = host_sub_cfg.inst_mbi;
+
+	inst_mbi->MBICCON |= BIT(NPCM_MBICCON_MBIRQEN) | BIT(NPCM_MBICCON_HIRQE)
+			| BIT(NPCM_MBICCON_MBISTSACLR);
+	inst_mbi->MGENCTRL |= BIT(NPCM_MGENCTRL_IBFIE) | BIT(NPCM_MGENCTRL_OBEIE);
+	inst_mbi->MGENCTRL2 |= BIT(NPCM_MGENCTRL2_HHECSTIE)
+			| BIT(NPCM_MGENCTRL2_HEHWSTIE)
+			| BIT(NPCM_MGENCTRL2_MBIStSEN);
+}
+#endif
+
 #if defined(CONFIG_ESPI_PERIPHERAL_UART)
 /* host uart pinmux configuration */
 PINCTRL_DT_DEFINE(DT_INST(0, nuvoton_npcm_host_uart));
@@ -1345,7 +1392,7 @@ void npcm_host_init_subs_host_domain(void)
 		host_c2h_write_io_cfg_reg(EC_CFG_IDX_CTRL, EC_CFG_IDX_CTRL_LDN_ENABLE);
 	}
 
-	LOG_DBG("Hos sub-modules configurations are done!");
+	LOG_DBG("Host sub-modules configurations are done!");
 }
 
 void npcm_host_enable_access_interrupt(void)
@@ -1432,6 +1479,9 @@ int npcm_host_init_subs_core_domain(const struct device *host_bus_dev,
 #if defined(CONFIG_ESPI_PERIPHERAL_UART)
 	host_uart_init();
 #endif
+#if defined(CONFIG_ESPI_PERIPHERAL_SHM_MBI)
+	host_mbi_init();
+#endif
 
 	/* Host KBC sub-device interrupt installation */
 #if defined(CONFIG_ESPI_PERIPHERAL_8042_KBC)
@@ -1464,7 +1514,15 @@ int npcm_host_init_subs_core_domain(const struct device *host_bus_dev,
 		    DT_INST_IRQ_BY_NAME(0, p80_fifo, priority),
 		    host_port80_isr,
 		    NULL, 0);
-	//irq_enable(DT_INST_IRQ_BY_NAME(0, p80_fifo, irq));
+	irq_enable(DT_INST_IRQ_BY_NAME(0, p80_fifo, irq));
+#endif
+
+#if defined(CONFIG_ESPI_PERIPHERAL_SHM_MBI)
+	IRQ_CONNECT(DT_INST_IRQ_BY_NAME(0, shm_mbi, irq),
+		    DT_INST_IRQ_BY_NAME(0, shm_mbi, priority),
+		    host_shm_mbi_isr,
+		    NULL, 0);
+	irq_enable(DT_INST_IRQ_BY_NAME(0, shm_mbi, irq));
 #endif
 
 	if (IS_ENABLED(CONFIG_PM)) {

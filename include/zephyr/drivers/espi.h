@@ -345,6 +345,19 @@ struct espi_evt_data_acpi {
 	uint32_t reserved:16;
 };
 
+/* MBI event: Input Buffer Full */
+#define HOST_MBI_EVT_IBF BIT(0)
+/* MBI event: Output Buffer Empty */
+#define HOST_MBI_EVT_OBE BIT(1)
+/**
+ * @brief Bit field definition of evt_data in struct espi_event for MBI.
+ */
+struct espi_evt_data_mbi {
+	uint32_t evt:8;
+	uint32_t data:8;
+	uint32_t reserved:16;
+};
+
 /**
  * @brief eSPI event
  */

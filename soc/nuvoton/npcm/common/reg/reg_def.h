@@ -1402,6 +1402,66 @@ struct shm_reg {
 #define NPCM_DP80BUF_BTYE_LEN            FIELD(12, 13)
 
 /*
+ * Mailbox (MBI) device registers
+ */
+struct mbi_reg {
+	/* 0x000: Host-to-SMC */
+	volatile uint8_t HTS;
+	/* 0x001: SMC-to-Host */
+	volatile uint8_t STH;
+	volatile uint8_t reserved1[14];
+	/* 0x010 ~ 03F: Data */
+	volatile uint8_t GPD[48];
+	volatile uint8_t reserved2[16];
+	/* 0x050 ~ 055: Host Write Indicator */
+	volatile uint8_t DINMR[6];
+	volatile uint8_t reserved3[2];
+	/* 0x058 ~ 05D: Core Write Indicator */
+	volatile uint8_t DINMRC[6];
+	volatile uint8_t reserved4[2];
+	/* 0x060 ~ 065: Mailbox Host Write Protect */
+	volatile uint8_t MBIHWP[6];
+	volatile uint8_t reserved5[10];
+	/* 0x070: Mailbo Core Control */
+	volatile uint8_t MBICCON;
+	/* 0x071: Mailbox General Control */
+	volatile uint8_t MGENCTRL;
+	/* 0x072: Mailbox General Control 2 */
+	volatile uint8_t MGENCTRL2;
+	/* 0x073: Mailbox Interface Status */
+	volatile uint8_t MBISTS;
+	/* 0x074: Mail Status Register Clear Enable */
+	volatile uint8_t MBISTSCLEN;
+};
+
+/* MBI register fields */
+#define NPCM_MBICCON_MBIRQEN		0
+#define NPCM_MBICCON_HHECST		1
+#define NPCM_MBICCON_HIRQE		2
+#define NPCM_MBICCON_IRQB		3
+#define NPCM_MBICCON_IBF		5
+#define NPCM_MBICCON_OBE		6
+#define NPCM_MBICCON_MBISTSACLR		7
+#define NPCM_MGENCTRL_COM		0
+#define NPCM_MGENCTRL_IBFIE		1
+#define NPCM_MGENCTRL_OBEIE		2
+#define NPCM_MGENCTRL_INTTYPE		3
+#define NPCM_MGENCTRL_HEHWST		6
+#define NPCM_MGENCTRL_MSTNOTR1		7
+#define NPCM_MGENCTRL2_HHECSTIE		0
+#define NPCM_MGENCTRL2_HEHWSTIE		1
+#define NPCM_MGENCTRL2_MBIStSEN		2
+
+#define MBICCON_HHECST_MASK		(0x01 << NPCM_MBICCON_HHECST)
+#define MBICCON_IRQB_MASK		(0x01 << NPCM_MBICCON_IRQB)
+#define MBICCON_IBF_MASK		(0x01 << NPCM_MBICCON_IBF)
+#define MBICCON_OBE_MASK		(0x01 << NPCM_MBICCON_OBE)
+#define MGENCTRL_COM_MASK		(0x01 << NPCM_MGENCTRL_COM)
+#define MGENCTRL_INTTYPE_MASK		(0x03 << NPCM_MGENCTRL_INTTYPE)
+#define MGENCTRL_HEHWST_MASK		(0x01 << NPCM_MGENCTRL_HEHWST)
+#define MGENCTRL_MSTNOTR1_MASK		(0x01 << NPCM_MGENCTRL_MSTNOTR1)
+
+/*
  * Keyboard and Mouse Controller (KBC) device registers
  */
 struct kbc_reg {
