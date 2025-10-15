@@ -358,6 +358,24 @@ struct espi_evt_data_mbi {
 	uint32_t reserved:16;
 };
 
+/* SHM event: Host Write to Offset */
+#define HOST_SHM_EVT_HSEM_W BIT(0)
+/* SHM event: Host Read Write Access Error */
+#define HOST_SHM_EVT_HERR BIT(1)
+/* SHM event: Host Read Write the Offset */
+#define HOST_SHM_EVT_OFS_ACC BIT(2)
+/* SHM event: Host Access the SHM */
+#define HOST_SHM_EVT_SHM_ACC BIT(3)
+
+/**
+ * @brief Bit field definition of evt_data in struct espi_event for SHM.
+ */
+struct espi_evt_data_shm {
+	uint32_t evt:8;
+	uint32_t data:8;
+	uint32_t offset:16;
+};
+
 /**
  * @brief eSPI event
  */

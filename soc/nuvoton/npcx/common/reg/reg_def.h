@@ -918,7 +918,49 @@ struct shm_reg {
 	volatile uint16_t COFS2;
 	/* 0x04C: Core_Offset in Window 1 Address */
 	volatile uint16_t COFS1;
-	volatile uint16_t reserved12;
+	/* 0x04E: Shared Memory Core Control 2 */
+	volatile uint8_t SMC_CTL2;
+	volatile uint8_t reserved12[5];
+	/* 0x054: Shared Access Window 3, Semaphore */
+	volatile uint8_t SHAW3_SEM;
+	/* 0x055: Shared Access Window 4, Semaphore */
+	volatile uint8_t SHAW4_SEM;
+	/* 0x056: Shared Access Window 3 Write Protect */
+	volatile uint8_t WIN3_WR_PROT;
+	/* 0x057: Shared Access Window 3 Read Protect */
+	volatile uint8_t WIN3_RD_PROT;
+	/* 0x058: Shared Access Window 4 Write Protect */
+	volatile uint8_t WIN4_WR_PROT;
+	/* 0x059: Shared Access Window 4 Read Protect */
+	volatile uint8_t WIN4_RD_PROT;
+	/* 0x05A: RAM Windows 2 Size */
+	volatile uint8_t WIN2_SIZE;
+	volatile uint8_t reserved13;
+	/* 0x05C: Shared Access Window 3 Base */
+	volatile uint32_t WIN_BASE3;
+	/* 0x060: Shared Access Window 4 Base */
+	volatile uint32_t WIN_BASE4;
+	/* 0x064: Core_Offset in Window 3 Address */
+	volatile uint16_t COFS3;
+	/* 0x066: Core_Offset in Window 4 Address */
+	volatile uint16_t COFS4;
+	volatile uint32_t reserved14;
+	/* 0x06C: Shared memory Core Status Register 2 */
+	volatile uint8_t SMC_STS2;
+	/* 0x06D: Indirect memory Access 2, Semaphore */
+	volatile uint8_t IMA2_SEM;
+	/* 0x06E: Indirect Memory Access 2 Write Protect */
+	volatile uint8_t IMA2_WR_PROT;
+	/* 0x06F: Indirect Memory Access 2 Read Protect */
+	volatile uint8_t IMA2_RD_PROT;
+	/* 0x070: Indirect Memory Access 2 Base */
+	volatile uint32_t IMA2_BASE;
+	/* 0x074: Additional indirect memory Access , Semaphore */
+	volatile uint8_t AIMA_SEM;
+	volatile uint8_t reserved15[3];
+	/* 0x078: Additional Indirect Memory Access Base ([31:8]) */
+	volatile uint32_t AIMA_BASE;
+	volatile uint8_t reserved16;
 };
 
 /* SHM register fields */

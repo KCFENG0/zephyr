@@ -860,10 +860,46 @@ static void host_mbi_isr(void)
 			    host_sub_data.host_bus_dev, evt);
 }
 
+static void host_shm_isr(void){
+	struct shm_reg *const inst_shm = host_sub_cfg.inst_shm;
+	uint8_t smc_status = inst_shm->SMC_STS;
+	uint8_t ofs_acc = inst_shm->HOFS_STS;
+	uint8_t ofs2_acc = inst_shm->HOFS_STS2;
+
+	struct espi_event evt = { ESPI_BUS_PERIPHERAL_NOTIFICATION,
+		ESPI_PERIPHERAL_HOST_IO, ESPI_PERIPHERAL_NODATA
+	};
+
+	struct espi_evt_data_shm *shm_evt =
+		(struct espi_evt_data_shm *)&evt.evt_data;
+
+	printk("shm isr: smc_status=0x%02x, ofs_acc=0x%02x, ofs2_acc=0x%02x\n",
+		smc_status, ofs_acc, ofs2_acc);
+	if (smc_status & BIT(NPCM_SMC_STS_HSEM1W) ||
+	    smc_status & BIT(NPCM_SMC_STS_HSEM2W)) {
+		shm_evt->evt = HOST_SHM_EVT_HSEM_W;
+		inst_shm->SMC_STS |= smc_status;
+	} else if (smc_status & BIT(NPCM_SMC_STS_HRERR) ||
+		   smc_status & BIT(NPCM_SMC_STS_HWERR)) {
+		shm_evt->evt = HOST_SHM_EVT_HERR;
+		inst_shm->SMC_STS |= smc_status;
+	} else if (ofs_acc & 0xFF || ofs2_acc & 0x03) {
+		shm_evt->evt = HOST_SHM_EVT_OFS_ACC;
+		inst_shm->HOFS_STS |= ofs_acc;
+		inst_shm->HOFS_STS2 |= ofs2_acc;
+	} else if (smc_status & BIT(NPCM_SMC_STS_SHM_ACC)) {
+		shm_evt->evt = HOST_SHM_EVT_SHM_ACC;
+		inst_shm->SMC_STS |= smc_status;
+	}
+
+	espi_send_callbacks(host_sub_data.callbacks,
+			    host_sub_data.host_bus_dev, evt);
+}
+
 static void host_shm_mbi_isr(const void *arg)
 {
 	ARG_UNUSED(arg);
-
+	host_shm_isr();
 	host_mbi_isr();
 }
 
