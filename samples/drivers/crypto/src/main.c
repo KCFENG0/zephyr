@@ -609,6 +609,7 @@ struct mode_test {
 	void (*mode_func)(const struct device *dev);
 };
 
+#if CONFIG_CRYPTO_NPCM_SHA
 /* Following test are part of mbedTLS */
 #define SHA160_HASH_LENGTH      (160/8)
 #define SHA224_HASH_LENGTH      (224/8)
@@ -1320,6 +1321,7 @@ static void crypto_hash_stop_resume(const struct device *dev)
 	sha512_hash_stop_resume_test(dev, sha384_test1, sizeof(sha384_test1),
 								 sha384_results[0], CRYPTO_HASH_ALGO_SHA384);
 }
+#endif //CONFIG_CRYPTO_NPCM_SHA
 
 int main(void)
 {
