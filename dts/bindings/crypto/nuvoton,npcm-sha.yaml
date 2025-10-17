@@ -1,0 +1,20 @@
+# Copyright (c) 2022 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+description: NPCM Crypto SHA accelerator.
+
+compatible: "nuvoton,npcm-sha"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+  in-swap:
+    type: boolean
+    description: SHA input data swap
+
+  out-swap:
+    type: boolean
+    description: SHA output data swap

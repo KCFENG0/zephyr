@@ -24,6 +24,7 @@
  * Hash algorithm
  */
 enum hash_algo {
+	CRYPTO_HASH_ALGO_SHA1 = 0,
 	CRYPTO_HASH_ALGO_SHA224 = 1,
 	CRYPTO_HASH_ALGO_SHA256 = 2,
 	CRYPTO_HASH_ALGO_SHA384 = 3,

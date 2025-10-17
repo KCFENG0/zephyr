@@ -1,0 +1,11 @@
+# NPCM SHA driver configuration options
+
+# Copyright (c) 2022 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+config CRYPTO_NPCM_SHA
+	bool "NPCM SHA driver"
+	default y
+	depends on DT_HAS_NUVOTON_NPCM_SHA_ENABLED
+	help
+	  Enable NPCM SHA driver.

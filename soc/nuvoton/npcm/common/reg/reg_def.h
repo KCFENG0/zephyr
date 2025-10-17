@@ -4074,4 +4074,47 @@ typedef enum {
 #define RTC_YEARALARM_Pos                                  (0)
 #define RTC_YEARALARM_Msk                                  (0xFF << RTC_YEARALARM_Pos)
 
+/*
+ * Crypto SHA registers
+ */
+struct sha_reg {
+	__O  uint32_t DIN;                  /* [0x00] Data In                 */
+	__IO uint8_t  CSTS;                 /* [0x04] Control/Status          */
+		 uint8_t  RESERVED1[3];
+	__IO uint8_t  CFG;                  /* [0x08] Config                  */
+		 uint8_t  RESERVED2[3];
+	__I  uint8_t  VER;                  /* [0x0C] Hash Version            */
+		 uint8_t  RESERVED[3];
+	__O  uint32_t SHA512_DIN;           /* [0x10] Write-only DATA FIFO    */
+	__IO uint8_t  SHA512_CSTS;          /* [0x14] Control/Status register */
+		 uint8_t  RESERVED4[3];
+	__IO uint8_t  SHA512_CMD;           /* [0x18] Control Command register*/
+		 uint8_t  RESERVED5[3];
+	__I  uint32_t SHA512_DOUT;          /* [0x1C] Read-only DATA FIFO     */
+	__IO uint32_t DH[8];                /* [0x20] Digest of the Message   */
+};
+
+/* Crypto SHA register fields */
+/* HASH_CTR_STS fields */
+#define HASH_CTR_STS_SHA_EN     BIT(0)
+#define HASH_CTR_STS_SHA_BUSY   BIT(1)
+#define HASH_CTR_STS_SHA_RST    BIT(2)
+/* HASH_CFG fields */
+#define HASH_CFG_SHA1_SHA2      BIT(0)
+#define HASH_INPUT_SWAP         BIT(1)
+#define HASH_OUTPUT_SWAP        BIT(2)
+/* HASH_DIG_H fields */
+#define HASH_DIG_H_NUM          8
+/* SHA512_CTR_STS fields */
+#define SHA512_CTR_STS_SHA512_EN     BIT(0)
+#define SHA512_CTR_STS_SHA512_BUSY   BIT(1)
+#define SHA512_CTR_STS_SHA512_RST    BIT(2)
+/* SHA512_CMD fields */
+#define SHA512_CMD_SHA512_RD       BIT(0)
+#define SHA512_CMD_SHA512_WR       BIT(1)
+#define SHA512_CMD_SHA512_ROUND    BIT(2)
+#define SHA512_CMD_SHA512_384      BIT(3)
+#define SHA512_CMD_SHA512_LOAD     BIT(4)
+#define SHA512_CMD_INPUT_SWAP      BIT(7)
+
 #endif /* _NUVOTON_NPCM_REG_DEF_H */
