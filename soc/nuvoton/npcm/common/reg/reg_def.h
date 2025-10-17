@@ -4096,25 +4096,25 @@ struct sha_reg {
 
 /* Crypto SHA register fields */
 /* HASH_CTR_STS fields */
-#define HASH_CTR_STS_SHA_EN     BIT(0)
-#define HASH_CTR_STS_SHA_BUSY   BIT(1)
-#define HASH_CTR_STS_SHA_RST    BIT(2)
+#define NPCM_HASH_CTR_STS_SHA_EN     BIT(0)
+#define NPCM_HASH_CTR_STS_SHA_BUSY   BIT(1)
+#define NPCM_HASH_CTR_STS_SHA_RST    BIT(2)
 /* HASH_CFG fields */
-#define HASH_CFG_SHA1_SHA2      BIT(0)
-#define HASH_INPUT_SWAP         BIT(1)
-#define HASH_OUTPUT_SWAP        BIT(2)
+#define NPCM_HASH_CFG_SHA1_SHA2      BIT(0)
+#define NPCM_HASH_INPUT_SWAP         BIT(1)
+#define NPCM_HASH_OUTPUT_SWAP        BIT(2)
 /* HASH_DIG_H fields */
-#define HASH_DIG_H_NUM          8
+#define NPCM_HASH_DIG_H_NUM          8
 /* SHA512_CTR_STS fields */
-#define SHA512_CTR_STS_SHA512_EN     BIT(0)
-#define SHA512_CTR_STS_SHA512_BUSY   BIT(1)
-#define SHA512_CTR_STS_SHA512_RST    BIT(2)
+#define NPCM_SHA512_CTR_STS_SHA512_EN     BIT(0)
+#define NPCM_SHA512_CTR_STS_SHA512_BUSY   BIT(1)
+#define NPCM_SHA512_CTR_STS_SHA512_RST    BIT(2)
 /* SHA512_CMD fields */
-#define SHA512_CMD_SHA512_RD       BIT(0)
-#define SHA512_CMD_SHA512_WR       BIT(1)
-#define SHA512_CMD_SHA512_ROUND    BIT(2)
-#define SHA512_CMD_SHA512_384      BIT(3)
-#define SHA512_CMD_SHA512_LOAD     BIT(4)
-#define SHA512_CMD_INPUT_SWAP      BIT(7)
+#define NPCM_SHA512_CMD_SHA512_RD       BIT(0)
+#define NPCM_SHA512_CMD_SHA512_WR       BIT(1)
+#define NPCM_SHA512_CMD_SHA512_ROUND    BIT(2)
+#define NPCM_SHA512_CMD_SHA512_384      BIT(3)
+#define NPCM_SHA512_CMD_SHA512_LOAD     BIT(4)
+#define NPCM_SHA512_CMD_INPUT_SWAP      BIT(7)
 
 #endif /* _NUVOTON_NPCM_REG_DEF_H */

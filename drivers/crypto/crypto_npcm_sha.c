@@ -114,33 +114,33 @@ static int npcm_sha256_starts(npcm_sha256_context *ctx, enum hash_algo algo)
 	uint8_t i = 0;
 
 	/* Enable SHA module */
-	SHA->CSTS |= HASH_CTR_STS_SHA_EN;
+	SHA->CSTS |= NPCM_HASH_CTR_STS_SHA_EN;
 
 	/* Set SHA type (must set before reset) 1:SHA1 0:SHA2-256 */
 	if (algo == CRYPTO_HASH_ALGO_SHA1) {
-		SHA->CFG |= HASH_CFG_SHA1_SHA2;
+		SHA->CFG |= NPCM_HASH_CFG_SHA1_SHA2;
 	} else {
-		SHA->CFG &= ~HASH_CFG_SHA1_SHA2;
+		SHA->CFG &= ~NPCM_HASH_CFG_SHA1_SHA2;
 	}
 
 	/* HW reset */
-	SHA->CSTS |= HASH_CTR_STS_SHA_RST;
+	SHA->CSTS |= NPCM_HASH_CTR_STS_SHA_RST;
 
 	/* Replace the initial digest */
 	if (algo == CRYPTO_HASH_ALGO_SHA224) {
-		SHA->CFG &= ~HASH_INPUT_SWAP;
+		SHA->CFG &= ~NPCM_HASH_INPUT_SWAP;
 
 		/* Wait not busy. */
-		while (SHA->CSTS & HASH_CTR_STS_SHA_BUSY);
+		while (SHA->CSTS & NPCM_HASH_CTR_STS_SHA_BUSY);
 
-		for (i = 0; i < HASH_DIG_H_NUM; i++) {
+		for (i = 0; i < NPCM_HASH_DIG_H_NUM; i++) {
 			SHA->DH[i] = sha224_iv[i];
 		}
 	}
 
 	/* Set in/out swap bit */
-	update_reg_bit(&SHA->CFG, HASH_INPUT_SWAP, ctx->in_swap);
-	update_reg_bit(&SHA->CFG, HASH_OUTPUT_SWAP, ctx->out_swap);
+	update_reg_bit(&SHA->CFG, NPCM_HASH_INPUT_SWAP, ctx->in_swap);
+	update_reg_bit(&SHA->CFG, NPCM_HASH_OUTPUT_SWAP, ctx->out_swap);
 
 	return 0;
 }
@@ -164,12 +164,12 @@ static void npcm_backup_sha256_state(npcm_sha256_context *ctx, enum hash_algo al
 	}
 
 	/* Wait not busy. */
-	while (SHA->CSTS & HASH_CTR_STS_SHA_BUSY);
+	while (SHA->CSTS & NPCM_HASH_CTR_STS_SHA_BUSY);
 
 	memcpy(ctx->state, (void *)SHA->DH, size);
 
 	if (ctx->out_swap != ctx->in_swap) {
-		for (i = 0; i < HASH_DIG_H_NUM; i++) {
+		for (i = 0; i < NPCM_HASH_DIG_H_NUM; i++) {
 			/* Swap the output data */
 			ctx->state[i] = sys_cpu_to_be32(ctx->state[i]);
 		}
@@ -197,9 +197,9 @@ static void npcm_sha256_process(npcm_sha256_context *ctx, enum hash_algo algo,
 		/* Load the digest value of the current context into the hardware. */
 		if (ctx->state[0] != 0U) {
 			/* Wait not busy. */
-			while (SHA->CSTS & HASH_CTR_STS_SHA_BUSY);
+			while (SHA->CSTS & NPCM_HASH_CTR_STS_SHA_BUSY);
 
-			for (i = 0; i < HASH_DIG_H_NUM; i++) {
+			for (i = 0; i < NPCM_HASH_DIG_H_NUM; i++) {
 				SHA->DH[i] = ctx->state[i];
 			}
 		}
@@ -208,7 +208,7 @@ static void npcm_sha256_process(npcm_sha256_context *ctx, enum hash_algo algo,
 	}
 
 	/* Wait till SHA is not busy */
-	while (SHA->CSTS & HASH_CTR_STS_SHA_BUSY);
+	while (SHA->CSTS & NPCM_HASH_CTR_STS_SHA_BUSY);
 
 	for (i = 0; i < (SHA_BLOCK_LEN / sizeof(uint32_t)); i++) {
 		SHA->DIN = input[i];
@@ -298,7 +298,7 @@ static int npcm_sha256_finish(npcm_sha256_context *ctx, enum hash_algo algo,
 	npcm_sha256_update(ctx, algo, msglen, sizeof(msglen));
 
 	/* Wait till SHA is not busy */
-	while (SHA->CSTS & HASH_CTR_STS_SHA_BUSY);
+	while (SHA->CSTS & NPCM_HASH_CTR_STS_SHA_BUSY);
 
 	/* Get digest values */
 	memcpy(output, (void *)SHA->DH, SHA256_HASH_LEN);
@@ -306,13 +306,13 @@ static int npcm_sha256_finish(npcm_sha256_context *ctx, enum hash_algo algo,
 	/* Swap the output data if the out_swap flag is set to 1(little endian) */
 	if (ctx->out_swap) {
 		uint32_t *out32 = (uint32_t *)output;
-		for (i = 0; i < HASH_DIG_H_NUM; i++) {
+		for (i = 0; i < NPCM_HASH_DIG_H_NUM; i++) {
 			out32[i] = sys_cpu_to_be32(out32[i]);
 		}
 	}
 
 	/* Disable SHA module */
-	SHA->CSTS &= ~HASH_CTR_STS_SHA_EN;
+	SHA->CSTS &= ~NPCM_HASH_CTR_STS_SHA_EN;
 
 	return 0;
 }
@@ -360,22 +360,22 @@ static int npcm_sha256_compute(struct hash_ctx *ctx, struct hash_pkt *pkt,
 static int npcm_sha512_starts(npcm_sha512_context *ctx, enum hash_algo algo)
 {
 	/* Enable SHA module */
-	SHA->SHA512_CSTS |= SHA512_CTR_STS_SHA512_EN;
+	SHA->SHA512_CSTS |= NPCM_SHA512_CTR_STS_SHA512_EN;
 
 	/* Set SHA type */
 	if (algo == CRYPTO_HASH_ALGO_SHA384) {
 		/* SHA512_LOAD:0, SHA512_384:0, SHA512_ROUND:0,SHA512_WR:1, SHA512_RD:0 */
-		SHA->SHA512_CMD = SHA512_CMD_SHA512_WR;
+		SHA->SHA512_CMD = NPCM_SHA512_CMD_SHA512_WR;
 	} else {
 		/* SHA512_LOAD:0, SHA512_384:1, SHA512_ROUND:0,SHA512_WR:1, SHA512_RD:0 */
-		SHA->SHA512_CMD = (SHA512_CMD_SHA512_WR | SHA512_CMD_SHA512_384); 
+		SHA->SHA512_CMD = (NPCM_SHA512_CMD_SHA512_WR | NPCM_SHA512_CMD_SHA512_384);
 	}
 
 	/* Reset SHA hardware */
-	SHA->SHA512_CSTS |= SHA512_CTR_STS_SHA512_RST;
+	SHA->SHA512_CSTS |= NPCM_SHA512_CTR_STS_SHA512_RST;
 
 	/* Set input swap bit */
-	update_reg_bit(&SHA->SHA512_CMD, SHA512_CMD_INPUT_SWAP, ctx->in_swap);
+	update_reg_bit(&SHA->SHA512_CMD, NPCM_SHA512_CMD_INPUT_SWAP, ctx->in_swap);
 
 	return 0;
 }
@@ -386,7 +386,7 @@ static void npcm_read_sha512_state(uint64_t *state)
 	uint32_t high, low;
 
 	/* Set SHA512_RD bit */
-	SHA->SHA512_CMD = (SHA->SHA512_CMD & ~SHA512_CMD_SHA512_WR) | SHA512_CMD_SHA512_RD;
+	SHA->SHA512_CMD = (SHA->SHA512_CMD & ~NPCM_SHA512_CMD_SHA512_WR) | NPCM_SHA512_CMD_SHA512_RD;
 
 	for (i = 0 ; i < (SHA512_HASH_LEN/sizeof(uint64_t)); i++) {
 		// to be able to later use the SHA512_LOAD, all 512 bits must be saved regardless of SHA2-384/512 selection.
@@ -401,7 +401,7 @@ static void npcm_read_sha512_state(uint64_t *state)
 		state[i] = ((uint64_t)high << 32) | low;
 	}
 
-	while(SHA->SHA512_CSTS & SHA512_CTR_STS_SHA512_BUSY);
+	while(SHA->SHA512_CSTS & NPCM_SHA512_CTR_STS_SHA512_BUSY);
 }
 
 static void npcm_write_sha512_state(npcm_sha512_context *ctx, uint64_t *state)
@@ -410,7 +410,7 @@ static void npcm_write_sha512_state(npcm_sha512_context *ctx, uint64_t *state)
 	uint32_t high, low;
 
 	/* Enable SHA512_LOAD bit */
-	SHA->SHA512_CMD |= SHA512_CMD_SHA512_LOAD;
+	SHA->SHA512_CMD |= NPCM_SHA512_CMD_SHA512_LOAD;
 
 	/* Write digest to SHA512_DATA_IN */
 	// Write the saved digest, all 512 bits must be written regardless of SHA2-384/512 bit selection.
@@ -429,7 +429,7 @@ static void npcm_write_sha512_state(npcm_sha512_context *ctx, uint64_t *state)
 	}
 
 	/* Disable SHA512_LOAD bit */
-	SHA->SHA512_CMD &= ~SHA512_CMD_SHA512_LOAD;
+	SHA->SHA512_CMD &= ~NPCM_SHA512_CMD_SHA512_LOAD;
 }
 
 static void npcm_sha512_process(npcm_sha512_context *ctx, enum hash_algo algo,
@@ -462,20 +462,20 @@ static void npcm_sha512_process(npcm_sha512_context *ctx, enum hash_algo algo,
 	}
 
 	/* Set SHA to write mode */
-	SHA->SHA512_CMD = (SHA->SHA512_CMD & ~SHA512_CMD_SHA512_RD) | SHA512_CMD_SHA512_WR;
+	SHA->SHA512_CMD = (SHA->SHA512_CMD & ~NPCM_SHA512_CMD_SHA512_RD) | NPCM_SHA512_CMD_SHA512_WR;
 
 	if (first_round) { 
-		SHA->SHA512_CMD &= ~SHA512_CMD_SHA512_ROUND;
+		SHA->SHA512_CMD &= ~NPCM_SHA512_CMD_SHA512_ROUND;
 		first_round = false;
 	} else { /* Internal round */
-		SHA->SHA512_CMD |= SHA512_CMD_SHA512_ROUND;
+		SHA->SHA512_CMD |= NPCM_SHA512_CMD_SHA512_ROUND;
 	}
 
 	for (i = 0; i < (SHA512_BLOCK_LEN / sizeof(uint32_t)); i++) {
 		SHA->SHA512_DIN = input[i];
 	}
 
-	while(SHA->SHA512_CSTS & SHA512_CTR_STS_SHA512_BUSY);
+	while(SHA->SHA512_CSTS & NPCM_SHA512_CTR_STS_SHA512_BUSY);
 }
 
 static int npcm_sha512_update(npcm_sha512_context *ctx, enum hash_algo algo,
@@ -574,7 +574,7 @@ static int npcm_sha512_finish(npcm_sha512_context *ctx, enum hash_algo algo,
 	memcpy(output, ctx->state, out_len);
 
 	/* Disable SHA module */
-	SHA->SHA512_CSTS &= ~SHA512_CTR_STS_SHA512_EN;
+	SHA->SHA512_CSTS &= ~NPCM_SHA512_CTR_STS_SHA512_EN;
 
 	return 0;
 }
