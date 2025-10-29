@@ -289,7 +289,8 @@ static int counter_npcm_itim32_init(const struct device *dev)
 	data->top_user_data = NULL;
 	data->alarm_callback = NULL;
 	data->alarm_user_data = NULL;
-	data->setup_cycles = data->freq;
+	/* Initialize to max value for free-running mode */
+	data->setup_cycles = UINT32_MAX;
 
 	/* Set default timeout cycles */
 	inst->ITCNT32 = data->setup_cycles;
