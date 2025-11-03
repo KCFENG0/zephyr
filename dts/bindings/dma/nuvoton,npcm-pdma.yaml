@@ -1,0 +1,38 @@
+# Copyright 2025 Nuvoton
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  NPCM PDMA Controller
+
+  A phandle to the DMA controller plus "channel" integer cell specifying
+  channel to be used for data transfer
+
+  Example for npcm PDMA Controller
+     pdma: pdma@40015000 {
+                  compatible = "nuvoton,npcm-pdma";
+                  ...
+                  dma-channels = <14>;
+                  #dma-cells = <2>;
+            };
+
+  If SPIP uses channel 0 for Tx DMA and channel 1 for Rx DMA
+     spip1: spi@40016000 {
+                  compatible = "nuvoton,npcm-spip";
+                  ...
+                  dmas = <&pdma 0 NPCM_PDMA_SRC_CH_SPI1_TX>, <&pdma 1 NPCM_PDMA_SRC_CH_SPI1_RX>;
+                  dma-names = "tx", "rx";
+            };
+compatible: "nuvoton,npcm-pdma"
+
+include: dma-controller.yaml
+
+properties:
+  reg:
+    required: true
+  "#dma-cells":
+    const: 2
+
+# Parameter syntax
+dma-cells:
+  - channel
+  - perid

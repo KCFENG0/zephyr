@@ -1,0 +1,11 @@
+# Nuvoton PDMA Driver Configuration Options
+
+# Copyright (c) 2025 Nuvoton Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+config DMA_NPCM_PDMA
+	bool "Nuvoton NPCM PDMA Driver"
+	depends on DT_HAS_NUVOTON_NPCM_PDMA_ENABLED
+	default y
+	help
+	  Enable Nuvoton NPCM Direct Memory Access (PDMA) driver.

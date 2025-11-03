@@ -9,6 +9,7 @@
 /* Macros for device tree declarations of npcm soc family */
 #include <zephyr/dt-bindings/adc/adc.h>
 #include <zephyr/dt-bindings/clock/npcm_clock.h>
+#include <zephyr/dt-bindings/dma/npcm_pdma.h>
 #include <zephyr/dt-bindings/flash_controller/npcm_qspi.h>
 #include <zephyr/dt-bindings/sensor/npcm_tach.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
@@ -117,6 +118,15 @@
 			reg = <0x400bf000 0x2000>;
 			index = <2>;
 			#miwu-cells = <2>;
+		};
+
+		pdma: pdma@40015000 {
+			compatible = "nuvoton,npcm-pdma";
+			reg = <0x40015000 0x500>;
+			dma-channels = <14>;
+			interrupts = <22 3>;
+			#dma-cells = <2>;
+			status = "okay";
 		};
 
 		qspi_spim: quad-spim@40017000 {
