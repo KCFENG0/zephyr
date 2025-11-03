@@ -49,10 +49,12 @@ static int spi_npcm_spip_configure(const struct device *dev, const struct spi_co
 	spi_operation_t operation = spi_cfg->operation;
 	uint8_t frame_size;
 
+#ifndef CONFIG_SPI_NPCM_USE_RUNTIME_CONFIGURE
 	if (spi_context_configured(&data->ctx, spi_cfg)) {
 		/* This configuration is already in use */
 		return 0;
 	}
+#endif
 
 	if (operation & SPI_FULL_DUPLEX) {
 		if ((operation & SPI_LINES_MASK) != SPI_LINES_SINGLE) {

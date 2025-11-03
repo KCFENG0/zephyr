@@ -9,3 +9,14 @@ config SPI_NPCM_SPIP
 	depends on DT_HAS_NUVOTON_NPCM_SPIP_ENABLED
 	help
 	  Enable the SPI peripherals on NPCM MCU.
+
+config SPI_NPCM_USE_RUNTIME_CONFIGURE
+	bool "Runtime configuration for NPCM SPIP peripherals"
+	default n
+	help
+	  Enable runtime configuration of NPCM SPIP peripherals.
+	  This disables applications to call spi_context_configured() to
+	  configure the NPCM SPI peripherals at runtime. If this is
+	  disabled, NPCM SPIP peripherals rely on SPI driver's
+	  initialization function to properly configure
+	  the controller.
