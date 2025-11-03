@@ -566,8 +566,8 @@ struct spip_reg {
 #define NPCM_PDMACTL_TXPDMAEN		(0)
 
 /* 0x10: SPI_FIFOCTL fields */
-#define NPCM_FIFOCTL_TXTH		(28)
-#define NPCM_FIFOCTL_RXTH		(24)
+#define NPCM_FIFOCTL_TXTH		FIELD(28, 3)
+#define NPCM_FIFOCTL_RXTH		FIELD(24, 3)
 #define NPCM_FIFOCTL_TXUFIEN		(7)
 #define NPCM_FIFOCTL_TXUFPOL		(6)
 #define NPCM_FIFOCTL_RXOVIEN		(5)

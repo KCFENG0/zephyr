@@ -139,6 +139,7 @@
 			reg = <0x40016000 0x100>;
 			#address-cells = <1>;
 			#size-cells = <0>;
+			interrupts = <18 3>;
 		};
 
 		gpio0: gpio@40081000 {

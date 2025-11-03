@@ -38,6 +38,10 @@ struct spi_npcm_spip_cfg {
 	struct spip_reg *reg_base;
 	uint32_t clk_cfg;
 	const struct pinctrl_dev_config *pcfg;
+#ifdef CONFIG_SPIP_NPCM_INTERRUPT
+	/* routine for configuring SPIP ISR */
+	void (*irq_cfg_func)(const struct device *dev);
+#endif
 };
 
 static int spi_npcm_spip_configure(const struct device *dev, const struct spi_config *spi_cfg)
@@ -169,6 +173,9 @@ static int spi_npcm_spip_configure(const struct device *dev, const struct spi_co
 	/* Disable AUTOSS */
 	reg_base->SPIP_SSCTL &= ~BIT(NPCM_SSCTL_AUTOSS);
 
+	/* Set RX FIFO threshold to 0 */
+	SET_FIELD(reg_base->SPIP_FIFOCTL, NPCM_FIFOCTL_RXTH, 0x0);
+
 	/* Set the SPI frequency */
 	prescaler_divider = data->src_clock_freq / spi_cfg->frequency;
 	if (prescaler_divider >= 1) {
@@ -236,6 +243,11 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 	uint32_t rx_frame;
 	int ret;
 
+#ifdef CONFIG_SPIP_NPCM_INTERRUPT
+	reg_base->SPIP_FIFOCTL |= BIT(NPCM_FIFOCTL_TXTHIEN);
+	reg_base->SPIP_FIFOCTL |= BIT(NPCM_FIFOCTL_RXTHIEN);
+#endif
+
 	ret = spi_npcm_spip_process_tx_buf(data, &tx_frame);
 
 	if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_BUSY),
@@ -256,6 +268,12 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 
 	reg_base->SPIP_TX = tx_frame;
 
+	if (WAIT_FOR(NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_TXEMPTY),
+			SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
+		LOG_ERR("Check TX DONE Timeout");
+		return -ETIMEDOUT;
+	}
+
 	if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_RXEMPTY),
 		     SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
 		LOG_ERR("Check Status RBF Timeout");
@@ -265,6 +283,11 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 	rx_frame = reg_base->SPIP_RX;
 	spi_npcm_spip_process_rx_buf(data, rx_frame);
 
+#ifdef CONFIG_SPIP_NPCM_INTERRUPT
+	reg_base->SPIP_FIFOCTL &= ~BIT(NPCM_FIFOCTL_TXTHIEN);
+	reg_base->SPIP_FIFOCTL &= ~BIT(NPCM_FIFOCTL_RXTHIEN);
+#endif
+
 	return 0;
 }
 
@@ -272,6 +295,25 @@ static bool spi_npcm_spip_transfer_ongoing(struct spi_npcm_spip_data *data)
 {
 	return spi_context_tx_on(&data->ctx) || spi_context_rx_on(&data->ctx);
 }
+
+#ifdef CONFIG_SPIP_NPCM_INTERRUPT
+static void spi_npcm_spip_isr(const struct device *dev)
+{
+	const struct spi_npcm_spip_cfg *const config = dev->config;
+	struct spip_reg *const reg_base = config->reg_base;
+
+	/* Transmit FIFO Threshold Interrupt or Transmit FIFO Empty Interrupt */
+	if (NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_TXTHIF) ||
+	    NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_TXEMPTY)) {
+		reg_base->SPIP_FIFOCTL &= ~BIT(NPCM_FIFOCTL_TXTHIEN);
+	}
+
+	if (!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_RXEMPTY) &&
+	    NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_RXTHIF)) {
+		reg_base->SPIP_FIFOCTL &= ~BIT(NPCM_FIFOCTL_RXTHIEN);
+	}
+}
+#endif
 
 static int spi_npcm_spip_transceive(const struct device *dev, const struct spi_config *spi_cfg,
 				    const struct spi_buf_set *tx_bufs,
@@ -395,6 +437,10 @@ static int spi_npcm_spip_init(const struct device *dev)
 	/* Make sure the context is unlocked */
 	spi_context_unlock_unconditionally(&data->ctx);
 
+#ifdef CONFIG_SPIP_NPCM_INTERRUPT
+	config->irq_cfg_func(dev);
+#endif
+
 	return 0;
 }
 
@@ -403,8 +449,24 @@ static struct spi_driver_api spi_npcm_spip_api = {
 	.release = spi_npcm_spip_release,
 };
 
+#ifdef CONFIG_SPIP_NPCM_INTERRUPT
+#define NPCM_SPIP_IRQ_HANDLER(n)                                                                   \
+	static void spi_npcm_spip_irq_cfg_func_##n(const struct device *dev)                       \
+	{                                                                                          \
+		IRQ_CONNECT(DT_INST_IRQN(n), DT_INST_IRQ(n, priority), spi_npcm_spip_isr,          \
+			    DEVICE_DT_INST_GET(n), 0);                                             \
+		irq_enable(DT_INST_IRQN(n));                                                       \
+	}
+
+#define NPCM_SPIP_IRQ_HANDLER_FUNC(n) .irq_cfg_func = spi_npcm_spip_irq_cfg_func_##n,
+#else
+#define NPCM_SPIP_IRQ_HANDLER_FUNC(n)
+#define NPCM_SPIP_IRQ_HANDLER(n)
+#endif
+
 #define NPCM_SPI_INIT(n)                                                                           \
 	PINCTRL_DT_INST_DEFINE(n);                                                                 \
+	NPCM_SPIP_IRQ_HANDLER(n)                                                                   \
 	static struct spi_npcm_spip_data spi_npcm_spip_data_##n = {                                \
 		SPI_CONTEXT_INIT_LOCK(spi_npcm_spip_data_##n, ctx),                                \
 		SPI_CONTEXT_INIT_SYNC(spi_npcm_spip_data_##n, ctx),                                \
@@ -413,7 +475,8 @@ static struct spi_driver_api spi_npcm_spip_api = {
 	static struct spi_npcm_spip_cfg spi_npcm_spip_cfg_##n = {                                  \
 		.reg_base = (struct spip_reg *)DT_INST_REG_ADDR(n),                                \
 		.clk_cfg = DT_INST_PHA(n, clocks, clk_cfg),                                        \
-		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n)};                                        \
+		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                         \
+		NPCM_SPIP_IRQ_HANDLER_FUNC(n)};                                                    \
                                                                                                    \
 	DEVICE_DT_INST_DEFINE(n, spi_npcm_spip_init, NULL, &spi_npcm_spip_data_##n,                \
 			      &spi_npcm_spip_cfg_##n, POST_KERNEL, CONFIG_SPI_INIT_PRIORITY,       \

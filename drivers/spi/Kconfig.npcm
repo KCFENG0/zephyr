@@ -10,6 +10,12 @@ config SPI_NPCM_SPIP
 	help
 	  Enable the SPI peripherals on NPCM MCU.
 
+config SPIP_NPCM_INTERRUPT
+	bool "NPCM SPIP Interrupt Support"
+	depends on SPI_NPCM_SPIP
+	help
+	  Enable Interrupt support for the SPI Driver of NPCM chip.
+
 config SPI_NPCM_USE_RUNTIME_CONFIGURE
 	bool "Runtime configuration for NPCM SPIP peripherals"
 	default n

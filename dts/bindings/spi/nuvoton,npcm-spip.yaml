@@ -10,3 +10,5 @@ include: [spi-controller.yaml, pinctrl-device.yaml]
 properties:
   reg:
     required: true
+  interrupts:
+    required: true
