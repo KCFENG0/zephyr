@@ -6,6 +6,9 @@
 
 #define DT_DRV_COMPAT nuvoton_npcm_spip
 
+#if defined(CONFIG_SPIP_NPCM_DMA)
+#include <zephyr/drivers/dma.h>
+#endif
 #include <zephyr/drivers/spi.h>
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/drivers/pinctrl.h>
@@ -32,6 +35,9 @@ struct spi_npcm_spip_data {
 	uint32_t src_clock_freq;
 	uint8_t bytes_per_frame;
 	uint8_t access_mode;
+#ifdef CONFIG_SPIP_NPCM_DMA
+	uint8_t dma_rx_buf[4096] __attribute__((aligned(32)));
+#endif
 };
 
 struct spi_npcm_spip_cfg {
@@ -41,6 +47,13 @@ struct spi_npcm_spip_cfg {
 #ifdef CONFIG_SPIP_NPCM_INTERRUPT
 	/* routine for configuring SPIP ISR */
 	void (*irq_cfg_func)(const struct device *dev);
+#endif
+#ifdef CONFIG_SPIP_NPCM_DMA
+	const struct device *dma_dev;
+	const uint32_t dma_tx_channel;
+	const uint32_t dma_tx_perid;
+	const uint32_t dma_rx_channel;
+	const uint32_t dma_rx_perid;
 #endif
 };
 
@@ -205,6 +218,7 @@ static void spi_npcm_spip_cs_control(const struct device *dev, bool on)
 	}
 }
 
+#ifndef CONFIG_SPIP_NPCM_DMA
 static int spi_npcm_spip_process_tx_buf(struct spi_npcm_spip_data *const data, uint32_t *tx_frame)
 {
 	int ret = 0;
@@ -224,6 +238,7 @@ static int spi_npcm_spip_process_tx_buf(struct spi_npcm_spip_data *const data, u
 
 	return ret;
 }
+#endif
 
 static void spi_npcm_spip_process_rx_buf(struct spi_npcm_spip_data *const data, uint32_t rx_frame)
 {
@@ -234,20 +249,129 @@ static void spi_npcm_spip_process_rx_buf(struct spi_npcm_spip_data *const data, 
 	spi_context_update_rx(&data->ctx, data->bytes_per_frame, 1);
 }
 
+#ifdef CONFIG_SPIP_NPCM_DMA
+static void spi_npcm_dma_callback(const struct device *dma_dev,
+				  void *user_data,
+				  uint32_t channel,
+				  int status)
+{
+	ARG_UNUSED(dma_dev);
+	ARG_UNUSED(channel);
+	ARG_UNUSED(status);
+
+	const struct device *dev = user_data;
+	struct spi_npcm_spip_data *drv_data = dev->data;
+
+	k_sem_give(&drv_data->ctx.lock);
+}
+
+static int spi_npcm_dma_txrx(const struct device *dev,
+			     const uint8_t *tx_buf,
+			     const uint8_t *rx_buf,
+			     const uint32_t len)
+{
+	const struct spi_npcm_spip_cfg *const config = dev->config;
+	struct spip_reg *const reg_base = config->reg_base;
+	const struct device *dma_dev = config->dma_dev;
+	const int tx_channel = config->dma_tx_channel;
+	const int rx_channel = config->dma_rx_channel;
+	struct dma_config dma_tx_cfg = {0};
+	struct dma_config dma_rx_cfg = {0};
+	struct dma_block_config dma_tx_block_cfg = {0};
+	struct dma_block_config dma_rx_block_cfg = {0};
+	int ret;
+
+	if (!device_is_ready(dma_dev)) {
+		LOG_ERR("DMA device is not ready");
+		return -ENODEV;
+	}
+
+	__ASSERT_NO_MSG(rx_buf != NULL || tx_buf != NULL);
+
+	if (tx_buf != NULL) {
+		/* Configure TX channel */
+		dma_tx_cfg.channel_direction = MEMORY_TO_PERIPHERAL;
+		dma_tx_cfg.source_data_size = 1;
+		dma_tx_cfg.dest_data_size = 1;
+		dma_tx_cfg.block_count = 1,
+		dma_tx_cfg.dma_slot = config->dma_tx_perid;
+		dma_tx_cfg.source_burst_length = 1;
+		dma_tx_cfg.dest_burst_length = 1;
+		dma_tx_cfg.dma_callback = spi_npcm_dma_callback;
+		dma_tx_cfg.user_data = (void *)dev;
+		dma_tx_cfg.complete_callback_en = true;
+
+		dma_tx_block_cfg.source_gather_en = 1;
+		dma_tx_block_cfg.block_size = len;
+		dma_tx_block_cfg.source_address = (uint32_t)tx_buf;
+		dma_tx_block_cfg.dest_address = (uint32_t)&reg_base->SPIP_TX;
+		dma_tx_block_cfg.source_addr_adj = DMA_ADDR_ADJ_INCREMENT;
+		dma_tx_block_cfg.dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
+
+		dma_tx_cfg.head_block = &dma_tx_block_cfg;
+
+		ret = dma_config(dma_dev, tx_channel, &dma_tx_cfg);
+		if (ret != 0) {
+			LOG_ERR("Failed to configure TX channel");
+			return ret;
+		}
+	}
+
+	if (rx_buf != NULL) {
+		/* Configure RX channel */
+		dma_rx_cfg.channel_direction = PERIPHERAL_TO_MEMORY;
+		dma_rx_cfg.source_data_size = 1;
+		dma_rx_cfg.dest_data_size = 1;
+		dma_rx_cfg.block_count = 1,
+		dma_rx_cfg.dma_slot = config->dma_rx_perid;
+		dma_rx_cfg.source_burst_length = 1;
+		dma_rx_cfg.dest_burst_length = 1;
+		dma_rx_cfg.dma_callback = NULL;
+		dma_rx_cfg.user_data = (void *)dev;
+		dma_rx_cfg.complete_callback_en = true;
+
+		dma_rx_block_cfg.dest_scatter_en = 1;
+		dma_rx_block_cfg.block_size = len;
+		dma_rx_block_cfg.source_address = (uint32_t)&reg_base->SPIP_RX;
+		dma_rx_block_cfg.dest_address = (uint32_t)rx_buf;
+		dma_rx_block_cfg.source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
+		dma_rx_block_cfg.dest_addr_adj =  DMA_ADDR_ADJ_INCREMENT;
+
+		dma_rx_cfg.head_block = &dma_rx_block_cfg;
+
+		ret = dma_config(dma_dev, rx_channel, &dma_rx_cfg);
+		if (ret != 0) {
+			LOG_ERR("Failed to configure RX channel");
+			return ret;
+		}
+	}
+
+	return ret;
+}
+#endif
+
 static int spi_npcm_spip_xfer_frame(const struct device *dev)
 {
 	const struct spi_npcm_spip_cfg *const config = dev->config;
 	struct spip_reg *const reg_base = config->reg_base;
 	struct spi_npcm_spip_data *const data = dev->data;
+#ifndef CONFIG_SPIP_NPCM_DMA
 	uint32_t tx_frame = SPI_NPCM_SPIP_TX_NOP;
-	uint32_t rx_frame;
+#endif
+	uint32_t rx_frame = 0;
 	int ret;
+#ifdef CONFIG_SPIP_NPCM_DMA
+	const struct device *dma_dev = config->dma_dev;
+	const int tx_channel = config->dma_tx_channel;
+	const int rx_channel = config->dma_rx_channel;
+#endif
 
 #ifdef CONFIG_SPIP_NPCM_INTERRUPT
 	reg_base->SPIP_FIFOCTL |= BIT(NPCM_FIFOCTL_TXTHIEN);
 	reg_base->SPIP_FIFOCTL |= BIT(NPCM_FIFOCTL_RXTHIEN);
 #endif
 
+#ifndef CONFIG_SPIP_NPCM_DMA
 	ret = spi_npcm_spip_process_tx_buf(data, &tx_frame);
 
 	if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_BUSY),
@@ -255,9 +379,10 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 		LOG_ERR("Check Status BSY Timeout");
 		return -ETIMEDOUT;
 	}
+#endif
 
 	if (data->access_mode != SPI_NPCM_SPIP_SINGLE) {
-		if (ret == -ENOBUFS) {
+		if (!spi_context_tx_buf_on(&data->ctx)) {
 			/* Input mode */
 			reg_base->SPIP_CTL &= ~BIT(NPCM_CTL_QDIODIR);
 		} else {
@@ -266,7 +391,40 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 		}
 	}
 
+#ifdef CONFIG_SPIP_NPCM_DMA
+	/* Add SPIP TX PDMA */
+	if (data->ctx.tx_len) {
+		/* Disable TX PDMA */
+		reg_base->SPIP_PDMACTL &= ~BIT(NPCM_PDMACTL_TXPDMAEN);
+		ret = dma_stop(dma_dev, tx_channel);
+		if (ret != 0) {
+			LOG_ERR("Failed to stop TX channel");
+			return ret;
+		}
+		reg_base->SPIP_FIFOCTL |= (BIT(NPCM_FIFOCTL_TXRST) | BIT(NPCM_FIFOCTL_RXRST));
+		while(reg_base->SPIP_STATUS & BIT(NPCM_STATUS_TXRXRST)) {};
+
+		/* Configure and Enable TX */
+		ret = spi_npcm_dma_txrx(dev,
+					data->ctx.tx_buf,
+					NULL,
+					data->bytes_per_frame);
+		if (ret != 0)
+			return ret;
+
+		/* Enable TX PDMA */
+		reg_base->SPIP_PDMACTL |= BIT(NPCM_PDMACTL_TXPDMAEN);
+		ret = dma_start(dma_dev, tx_channel);
+		if (ret != 0) {
+			LOG_ERR("Failed to start TX channel");
+			return ret;
+		}
+
+		spi_context_update_tx(&data->ctx, data->bytes_per_frame, 1);
+	}
+#else
 	reg_base->SPIP_TX = tx_frame;
+#endif
 
 	if (WAIT_FOR(NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_TXEMPTY),
 			SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
@@ -274,13 +432,48 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 		return -ETIMEDOUT;
 	}
 
-	if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_RXEMPTY),
-		     SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
-		LOG_ERR("Check Status RBF Timeout");
-		return -ETIMEDOUT;
+	if (spi_context_tx_on(&data->ctx)) {
+		if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_RXEMPTY),
+				SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
+			LOG_ERR("Check Status RBF Timeout");
+			return -ETIMEDOUT;
+		}
 	}
 
+#ifdef CONFIG_SPIP_NPCM_DMA
+	/* Add SPIP RX PDMA */
+	if (data->ctx.rx_len) {
+		/* Disable RX PDMA */
+		reg_base->SPIP_PDMACTL &= ~BIT(NPCM_PDMACTL_RXPDMAEN);
+		ret = dma_stop(dma_dev, rx_channel);
+		if (ret != 0) {
+			LOG_ERR("Failed to stop RX channel");
+			return ret;
+		}
+
+		/* Configure and Enable RX */
+		ret = spi_npcm_dma_txrx(dev,
+					NULL,
+					data->dma_rx_buf,
+					data->bytes_per_frame);
+		if (ret != 0)
+			return ret;
+
+		/* Enable RX PDMA */
+		reg_base->SPIP_PDMACTL |= BIT(NPCM_PDMACTL_RXPDMAEN);
+		ret = dma_start(dma_dev, rx_channel);
+		if (ret != 0) {
+			LOG_ERR("Failed to start RX channel");
+			return ret;
+		}
+
+		rx_frame = data->dma_rx_buf[0];
+
+		reg_base->SPIP_PDMACTL &= ~BIT(NPCM_PDMACTL_RXPDMAEN);
+	}
+#else
 	rx_frame = reg_base->SPIP_RX;
+#endif
 	spi_npcm_spip_process_rx_buf(data, rx_frame);
 
 #ifdef CONFIG_SPIP_NPCM_INTERRUPT
@@ -476,6 +669,13 @@ static struct spi_driver_api spi_npcm_spip_api = {
 		.reg_base = (struct spip_reg *)DT_INST_REG_ADDR(n),                                \
 		.clk_cfg = DT_INST_PHA(n, clocks, clk_cfg),                                        \
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                         \
+		IF_ENABLED(CONFIG_SPIP_NPCM_DMA, (                                                 \
+			.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_NAME(n, tx)),                \
+			.dma_tx_channel = DT_INST_DMAS_CELL_BY_NAME(n, tx, channel),               \
+			.dma_tx_perid = DT_INST_DMAS_CELL_BY_NAME(n, tx, perid),                   \
+			.dma_rx_channel = DT_INST_DMAS_CELL_BY_NAME(n, rx, channel),               \
+			.dma_rx_perid = DT_INST_DMAS_CELL_BY_NAME(n, rx, perid),                   \
+		))                                                                                 \
 		NPCM_SPIP_IRQ_HANDLER_FUNC(n)};                                                    \
                                                                                                    \
 	DEVICE_DT_INST_DEFINE(n, spi_npcm_spip_init, NULL, &spi_npcm_spip_data_##n,                \

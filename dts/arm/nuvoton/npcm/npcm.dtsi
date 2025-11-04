@@ -150,6 +150,8 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			interrupts = <18 3>;
+			dmas = <&pdma 12 NPCM_PDMA_SRC_CH_SPI1_RX>, <&pdma 13 NPCM_PDMA_SRC_CH_SPI1_TX>;
+			dma-names = "rx", "tx";
 		};
 
 		gpio0: gpio@40081000 {

@@ -16,6 +16,12 @@ config SPIP_NPCM_INTERRUPT
 	help
 	  Enable Interrupt support for the SPI Driver of NPCM chip.
 
+config SPIP_NPCM_DMA
+	bool "Nuvoton NPCM enhance super I/O (eSIO) SPIP driver DMA support"
+	depends on SPI_NPCM_SPIP
+	help
+	  Enable DMA support for npcm SPIP.
+
 config SPI_NPCM_USE_RUNTIME_CONFIGURE
 	bool "Runtime configuration for NPCM SPIP peripherals"
 	default n
