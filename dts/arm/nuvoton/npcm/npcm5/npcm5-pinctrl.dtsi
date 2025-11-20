@@ -363,7 +363,7 @@
 		};
 	};
 
-	/omit-if-no-ref/ adc_vin16_gpio91: periph-adc-vin16 {
+	/omit-if-no-ref/ adc_vin16_gpio90: periph-adc-vin16 {
 		vin {
 			pinmux = <GPIO90__THR16_VIN16_TD2P__DSMOUT 1>;
 		};

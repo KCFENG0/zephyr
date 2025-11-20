@@ -380,7 +380,7 @@
 	 */
 	pinctrl-0 = <&adc_vin7_gpio86   /* VIN7 - C8 */
 		     &adc_vin5_gpio87   /* VIN5 - F7 */
-		     &adc_vin16_gpio91  /* VIN16/THR16/TD2P - D7 */
+		     &adc_vin16_gpio90  /* VIN16/THR16/TD2P - D7 */
 		     &adc_vin15_gpio91  /* VIN15/THR15/TD1P - C7 */
 		     &adc_vin14_gpio92  /* VIN14/THR14/TD0P - A6 */
 		     &adc_vin1_gpio93   /* VIN1/THR1/TD3P - B6 */
