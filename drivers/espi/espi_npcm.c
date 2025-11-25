@@ -254,7 +254,7 @@ int espi_npcm_flash_get_rx(const struct device *dev,
 	hdr->len_l = len & 0xff;
 
 	count = len / 4;
-	if (count % 4)
+	if (len % 4)
 		count++;
 
 	/* RX buffer is 64 bytes max */
@@ -308,7 +308,7 @@ int espi_npcm_flash_put_tx(const struct device *dev, struct espi_npcm_ioc *ioc)
 
 	if (ioc->pkt[0] > ESPI_FLASH_RESP_LEN) {
 		count = len / 4;
-		if (count % 4)
+		if (len % 4)
 			count++;
 
 		/* TX buffer is 64 bytes max */
