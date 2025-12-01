@@ -131,6 +131,19 @@
 				    &wui_none &wui_none &wui_none &wui_none>;
 		};
 
+		saradc: saradc@400d1000 {
+			compatible = "nuvoton,npcm-sar-adc";
+			reg = <0x400d1000 0x1ca>;
+			interrupts = <21 3>;
+			clocks = <&pcc NPCM_CLOCK_ADC>;
+			channel-count = <16>;
+			threshold-count = <3>;
+			vref-mv = <3300>;
+			resolution-bits = <10>;
+			#io-channel-cells = <1>;
+			status = "disabled";
+		};
+
 		dasdc: dsadc@400d1100 {
 			channel-count = <24>;
 		};

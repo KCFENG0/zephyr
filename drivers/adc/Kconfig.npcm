@@ -11,3 +11,12 @@ config ADC_NPCM
 	  This option enables the ADC driver for NPCM family of
 	  processors.
 	  Say y if you wish to use ADC channels on NPCM MCU.
+
+config ADC_NPCM_SARADC
+        bool "Nuvoton NPCM5 SARADC driver"
+        default n
+        depends on DT_HAS_NUVOTON_NPCM_SAR_ADC_ENABLED
+        help
+          This option enables the SARADC driver for NPCM family of
+          processors.
+          Say y if you wish to use SARADC channels on NPCM MCU.

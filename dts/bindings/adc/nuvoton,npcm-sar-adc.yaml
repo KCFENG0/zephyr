@@ -1,0 +1,46 @@
+# Copyright (c) 2024 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+description: Nuvoton, NPCM5 SAR ADC node
+
+compatible: "nuvoton,npcm-sar-adc"
+
+include: [adc-controller.yaml, pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  clocks:
+    required: true
+
+  pinctrl-0:
+    required: false
+
+  pinctrl-names:
+    required: false
+
+  vref-mv:
+    type: int
+    required: true
+    description: ADC reference voltage (Unit:mV)
+
+  channel-count:
+    type: int
+    required: true
+    description: the number of ADC channels
+
+  threshold-count:
+    type: int
+    required: true
+    description: the number of threshold detectors
+
+  resolution-bits:
+    type: int
+    description: ADC resolution in bits
+
+io-channel-cells:
+  - channel
