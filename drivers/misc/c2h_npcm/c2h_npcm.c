@@ -300,7 +300,8 @@ void sib_write_offset(const struct device *dev, SIB_DEVICE_T sib_dev,
 		__c2h_write_reg(dev, sib_dev, 0x1, value);
 	} else if (sib_dev == SIB_DEV_SHM || sib_dev == SIB_DEV_KBC ||
 		   sib_dev == SIB_DEV_PMCHAN1 || sib_dev == SIB_DEV_PMCHAN2 ||
-		   sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4) {
+		   sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4 ||
+		   sib_dev == SIB_DEV_UARTA || sib_dev == SIB_DEV_UARTB) {
 		__c2h_write_reg(dev, sib_dev, offset, value);
 	} else {
 		LOG_ERR("Not Defined!!");
@@ -332,7 +333,8 @@ uint8_t sib_read_offset(const struct device *dev,
 		value = __c2h_read_reg(dev, sib_dev, 0x1);
 	} else if (sib_dev == SIB_DEV_SHM || sib_dev == SIB_DEV_KBC ||
 		   sib_dev == SIB_DEV_PMCHAN1 || sib_dev == SIB_DEV_PMCHAN2 ||
-		   sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4) {
+		   sib_dev == SIB_DEV_PMCHAN3 || sib_dev == SIB_DEV_PMCHAN4 ||
+		   sib_dev == SIB_DEV_UARTA || sib_dev == SIB_DEV_UARTB) {
 		value = __c2h_read_reg(dev, sib_dev, offset);
 	} else {
 		LOG_ERR("Not Defined!!");
