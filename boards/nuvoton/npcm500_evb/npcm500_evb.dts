@@ -34,7 +34,7 @@
 		 * Exsample : if you select channel 6(VIN16),
 		 *            and you can't select channel 7(THR16) and channel 19(TD2P).
 		 */
-		io-channels = <&dsadc 17>, <&dsadc 18>;
+		io-channels = <&dsadc 17>, <&dsadc 18>, <&saradc 0>, <&saradc 1>;
 	};
 };
 
@@ -386,6 +386,19 @@
 		     &adc_vin1_gpio93   /* VIN1/THR1/TD3P - B6 */
 		     &adc_vin2_gpio94   /* VIN2/THR2/TD4P - C6 */
 		     &adc_vin3_gpio95>; /* VIN3 - D6 */
+	pinctrl-names = "default";
+};
+
+&saradc {
+	status = "okay";
+	pinctrl-0 = <&adc_vin7_gpio86   /* ADC Channel 0 - C8 */
+		     &adc_vin5_gpio87   /* ADC Channel 1 - F7 */
+		     &adc_vin16_gpio90  /* ADC Channel 2 - D7 */
+		     &adc_vin15_gpio91  /* ADC Channel 3 - C7 */
+		     &adc_vin14_gpio92  /* ADC Channel 4 - A6 */
+		     &adc_vin1_gpio93   /* ADC Channel 5 - B6 */
+		     &adc_vin2_gpio94   /* ADC Channel 6 - C6 */
+		     &adc_vin3_gpio95>; /* ADC Channel 7 - D6 */
 	pinctrl-names = "default";
 };
 

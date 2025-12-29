@@ -17,6 +17,10 @@
 
 #include <reg/reg_access.h>
 #include <reg/reg_def.h>
+#if defined(CONFIG_ADC_NPCM_SARADC)
+/* Include NPCX-compatible SAR ADC register definitions */
+#include <npcm5/reg_def_adc.h>
+#endif
 #include <soc_dt.h>
 #include <soc_espi_taf.h>
 #include <soc_pins.h>

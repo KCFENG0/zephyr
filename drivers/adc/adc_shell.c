@@ -141,6 +141,7 @@ static struct adc_hdl {
 	DT_FOREACH_STATUS_OKAY(ti_tla2021, ADC_HDL_LIST_ENTRY)
 	DT_FOREACH_STATUS_OKAY(zephyr_adc_emul, ADC_HDL_LIST_ENTRY)
 	DT_FOREACH_STATUS_OKAY(nuvoton_npcm_adc, ADC_HDL_LIST_ENTRY)
+	DT_FOREACH_STATUS_OKAY(nuvoton_npcm_sar_adc, ADC_HDL_LIST_ENTRY)
 	/* zephyr-keep-sorted-stop */
 };
 
