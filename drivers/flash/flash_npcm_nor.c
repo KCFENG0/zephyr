@@ -48,11 +48,7 @@ struct flash_npcm_nor_config {
 struct flash_npcm_nor_data {
 	/* Specific control operation for Quad-SPI Nor Flash */
 	uint32_t operation;
-};
-
-static const struct flash_parameters flash_npcm_parameters = {
-	.write_block_size = 1,
-	.erase_value = 0xff,
+	struct flash_parameters flash_nor_parameter;
 };
 
 #define DT_INST_QUAD_EN_PROP_OR(inst)						\
@@ -394,7 +390,8 @@ flash_npcm_nor_get_parameters(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
-	return &flash_npcm_parameters;
+	const struct flash_npcm_nor_data *data = (const struct flash_npcm_nor_data *)dev->data;
+	return &data->flash_nor_parameter;
 };
 
 #ifdef CONFIG_FLASH_EX_OP_ENABLED
@@ -664,7 +661,12 @@ static const struct flash_npcm_nor_config flash_npcm_nor_config_##n = {		\
 			.pages_size  = SPI_NOR_PAGE_SIZE,			\
 		},))								\
 };										\
-static struct flash_npcm_nor_data flash_npcm_nor_data_##n;			\
+static struct flash_npcm_nor_data flash_npcm_nor_data_##n = {			\
+		.flash_nor_parameter = {	\
+			.write_block_size = DT_INST_PROP_OR(n, write_block_size, 0x1000),	\
+			.erase_value = 0xff,					\
+		},								\
+};										\
 DEVICE_DT_INST_DEFINE(n, flash_npcm_nor_init, NULL,				\
 		      &flash_npcm_nor_data_##n, &flash_npcm_nor_config_##n,	\
 		      POST_KERNEL, CONFIG_FLASH_INIT_PRIORITY,			\
