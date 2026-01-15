@@ -36,7 +36,8 @@ static struct freq_multiplier_t freq_multiplier[] = {
 	{.ofmclk = 50000000, .hfcgn = 0x02, .hfcgmh = 0x0B, .hfcgml = 0xEC},
 	{.ofmclk = 48000000, .hfcgn = 0x02, .hfcgmh = 0x0B, .hfcgml = 0x72},
 	{.ofmclk = 40000000, .hfcgn = 0x02, .hfcgmh = 0x09, .hfcgml = 0x89},
-	{.ofmclk = 33000000, .hfcgn = 0x02, .hfcgmh = 0x07, .hfcgml = 0xDE}};
+	{.ofmclk = 33000000, .hfcgn = 0x02, .hfcgmh = 0x07, .hfcgml = 0xDE},
+	{.ofmclk = 20000000, .hfcgn = 0x08, .hfcgmh = 0x13, .hfcgml = 0x13}};
 
 /* PMC multi-registers */
 #define NPCM_PWDWN_CTL_OFFSET(n) (((n) < 7) ? (0x07 + n) : (0x15 + (n - 7)))
