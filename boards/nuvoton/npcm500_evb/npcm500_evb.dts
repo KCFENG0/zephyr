@@ -609,6 +609,30 @@
 	status = "okay";
 };
 
+&pwm1 {
+	pinctrl-0 = <&pwm0_gpio82>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&pwm2 {
+	pinctrl-0 = <&pwm1_gpio04>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&pwm3 {
+	pinctrl-0 = <&pwm2_gpio36>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&pwm4 {
+	pinctrl-0 = <&pwm3_gpio64>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
 &pwm5 {
 	pinctrl-0 = <&pwm4_gpioa0>;
 	pinctrl-names = "default";
@@ -616,15 +640,33 @@
 };
 
 &pwm6 {
-       pinctrl-0 = <&pwm5_gpioa3>;
-       pinctrl-names = "default";
-       status = "okay";
+	pinctrl-0 = <&pwm5_gpioa3>;
+	pinctrl-names = "default";
+	status = "okay";
 };
 
 &pwm7 {
-       pinctrl-0 = <&pwm6_gpioa5>;
-       pinctrl-names = "default";
-       status = "okay";
+	pinctrl-0 = <&pwm6_gpioa5>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&pwm8 {
+	pinctrl-0 = <&pwm7_gpio00>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&pwm9 {
+	pinctrl-0 = <&pwm8_gpio02>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&pwm10 {
+	pinctrl-0 = <&pwm9_gpio06>;
+	pinctrl-names = "default";
+	status = "okay";
 };
 
 &tach1 {

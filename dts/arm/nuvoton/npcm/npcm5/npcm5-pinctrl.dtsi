@@ -415,6 +415,30 @@
 	};
 
 	/* PWM */
+	/omit-if-no-ref/ pwm0_gpio82: periph-pwm0 {
+		pwm {
+			pinmux = <GPIO82__I3C5_SCL__PWM0 2>;
+		};
+	};
+
+	/omit-if-no-ref/ pwm1_gpio04: periph-pwm1 {
+		pwm {
+			pinmux = <GPIO04__EMAC_TXD0__SINB__CR_SIN1__PWM1 4>;
+		};
+	};
+
+	/omit-if-no-ref/ pwm2_gpio36: periph-pwm2 {
+		pwm {
+			pinmux = <GPIO36__ERR__VSBY_32KHZ_IN__PWM2__SCL4A 3>;
+		};
+	};
+
+	/omit-if-no-ref/ pwm3_gpio64: periph-pwm3 {
+		pwm {
+			pinmux = <GPIO64__RESETCON__DPWROKI__PWM3 3>;
+		};
+	};
+
 	/omit-if-no-ref/ pwm4_gpioa0: periph-pwm4 {
 		pwm {
 			pinmux = <GPIOA0__PWM4__IOX2_LDSH 1>;
@@ -430,6 +454,24 @@
 	/omit-if-no-ref/ pwm6_gpioa5: periph-pwm6 {
 		pwm {
 			pinmux = <GPIOA5__PWM6 1>;
+		};
+	};
+
+	/omit-if-no-ref/ pwm7_gpio00: periph-pwm7 {
+		pwm {
+			pinmux = <GPIO00__EMAC_RXD1__CTSB__PWM7 3>;
+		};
+	};
+
+	/omit-if-no-ref/ pwm8_gpio02: periph-pwm8 {
+		pwm {
+			pinmux = <GPIO02__EMAC_REF_CLK__RTSB__PWM8 3>;
+		};
+	};
+
+	/omit-if-no-ref/ pwm9_gpio06: periph-pwm9 {
+		pwm {
+			pinmux = <GPIO06__EMAC_MDI0__DCDB__PWM9 3>;
 		};
 	};
 
