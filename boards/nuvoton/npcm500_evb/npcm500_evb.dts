@@ -34,7 +34,7 @@
 		 * Exsample : if you select channel 6(VIN16),
 		 *            and you can't select channel 7(THR16) and channel 19(TD2P).
 		 */
-		io-channels = <&dsadc 17>, <&dsadc 18>, <&saradc 0>, <&saradc 1>;
+		io-channels = <&dsadc 17>, <&dsadc 18>;
 	};
 };
 
