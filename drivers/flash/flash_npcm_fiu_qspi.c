@@ -568,12 +568,99 @@ exit:
     return ret;
 }
 
+/*
+ * FIU CRC/Checksum Hardware Engine Operations
+ *
+ * The NPCM FIU provides hardware-accelerated CRC32 and Checksum calculation.
+ * CRC engine control registers:
+ * - CRCCON: Control register (mode, source, enable)
+ * - CRCENT: Data entry register (write-only)
+ * - CRCRSLT: Result register (read-only)
+ *
+ * CRCCON bits:
+ *   [0] CALCEN  - Enable CRC calculation (1=enabled)
+ *   [1] CKSMCRC - Mode selection (0=CRC32, 1=Checksum)
+ *   [2] UMAENT  - Data source (0=Firmware, 1=UMA/Flash)
+ */
+static int qspi_npcm_fiu_crc_init(const struct device *dev, uint8_t mode,
+				  uint8_t source, uint32_t initial_value)
+{
+	struct fiu_reg *const inst = HAL_INSTANCE(dev);
+	struct npcm_qspi_data *const data = dev->data;
+
+	k_sem_take(&data->lock_sem, K_FOREVER);
+
+	/* Reset CRC control register */
+	inst->CRCCON = 0;
+
+	/* Initialize CRC result register with seed value (must be done before enabling) */
+	inst->CRCRSLT = initial_value;
+
+	/* Configure mode: bit 1 (CKSMCRC) - 0=CRC32, 1=Checksum */
+	if (mode == NPCM_CRC_MODE_CHECKSUM) {
+		inst->CRCCON |= BIT(1);
+	}
+
+	/* Configure source: bit 2 (UMAENT) - 0=Firmware, 1=UMA/Flash */
+	if (source == NPCM_CRC_SRC_FLASH) {
+		inst->CRCCON |= BIT(2);
+	}
+
+	/* Enable CRC calculation: bit 0 (CALCEN) */
+	inst->CRCCON |= BIT(0);
+
+	k_sem_give(&data->lock_sem);
+	return 0;
+}
+
+static int qspi_npcm_fiu_crc_add_data(const struct device *dev,
+				      const uint8_t *data_buf, size_t length)
+{
+	struct fiu_reg *const inst = HAL_INSTANCE(dev);
+	struct npcm_qspi_data *const data = dev->data;
+
+	if (data_buf == NULL || length == 0) {
+		return -EINVAL;
+	}
+
+	k_sem_take(&data->lock_sem, K_FOREVER);
+
+	/* Feed data bytes into CRC engine via CRCENT register */
+	for (size_t i = 0; i < length; i++) {
+		inst->CRCENT = data_buf[i];
+	}
+
+	k_sem_give(&data->lock_sem);
+	return 0;
+}
+
+static int qspi_npcm_fiu_crc_get_result(const struct device *dev, uint32_t *result)
+{
+	struct fiu_reg *const inst = HAL_INSTANCE(dev);
+	struct npcm_qspi_data *const data = dev->data;
+
+	if (result == NULL) {
+		return -EINVAL;
+	}
+
+	k_sem_take(&data->lock_sem, K_FOREVER);
+
+	/* Read final CRC/Checksum result from CRCRSLT register */
+	*result = inst->CRCRSLT;
+
+	k_sem_give(&data->lock_sem);
+	return 0;
+}
+
 struct npcm_qspi_ops npcm_qspi_fiu_ops = {
 	.lock_configure = qspi_npcm_fiu_mutex_lock_configure,
         .unlock = qspi_npcm_fiu_mutex_unlock,
         .transceive = qspi_npcm_fiu_uma_transceive,
         .set_read_mode = qspi_npcm_fiu_set_read_mode,
         .get_read_mode = qspi_npcm_fiu_get_read_mode,
+        .crc_init = qspi_npcm_fiu_crc_init,
+        .crc_add_data = qspi_npcm_fiu_crc_add_data,
+        .crc_get_result = qspi_npcm_fiu_crc_get_result,
 };
 
 static int qspi_npcm_fiu_init(const struct device *dev)

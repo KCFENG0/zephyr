@@ -92,6 +92,9 @@ struct npcm_qspi_ops {
                      uint32_t flags);
     int (*set_read_mode)(const struct device *dev, uint8_t rd_mode);
     int (*get_read_mode)(const struct device *dev, uint8_t *rd_mode);
+    int (*crc_init)(const struct device *dev, uint8_t mode, uint8_t source, uint32_t initial_value);
+    int (*crc_add_data)(const struct device *dev, const uint8_t *data, size_t length);
+    int (*crc_get_result)(const struct device *dev, uint32_t *result);
 };
 
 /* Device data */

@@ -468,6 +468,59 @@ static int flash_npcm_nor_ex_get_spi_spec(const struct device *dev,
 	return 0;
 }
 
+/*
+ * CRC/Checksum Helper Functions
+ *
+ * These functions provide the interface layer between the NOR flash driver
+ * and the FIU hardware CRC engine. They validate parameters and delegate
+ * actual operations to the QSPI operations structure.
+ */
+static int flash_npcm_nor_crc_init(const struct device *dev,
+				   const struct npcm_ex_ops_crc_init_in *crc_init)
+{
+	const struct flash_npcm_nor_config *config = dev->config;
+	struct npcm_qspi_data *qspi_data = config->qspi_bus->data;
+
+	if (crc_init == NULL || qspi_data->qspi_ops->crc_init == NULL) {
+		return -EINVAL;
+	}
+
+	return qspi_data->qspi_ops->crc_init(config->qspi_bus,
+					      crc_init->mode,
+					      crc_init->source,
+					      crc_init->initial_value);
+}
+
+static int flash_npcm_nor_crc_add_data(const struct device *dev,
+				       const struct npcm_ex_ops_crc_add_data_in *add_data)
+{
+	const struct flash_npcm_nor_config *config = dev->config;
+	struct npcm_qspi_data *qspi_data = config->qspi_bus->data;
+
+	if (add_data == NULL || add_data->data == NULL ||
+	    qspi_data->qspi_ops->crc_add_data == NULL) {
+		return -EINVAL;
+	}
+
+	return qspi_data->qspi_ops->crc_add_data(config->qspi_bus,
+						  add_data->data,
+						  add_data->length);
+}
+
+static int flash_npcm_nor_crc_get_result(const struct device *dev,
+					 struct npcm_ex_ops_crc_result_out *result)
+{
+	const struct flash_npcm_nor_config *config = dev->config;
+	struct npcm_qspi_data *qspi_data = config->qspi_bus->data;
+
+	if (result == NULL || qspi_data->qspi_ops->crc_get_result == NULL) {
+		return -EINVAL;
+	}
+
+	return qspi_data->qspi_ops->crc_get_result(config->qspi_bus,
+						    &result->result);
+}
+
 static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code,
 				const uintptr_t in, void *out)
 {
@@ -546,6 +599,39 @@ static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code,
 
 		// Call the FIU driver function to set 4-byte mode
 		return flash_npcm_nor_set_4b_mode(dev, set_4b_in->enable);
+	}
+	case FLASH_NPCM_EX_OP_CRC_INIT:
+	{
+		const struct npcm_ex_ops_crc_init_in *crc_init =
+			(const struct npcm_ex_ops_crc_init_in *)in;
+
+		if (crc_init == NULL) {
+			return -EINVAL;
+		}
+
+		return flash_npcm_nor_crc_init(dev, crc_init);
+	}
+	case FLASH_NPCM_EX_OP_CRC_ADD_DATA:
+	{
+		const struct npcm_ex_ops_crc_add_data_in *add_data =
+			(const struct npcm_ex_ops_crc_add_data_in *)in;
+
+		if (add_data == NULL) {
+			return -EINVAL;
+		}
+
+		return flash_npcm_nor_crc_add_data(dev, add_data);
+	}
+	case FLASH_NPCM_EX_OP_CRC_GET_RESULT:
+	{
+		struct npcm_ex_ops_crc_result_out *crc_result =
+			(struct npcm_ex_ops_crc_result_out *)out;
+
+		if (crc_result == NULL) {
+			return -EINVAL;
+		}
+
+		return flash_npcm_nor_crc_get_result(dev, crc_result);
 	}
 	default:
 		ret = -ENOTSUP;
