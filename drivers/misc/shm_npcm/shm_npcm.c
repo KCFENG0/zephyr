@@ -337,7 +337,9 @@ static int shm_npcm_reset(const struct device *dev)
 	shm_regs->SHM_CTL &= ~BIT(6); //STALL_HOST: host access termainates normally
 
 	/* Set all windows base to 0 */
+#if !defined(CONFIG_ESPI_PERIPHERAL_EC_HOST_CMD)
 	shm_regs->WIN_BASE1 = win_dis;
+#endif
 	shm_regs->WIN_BASE2 = win_dis;
 	shm_regs->WIN_BASE3 = win_dis;
 	shm_regs->WIN_BASE4 = win_dis;
@@ -347,7 +349,9 @@ static int shm_npcm_reset(const struct device *dev)
 	shm_regs->AIMA_BASE = win_dis;
 
 	/* Set all windows size to 16 bytes */
+#if !defined(CONFIG_ESPI_PERIPHERAL_EC_HOST_CMD)
 	shm_npcm_set_win_size(SHM_WIN1, SHM_WIN_SIZE_16B);
+#endif
 	shm_npcm_set_win_size(SHM_WIN2, SHM_WIN_SIZE_16B);
 	shm_npcm_set_win_size(SHM_WIN3, SHM_WIN_SIZE_16B);
 	shm_npcm_set_win_size(SHM_WIN4, SHM_WIN_SIZE_16B);

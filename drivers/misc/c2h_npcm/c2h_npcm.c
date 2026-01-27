@@ -26,6 +26,7 @@
 LOG_MODULE_REGISTER(c2h_npcm, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define NPCM_C2H_TRANSACTION_TIMEOUT_US 200
+#define NPCM_SIOSFR	0x2F
 
 struct c2h_npcm_config {
 	struct c2h_reg *const inst_c2h;
@@ -362,9 +363,12 @@ uint8_t sib_read_offset(const struct device *dev,
 	{								              \
 		struct c2h_npcm_config *cfg = (struct c2h_npcm_config *)dev->config;  \
 		struct c2h_reg *const inst_c2h = cfg->inst_c2h;		              \
+		uint8_t val;							      \
 									              \
 		/* Enable Core-to-Host access module */			              \
 		inst_c2h->SIBCTRL |= BIT(NPCM_SIBCTRL_CSAE);		              \
+		val = sib_read_offset(dev, SIB_DEV_CFG, NPCM_SIOSFR);		      \
+		sib_write_offset(dev, SIB_DEV_CFG, NPCM_SIOSFR, val | BIT(7));	      \
 									              \
 		return 0;						              \
 	}								              \
