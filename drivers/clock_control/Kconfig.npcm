@@ -9,3 +9,12 @@ config CLOCK_CONTROL_NPCM
 	depends on DT_HAS_NUVOTON_NPCM_PCC_ENABLED
 	help
 	  Enable support for NPCM clock controller driver.
+
+config CLOCK_CONTROL_NPCM_FPGA
+	bool "FPGA mode - bypass PLL configuration"
+	depends on CLOCK_CONTROL_NPCM
+	help
+	  Enable this option when running on FPGA where clocks are fixed
+	  and PLL configuration should be bypassed. The clock controller
+	  will skip PLL and prescaler configuration, assuming the FPGA
+	  provides a fixed clock.

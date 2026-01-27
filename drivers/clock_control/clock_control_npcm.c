@@ -28,6 +28,7 @@ struct freq_multiplier_t {
 	uint8_t hfcgml;
 };
 
+#ifndef CONFIG_CLOCK_CONTROL_NPCM_FPGA
 static struct freq_multiplier_t freq_multiplier[] = {
 	{.ofmclk = 100000000, .hfcgn = 0x82, .hfcgmh = 0x0B, .hfcgml = 0xEC},
 	{.ofmclk = 96000000, .hfcgn = 0x82, .hfcgmh = 0x0B, .hfcgml = 0x72},
@@ -39,6 +40,7 @@ static struct freq_multiplier_t freq_multiplier[] = {
 	{.ofmclk = 33000000, .hfcgn = 0x02, .hfcgmh = 0x07, .hfcgml = 0xDE},
 	{.ofmclk = 20000000, .hfcgn = 0x08, .hfcgmh = 0x13, .hfcgml = 0x13},
 	{.ofmclk = 10000000, .hfcgn = 0x08, .hfcgmh = 0x09, .hfcgml = 0x89}};
+#endif
 
 /* PMC multi-registers */
 #define NPCM_PWDWN_CTL_OFFSET(n) (((n) < 7) ? (0x07 + n) : (0x15 + (n - 7)))
@@ -145,6 +147,11 @@ static struct clock_control_driver_api npcm_clock_control_api = {
 
 static int npcm_clock_control_init(const struct device *dev)
 {
+#ifdef CONFIG_CLOCK_CONTROL_NPCM_FPGA
+	/* FPGA mode: bypass all clock configuration, use fixed clocks */
+	ARG_UNUSED(dev);
+	return 0;
+#else
 	struct cdcg_reg *const priv = (struct cdcg_reg *)(DRV_CONFIG(dev)->base_cdcg);
 	struct freq_multiplier_t *freq_p = NULL;
 	int i;
@@ -190,6 +197,7 @@ static int npcm_clock_control_init(const struct device *dev)
 	priv->hfcbcd2 = APB3DIV_VAL;
 
 	return 0;
+#endif /* CONFIG_CLOCK_CONTROL_NPCM_FPGA */
 }
 
 const struct npcm_pcc_config pcc_config = {
