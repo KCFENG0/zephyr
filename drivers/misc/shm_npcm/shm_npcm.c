@@ -10,12 +10,16 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/drivers/misc/shm_npcm/shm_npcm.h>
 #include <soc.h>
 
+#define SNOOP_FIFO_DEPTH	16
+
+static uint8_t snoop_ptr[SNOOP_FIFO_DEPTH];
+
 struct shm_npcm_config{
 	struct shm_reg *const base;
 };
 
 struct shm_npcm_data{
-        uint8_t port80_data[256];
+        snoop_npcm_rx_callback_t *rx_cb;
 };
 
 struct shm_npcm_data shm_data;
@@ -23,6 +27,20 @@ struct shm_npcm_data shm_data;
 static const struct shm_npcm_config shm_npcm_cfg = {
 	.base = (struct shm_reg *)DT_INST_REG_ADDR(0),
 };
+
+int snoop_npcm_register_rx_callback(const struct device *dev, snoop_npcm_rx_callback_t cb)
+{
+	struct shm_npcm_data *data = (struct shm_npcm_data *)dev->data;
+
+	if (data->rx_cb) {
+		LOG_ERR("Snoop RX callback is registered\n");
+		return -EBUSY;
+	}
+
+	data->rx_cb = cb;
+
+	return 0;
+}
 
 void shm_npcm_set_win_size(uint32_t win, uint8_t size)
 {
@@ -281,10 +299,12 @@ static void port80_npcm_isr(const void *arg)
 {
 	ARG_UNUSED(arg);
 	struct shm_reg *const shm_regs = shm_npcm_cfg.base;
+	const struct device *dev = DEVICE_DT_GET(DT_NODELABEL(shm));
+	struct shm_npcm_data *data = (struct shm_npcm_data *)dev->data;
 
 	/* Read out port80 data continuously if FIFO is not empty */
 	while (NPCM_IS_BIT_SET(shm_regs->DP80STS, NPCM_DP80STS_FNE)) {
-		LOG_DBG("p80: %04x", shm_regs->DP80BUF);
+		LOG_INF("p80: %04x", shm_regs->DP80BUF);
 	}
 
 	/* If FIFO is overflow, show error msg */
@@ -302,7 +322,34 @@ static void port80_npcm_isr(const void *arg)
 		shm_regs->DP80STS |= BIT(NPCM_DP80STS_FWR);
 	}
 
-	return ;
+	uint8_t len;
+	uint16_t buf = 0;
+	uint32_t buf1 = 0;
+
+	buf = shm_regs->DP80BUF;
+	buf1 = shm_regs->DP80BUF1;
+
+	switch (GET_FIELD(shm_regs->DP80BUF, NPCM_DP80BUF_BTYE_LEN)){
+		case 0: /* 1 byte */
+			len = 1;
+			snoop_ptr[0] = buf & 0xFF;
+			break;
+		case 1: /* 2 bytes */
+			len = 2;
+			snoop_ptr[0] = buf & 0xFF;
+			snoop_ptr[1] = buf1 >> 8 & 0xFF;
+			break;
+		case 2: /* 4 bytes */
+			len = 4;
+			snoop_ptr[0] = buf & 0xFF;
+			snoop_ptr[1] = (buf1 >> 8) & 0xFF;
+			snoop_ptr[2] = (buf1 >> 16) & 0xFF;
+			snoop_ptr[3] = (buf1 >> 24) & 0xFF;
+			break;
+	}
+
+	if (data->rx_cb)
+		data->rx_cb(snoop_ptr, len);
 }
 
 static int port80_npcm_init(const struct device *dev)
@@ -322,7 +369,7 @@ static int port80_npcm_init(const struct device *dev)
 		    DT_INST_IRQ_BY_NAME(0, p80, priority),
 		    port80_npcm_isr,
 		    NULL, 0);
-	//irq_enable(DT_INST_IRQ_BY_NAME(0, p80, irq));
+	irq_enable(DT_INST_IRQ_BY_NAME(0, p80, irq));
 	return 0;
 }
 

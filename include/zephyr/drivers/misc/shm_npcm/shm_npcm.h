@@ -42,11 +42,19 @@ typedef struct {
 	uint16_t offset;
 } SHM_Mod_T;
 
+/*
+ * callback to handle snoop RX data
+ * @snoop: pointer to the byte snooped by channel 0, NULL if no data
+ * @len: data len
+ */
+typedef void snoop_npcm_rx_callback_t(const uint8_t *snoop, int len);
+
 void shm_npcm_set_win_size(uint32_t win, uint8_t size);
 void shm_npcm_set_memory(uint8_t win, SHM_Mod_T *shm_mod);
 void shm_npcm_offset_intr(uint8_t win, uint8_t flags, uint8_t enable);
 void shm_npcm_enable_sem(uint8_t win);
 void shm_npcm_enable_sem_intr(uint8_t win);
 int port80_npcm_read(uint8_t *port, uint8_t *bytelen, uint8_t *data);
+int snoop_npcm_register_rx_callback(const struct device *dev, snoop_npcm_rx_callback_t cb);
 
 #endif
