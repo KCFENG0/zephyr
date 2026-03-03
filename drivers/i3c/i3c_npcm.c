@@ -16,6 +16,7 @@ LOG_MODULE_REGISTER(npcm_i3c, CONFIG_I3C_LOG_LEVEL);
 
 /* I3C properties */
 #define I3C_CHK_TIMEOUT_US       10000 /* Timeout for checking register status */
+#define I3C_CLK_FREQ_20_MHZ      MHZ(20)
 #define I3C_CLK_FREQ_48_MHZ      MHZ(48)
 #define I3C_CLK_FREQ_96_MHZ      MHZ(96)
 #define I3C_SCL_PP_FREQ_MAX_MHZ  12500000
@@ -65,15 +66,19 @@ LOG_MODULE_REGISTER(npcm_i3c, CONFIG_I3C_LOG_LEVEL);
 
 /* Supported I3C clock frequency */
 enum npcm_i3c_clk_speed {
+	I3C_CLK_FREQ_20MHZ,
 	I3C_CLK_FREQ_48MHZ,
 	I3C_CLK_FREQ_96MHZ,
 };
 
 static const struct npcm_i3c_timing_cfg npcm_def_speed_cfg[] = {
 	/*
-	 * Recommended I3C timing values are based on I3C frequency 48 or 96 MHz
-	 * PP = 12.5 mhz, OD = 4.17 Mhz, i2c = 1.0 Mhz
+	 * Recommended I3C timing values:
+	 * 20 MHz (FPGA): PP = 2.22 MHz, OD = 384.6 KHz, I2C = ~400 KHz
+	 * 48 MHz: PP = 12.5 MHz, OD = 4.17 MHz, I2C = 1.0 MHz
+	 * 96 MHz: PP = 12.5 MHz, OD = 4.17 MHz, I2C = 1.0 MHz
 	 */
+	[I3C_CLK_FREQ_20MHZ] = {.ppbaud = 3, .pplow = 1, .odhpp = 1, .odbaud = 11, .i2c_baud = 0},
 	[I3C_CLK_FREQ_48MHZ] = {.ppbaud = 1, .pplow = 0, .odhpp = 1, .odbaud = 4, .i2c_baud = 3},
 	[I3C_CLK_FREQ_96MHZ] = {.ppbaud = 3, .pplow = 0, .odhpp = 1, .odbaud = 4, .i2c_baud = 3},
 };
@@ -217,6 +222,7 @@ static inline int npcm_i3c_send_request(struct i3c_reg *i3c_inst, uint32_t mctrl
 	i3c_inst->MCTRL = mctrl_val;
 
 	if (npcm_i3c_status_wait_clear(i3c_inst, NPCM_I3C_MSTATUS_MCTRLDONE) != 0) {
+		LOG_DBG("timeout");
 		return -ETIMEDOUT;
 	}
 
@@ -314,7 +320,7 @@ static int npcm_i3c_request_emit_start(struct i3c_reg *i3c_inst, uint8_t addr,
 
 	/* Check NACK after MCTRLDONE is get */
 	if (i3c_inst->MERRWARN & NPCM_I3C_MERRWARN_NACK) {
-		LOG_DBG("NACK");
+		LOG_DBG("emit start NACKed, merrwarn: %#x", i3c_inst->MERRWARN);
 		return -ENODEV;
 	}
 
@@ -460,6 +466,7 @@ static int npcm_i3c_recover_bus(const struct device *dev)
 	/* Check IDLE state */
 	if (WAIT_FOR((npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IDLE),
 		     I3C_CHK_TIMEOUT_US, NULL) == false) {
+		LOG_DBG("Wait for IDLE state timeout, state= %#x", npcm_i3c_state_get(i3c_inst));
 		return -EBUSY;
 	}
 
@@ -2682,9 +2689,20 @@ static void npcm_i3c_target_isr(const struct device *dev)
 
 		/* Check error or warning has occurred */
 		if (intmask & NPCM_I3C_INTMASKED_ERRWARN) {
-			LOG_ERR("ERRWARN %#x", i3c_inst->ERRWARN);
+			uint32_t errwarn = i3c_inst->ERRWARN;
 
-			i3c_inst->ERRWARN = i3c_inst->ERRWARN;
+			LOG_ERR("TGT ISR ERRWARN=%#x [%s%s%s%s%s%s%s%s%s]",
+				errwarn,
+				(errwarn & NPCM_I3C_ERRWARN_ORUN)     ? "ORUN " : "",
+				(errwarn & NPCM_I3C_ERRWARN_URUN)     ? "URUN " : "",
+				(errwarn & NPCM_I3C_ERRWARN_URUNNACK)  ? "URUNNACK " : "",
+				(errwarn & NPCM_I3C_ERRWARN_INVSTART)  ? "INVSTART " : "",
+				(errwarn & NPCM_I3C_ERRWARN_SPAR)     ? "SPAR " : "",
+				(errwarn & NPCM_I3C_ERRWARN_HPAR)     ? "HPAR " : "",
+				(errwarn & NPCM_I3C_ERRWARN_HCRC)     ? "HCRC " : "",
+				(errwarn & NPCM_I3C_ERRWARN_S0S1)     ? "S0S1 " : "",
+				(errwarn & NPCM_I3C_ERRWARN_OWRITE)   ? "OWRITE " : "");
+			i3c_inst->ERRWARN = errwarn;
 		}
 
 		/* Check dynamic address changed */
@@ -2943,7 +2961,9 @@ static int npcm_i3c_freq_init(const struct device *dev)
 	LOG_DBG("scl_i2c: %d", scl_i2c);
 	LOG_DBG("hdr: %d", ctrl_config->supported_hdr);
 
-	if (i3c_freq_rate == I3C_CLK_FREQ_48_MHZ) {
+	if (i3c_freq_rate == I3C_CLK_FREQ_20_MHZ) {
+		timing_cfg = npcm_def_speed_cfg[I3C_CLK_FREQ_20MHZ];
+	} else if (i3c_freq_rate == I3C_CLK_FREQ_48_MHZ) {
 		timing_cfg = npcm_def_speed_cfg[I3C_CLK_FREQ_48MHZ];
 	} else if (i3c_freq_rate == I3C_CLK_FREQ_96_MHZ) {
 		timing_cfg = npcm_def_speed_cfg[I3C_CLK_FREQ_96MHZ];
@@ -3138,6 +3158,42 @@ static void npcm_i3c_dev_init(const struct device *dev)
 		/* Set I3C target */
 		npcm_i3c_target_init(dev);
 	}
+}
+
+int npcm_i3c_switch_role(const struct device *dev, bool act_as_target)
+{
+	struct npcm_i3c_data *data = dev->data;
+
+	if (act_as_target) {
+		/* BCR 0x26: bits[7:6]=00 → not controller-capable → pure target path */
+		data->config_target.bcr = 0x26;
+		data->common.ctrl_config.is_secondary = false;
+		LOG_DBG("%s: switching to target mode", dev->name);
+	} else {
+		/* BCR 0x66: bits[7:6]=01 → controller-capable → primary master path */
+		data->config_target.bcr = 0x66;
+		data->common.ctrl_config.is_secondary = false;
+		LOG_DBG("%s: switching to master mode", dev->name);
+	}
+
+	npcm_i3c_dev_init(dev);
+	return 0;
+}
+
+uint64_t npcm_i3c_get_target_pid(const struct device *dev)
+{
+	const struct npcm_i3c_data *data = dev->data;
+
+	return data->config_target.pid;
+}
+
+void npcm_i3c_set_target_pid(const struct device *dev, uint64_t pid)
+{
+	struct npcm_i3c_data *data = dev->data;
+
+	data->config_target.pid = pid & 0x0000FFFFFFFFFFFFULL;
+	LOG_DBG("%s: target pid set to 0x%012llx", dev->name,
+		(unsigned long long)data->config_target.pid);
 }
 
 static int npcm_i3c_configure(const struct device *dev, enum i3c_config_type type, void *config)

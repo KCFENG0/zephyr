@@ -108,4 +108,20 @@ struct npcm_i3c_data {
 #endif
 };
 
+/* Runtime role switch: reinitializes hardware as primary master or pure target.
+ * act_as_target=false → BCR 0x66, primary controller
+ * act_as_target=true  → BCR 0x26, pure I3C target
+ */
+int npcm_i3c_switch_role(const struct device *dev, bool act_as_target);
+
+/* Return the device's own Provisional ID (from tgt-pid DTS property).
+ * Useful to display or cross-check the target PID after a role switch.
+ */
+uint64_t npcm_i3c_get_target_pid(const struct device *dev);
+
+/* Update the device's own Provisional ID at runtime.
+ * Call npcm_i3c_switch_role(..., true) afterwards to write it to hardware.
+ */
+void npcm_i3c_set_target_pid(const struct device *dev, uint64_t pid);
+
 #endif /* ZEPHYR_DRIVERS_I3C_I3C_NPCM_H_ */
