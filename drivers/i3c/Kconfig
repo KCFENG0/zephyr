@@ -106,6 +106,16 @@ config I3C_CONTROLLER_INIT_PRIORITY
 	  may not be addressable until addresses are assigned by
 	  the controller.
 
+config I3C_BUS_INIT_SETDASA_BYPASS
+	bool "Bypass SETDASA during I3C bus initialization"
+	default n
+	help
+	  Skip the SETDASA (Set Dynamic Address from Static Address) CCC
+	  step during i3c_bus_init(). Enable this when all I3C devices on
+	  the bus are assigned dynamic addresses exclusively via ENTDAA
+	  (i.e. none of them have static addresses that should be promoted
+	  to dynamic addresses at boot).
+
 comment "Device Drivers"
 
 rsource "Kconfig.nxp"
