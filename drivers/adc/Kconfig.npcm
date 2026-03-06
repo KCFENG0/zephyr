@@ -5,7 +5,7 @@
 
 config ADC_NPCM
 	bool "Nuvoton NPCM ADC driver"
-	default n
+	default y
 	depends on DT_HAS_NUVOTON_NPCM_ADC_ENABLED
 	help
 	  This option enables the ADC driver for NPCM family of
