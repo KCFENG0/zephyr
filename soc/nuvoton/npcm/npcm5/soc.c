@@ -8,6 +8,7 @@
 #include <zephyr/device.h>
 #include <zephyr/init.h>
 #include <zephyr/linker/sections.h>
+#include <cmsis_core.h>
 #include <soc.h>
 #include <zephyr/logging/log.h>
 
@@ -16,6 +17,15 @@ LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 #ifdef CONFIG_SOC_RESET_HOOK
 void soc_reset_hook(void)
 {
+#if defined(CONFIG_ICACHE)
+	SCB_InvalidateICache();
+	SCB_EnableICache();
+#endif
+#if defined(CONFIG_DCACHE)
+	SCB_InvalidateDCache();
+	SCB_EnableDCache();
+#endif
+
 	uintptr_t scfg_base = SCFG_BASE_ADDR;
 	struct scfg_reg *inst_scfg = (struct scfg_reg *)scfg_base;
 

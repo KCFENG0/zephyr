@@ -10,6 +10,8 @@ config SOC_SERIES_NPCM5
 	select SOC_FAMILY_NPCM
 	select CPU_HAS_ARM_MPU
 	select CPU_HAS_FPU
+	select CPU_HAS_ICACHE
+	select CPU_HAS_DCACHE
 	select CLOCK_CONTROL
 	select SOC_RESET_HOOK
 	select SOC_LATE_INIT_HOOK
