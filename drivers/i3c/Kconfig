@@ -16,6 +16,34 @@ module = I3C
 module-str = i3c
 source "subsys/logging/Kconfig.template.log_config"
 
+choice I3C_MODE
+	prompt "I3C Mode Selection"
+	default I3C_DUAL_ROLE
+	help
+	  Select the role in which I3C is enabled.
+	  At least one of Controller or Target must be enabled.
+
+	  Selecting only one can reduce the code footprint size.
+
+config I3C_CONTROLLER_ROLE_ONLY
+	bool "I3C Controller only"
+
+config I3C_TARGET_ROLE_ONLY
+	bool "I3C Target only"
+
+config I3C_DUAL_ROLE
+	bool "Both I3C Controller and Target"
+
+endchoice
+
+config I3C_CONTROLLER
+	bool
+	default y if I3C_DUAL_ROLE || I3C_CONTROLLER_ROLE_ONLY
+
+config I3C_TARGET
+	bool
+	default y if I3C_DUAL_ROLE || I3C_TARGET_ROLE_ONLY
+
 config I3C_SHELL
 	bool "I3C Shell"
 	depends on SHELL
@@ -25,14 +53,11 @@ config I3C_SHELL
 	  The I3C shell supports info, bus recovery, CCC, I3C read and
 	  write operations.
 
-config I3C_USE_GROUP_ADDR
-	bool "Use Group Addresses"
-	default y
+config I3C_TARGET_BUFFER_MODE
+	bool "I3C target driver for buffer mode"
+	depends on I3C_TARGET
 	help
-	  Enable this to use group addresses if supported
-	  by the controllers and target devices.
-
-	  Says Y if unsure.
+	  This is an option to enable buffer mode.
 
 menuconfig I3C_USE_IBI
 	bool "Use In-Band Interrupt (IBI)"
@@ -106,15 +131,32 @@ config I3C_CONTROLLER_INIT_PRIORITY
 	  may not be addressable until addresses are assigned by
 	  the controller.
 
-config I3C_BUS_INIT_SETDASA_BYPASS
-	bool "Bypass SETDASA during I3C bus initialization"
-	default n
+config I3C_INIT_RSTACT
+	bool "Perform Reset Action During Bus Initialization"
+	default y
 	help
-	  Skip the SETDASA (Set Dynamic Address from Static Address) CCC
-	  step during i3c_bus_init(). Enable this when all I3C devices on
-	  the bus are assigned dynamic addresses exclusively via ENTDAA
-	  (i.e. none of them have static addresses that should be promoted
-	  to dynamic addresses at boot).
+	  This determines whether the bus initialization routine
+	  sends a reset action command to I3C targets.
+
+if I3C_CONTROLLER && I3C_TARGET
+
+config I3C_NUM_OF_DESC_MEM_SLABS
+	int "Number of I3C Device Descriptors Mem Slabs"
+	default 3
+	help
+	  This is the number of memory slabs allocated from when
+	  there is a device encountered through ENTDAA or DEFTGTS that
+	  is not within known I3C devices.
+
+config I3C_I2C_NUM_OF_DESC_MEM_SLABS
+	int "Number of I2C Device Descriptors Mem Slabs"
+	default 3
+	help
+	  This is the number of memory slabs allocated from when
+	  there is a device encountered through DEFTGTS that is not
+	  within known I2C devices.
+
+endif # I3C_CONTROLLER && I3C_TARGET
 
 comment "Device Drivers"
 

@@ -5,11 +5,8 @@
 zephyr_syscall_header(${ZEPHYR_BASE}/include/zephyr/drivers/i3c.h)
 
 zephyr_library()
-
-zephyr_library_sources(
-  i3c_ccc.c
-  i3c_common.c
-)
+zephyr_library_sources_ifdef(CONFIG_I3C_CONTROLLER i3c_ccc.c)
+zephyr_library_sources_ifdef(CONFIG_I3C_CONTROLLER i3c_common.c)
 
 zephyr_library_sources_ifdef(
   CONFIG_USERSPACE
