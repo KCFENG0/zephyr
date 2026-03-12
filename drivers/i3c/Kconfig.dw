@@ -1,0 +1,36 @@
+# Copyright (c) 2023 Meta Platforms, Inc. and its affiliates.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+module = I3C_DW
+module-str = i3c-dw
+source "subsys/logging/Kconfig.template.log_config"
+
+menuconfig I3C_DW
+	bool "DW I3C support"
+	select I3C_IBI_WORKQUEUE if I3C_USE_IBI && I3C_CONTROLLER
+	depends on DT_HAS_SNPS_DESIGNWARE_I3C_ENABLED
+	depends on CLOCK_CONTROL
+	default y
+	help
+	  Enable the Synopsys Designware I3C driver
+
+if I3C_DW
+
+config I3C_DW_RW_TIMEOUT_MS
+	int "Set the Read/Write timeout in milliseconds"
+	default 100
+
+config I3C_DW_RST_TIMEOUT_US
+	int "Set the Reset timeout in microseconds"
+	default 1000000
+	help
+	  Set the timeout for I3C Read/Write and Reset operations.
+
+config I3C_DW_HALT_TIMEOUT_US
+	int "Set the Halt timeout in microseconds"
+	default 1000000
+	help
+	  Set the timeout for I3C Halt operations.
+
+endif # I3C_DW

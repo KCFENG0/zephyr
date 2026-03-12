@@ -164,6 +164,7 @@ rsource "Kconfig.nxp"
 rsource "Kconfig.cdns"
 rsource "Kconfig.npcx"
 rsource "Kconfig.npcm"
+rsource "Kconfig.dw"
 rsource "Kconfig.test"
 
 rsource "target/Kconfig"
