@@ -183,7 +183,7 @@ static bool npcm_i3c_has_error(struct i3c_reg *i3c_inst)
 {
 	if (i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_ERRWARN) {
 		LOG_WRN("ERROR: MSTATUS 0x%08x MERRWARN 0x%08x", i3c_inst->MSTATUS,
-							i3c_inst->MERRWARN);
+			i3c_inst->MERRWARN);
 
 		return true;
 	}
@@ -633,7 +633,7 @@ static int npcm_i3c_pdma_wait_completion(const struct device *dev, bool is_rx)
 		return -EINVAL;
 	}
 
-	pdma_inst = (struct pdma_reg *) NPCM_PDMA_BASE((uint32_t)dsct_inst);
+	pdma_inst = (struct pdma_reg *)NPCM_PDMA_BASE((uint32_t)dsct_inst);
 	if (pdma_inst == NULL) {
 		LOG_ERR("pdma base address not exist.");
 		return -EINVAL;
@@ -661,7 +661,7 @@ static int npcm_i3c_pdma_remain_count(const struct device *dev, bool is_rx)
 		return -EINVAL;
 	}
 
-	pdma_inst = (struct pdma_reg *) NPCM_PDMA_BASE((uint32_t)dsct_inst);
+	pdma_inst = (struct pdma_reg *)NPCM_PDMA_BASE((uint32_t)dsct_inst);
 	if (pdma_inst == NULL) {
 		LOG_ERR("pdma base address not exist.");
 		return -EINVAL;
@@ -689,7 +689,7 @@ static int npcm_i3c_pdma_stop(const struct device *dev, bool is_rx)
 	}
 
 	/* Get pdma base address */
-	pdma_inst = (struct pdma_reg *) NPCM_PDMA_BASE((uint32_t)dsct_inst);
+	pdma_inst = (struct pdma_reg *)NPCM_PDMA_BASE((uint32_t)dsct_inst);
 	if (pdma_inst == NULL) {
 		LOG_ERR("pdma base address not exist.");
 		return -EINVAL;
@@ -727,10 +727,10 @@ static int npcm_i3c_pdma_start(const struct device *dev, bool is_rx)
 	}
 
 	/* Get pdma base address */
-	pdma_inst = (struct pdma_reg *) NPCM_PDMA_BASE((uint32_t)dsct_inst);
+	pdma_inst = (struct pdma_reg *)NPCM_PDMA_BASE((uint32_t)dsct_inst);
 	if (pdma_inst == NULL) {
 		LOG_ERR("pdma base address not exist.");
-                return -EINVAL;
+		return -EINVAL;
 	}
 
 	key = irq_lock();
@@ -793,7 +793,7 @@ static int npcm_i3c_pdma_configure(const struct device *dev, enum i3c_config_typ
 	}
 
 	/* Get pdma base address */
-	pdma_inst = (struct pdma_reg *) NPCM_PDMA_BASE((uint32_t)dsct_inst);
+	pdma_inst = (struct pdma_reg *)NPCM_PDMA_BASE((uint32_t)dsct_inst);
 	if (pdma_inst == NULL) {
 		LOG_ERR("pdma base address not exist.");
 		return -EINVAL;
@@ -1180,8 +1180,7 @@ static int npcm_i3c_ctlr_xfer_write_fifo_dma(const struct device *dev, uint8_t a
 	uint32_t key;
 	int ret;
 
-	ret = npcm_i3c_pdma_configure(dev, I3C_CONFIG_CONTROLLER, false, buf, buf_sz,
-					no_ending);
+	ret = npcm_i3c_pdma_configure(dev, I3C_CONFIG_CONTROLLER, false, buf, buf_sz, no_ending);
 	if (ret) {
 		return ret;
 	}
@@ -1310,6 +1309,8 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 {
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 	struct npcm_i3c_data *const data = dev->data;
+	const struct i3c_target_callbacks *target_cb =
+		(data->target_config != NULL) ? data->target_config->callbacks : NULL;
 	uint8_t len = 0;
 	uint8_t rx_fifo_count;
 	bool is_rx;
@@ -1354,6 +1355,15 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 			if (ret) {
 				LOG_ERR("i3c wait dma completion timeout");
 			}
+
+			if (data->dma_rx_len) {
+				if (target_cb != NULL && target_cb->write_received_cb) {
+					for (i = 0; i < data->dma_rx_len; i++) {
+						target_cb->write_received_cb(data->target_config,
+									     data->dma_rx_buf[i]);
+					}
+				}
+			}
 		} else {
 			LOG_ERR("rx fifo empty");
 		}
@@ -1391,6 +1401,9 @@ static int npcm_i3c_target_xfer_end_handle(const struct device *dev,
 {
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 	struct npcm_i3c_data *const data = dev->data;
+	const struct i3c_target_callbacks *target_cb =
+		(data->target_config != NULL) ? data->target_config->callbacks : NULL;
+	int i;
 	int ret = 0;
 
 	if (oper_state == I3C_OP_STATE_RD) {
@@ -1399,6 +1412,14 @@ static int npcm_i3c_target_xfer_end_handle(const struct device *dev,
 
 		npcm_i3c_target_tx_fifo_flush(i3c_inst);
 	} else if (oper_state == I3C_OP_STATE_WR) {
+		if (data->rx_len) {
+			if (target_cb != NULL && target_cb->write_received_cb) {
+				for (i = 0; i < data->rx_len; i++) {
+					target_cb->write_received_cb(data->target_config,
+								     data->rx_buf[i]);
+				}
+			}
+		}
 	}
 
 	return ret;
@@ -1830,7 +1851,7 @@ static int npcm_i3c_do_daa(const struct device *dev)
 
 			LOG_DBG("DAA: Rcvd PID 0x%04x%08x", vendor_id, part_no);
 
-				/* Find a usable address during ENTDAA */
+			/* Find a usable address during ENTDAA */
 			ret = i3c_dev_list_daa_addr_helper(&data->common.attached_dev.addr_slots,
 							   &config->common.dev_list, pid, false,
 							   true, &target, &dyn_addr);
@@ -1968,7 +1989,8 @@ static int npcm_i3c_do_ccc(const struct device *dev, struct i3c_ccc_payload *pay
 	/* Write CCC command */
 	npcm_i3c_status_clear_all(i3c_inst);
 	npcm_i3c_errwarn_clear_all(i3c_inst);
-	xfered_len = npcm_i3c_xfer_write_fifo(i3c_inst, &payload->ccc.id, 1, payload->ccc.data_len > 0);
+	xfered_len =
+		npcm_i3c_xfer_write_fifo(i3c_inst, &payload->ccc.id, 1, payload->ccc.data_len > 0);
 	if (xfered_len < 0) {
 		LOG_ERR("CCC[0x%02x] %s command error (%d)", payload->ccc.id,
 			i3c_ccc_is_payload_broadcast(payload) ? "broadcast" : "direct", ret);
@@ -2058,7 +2080,6 @@ static void npcm_i3c_ibi_work(struct k_work *work)
 	struct i3c_ibi_work *i3c_ibi_work = CONTAINER_OF(work, struct i3c_ibi_work, work);
 	const struct device *dev = i3c_ibi_work->controller;
 	struct npcm_i3c_data *data = dev->data;
-	struct i3c_dev_attached_list *dev_list = &data->common.attached_dev;
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 	struct i3c_device_desc *target = NULL;
 	uint32_t ibitype, ibiaddr;
@@ -2068,8 +2089,7 @@ static void npcm_i3c_ibi_work(struct k_work *work)
 
 	if (npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_TGTREQ) {
 		LOG_DBG("IBI work %p running not because of IBI", work);
-		LOG_ERR("MSTATUS 0x%08x MERRWARN 0x%08x", i3c_inst->MSTATUS,
-			i3c_inst->MERRWARN);
+		LOG_ERR("MSTATUS 0x%08x MERRWARN 0x%08x", i3c_inst->MSTATUS, i3c_inst->MERRWARN);
 
 		npcm_i3c_request_emit_stop(i3c_inst);
 
@@ -2092,7 +2112,7 @@ static void npcm_i3c_ibi_work(struct k_work *work)
 
 	switch (ibitype) {
 	case NPCM_I3C_MSTATUS_IBITYPE_IBI:
-		target = i3c_dev_list_i3c_addr_find(dev_list, (uint8_t)ibiaddr);
+		target = i3c_dev_list_i3c_addr_find(dev, (uint8_t)ibiaddr);
 		if (target != NULL) {
 			ret = npcm_i3c_xfer_read_fifo(i3c_inst, &payload[0], sizeof(payload));
 			if (ret >= 0) {
@@ -2691,17 +2711,16 @@ static void npcm_i3c_target_isr(const struct device *dev)
 		if (intmask & NPCM_I3C_INTMASKED_ERRWARN) {
 			uint32_t errwarn = i3c_inst->ERRWARN;
 
-			LOG_ERR("TGT ISR ERRWARN=%#x [%s%s%s%s%s%s%s%s%s]",
-				errwarn,
-				(errwarn & NPCM_I3C_ERRWARN_ORUN)     ? "ORUN " : "",
-				(errwarn & NPCM_I3C_ERRWARN_URUN)     ? "URUN " : "",
-				(errwarn & NPCM_I3C_ERRWARN_URUNNACK)  ? "URUNNACK " : "",
-				(errwarn & NPCM_I3C_ERRWARN_INVSTART)  ? "INVSTART " : "",
-				(errwarn & NPCM_I3C_ERRWARN_SPAR)     ? "SPAR " : "",
-				(errwarn & NPCM_I3C_ERRWARN_HPAR)     ? "HPAR " : "",
-				(errwarn & NPCM_I3C_ERRWARN_HCRC)     ? "HCRC " : "",
-				(errwarn & NPCM_I3C_ERRWARN_S0S1)     ? "S0S1 " : "",
-				(errwarn & NPCM_I3C_ERRWARN_OWRITE)   ? "OWRITE " : "");
+			LOG_ERR("TGT ISR ERRWARN=%#x [%s%s%s%s%s%s%s%s%s]", errwarn,
+				(errwarn & NPCM_I3C_ERRWARN_ORUN) ? "ORUN " : "",
+				(errwarn & NPCM_I3C_ERRWARN_URUN) ? "URUN " : "",
+				(errwarn & NPCM_I3C_ERRWARN_URUNNACK) ? "URUNNACK " : "",
+				(errwarn & NPCM_I3C_ERRWARN_INVSTART) ? "INVSTART " : "",
+				(errwarn & NPCM_I3C_ERRWARN_SPAR) ? "SPAR " : "",
+				(errwarn & NPCM_I3C_ERRWARN_HPAR) ? "HPAR " : "",
+				(errwarn & NPCM_I3C_ERRWARN_HCRC) ? "HCRC " : "",
+				(errwarn & NPCM_I3C_ERRWARN_S0S1) ? "S0S1 " : "",
+				(errwarn & NPCM_I3C_ERRWARN_OWRITE) ? "OWRITE " : "");
 			i3c_inst->ERRWARN = errwarn;
 		}
 
@@ -2968,13 +2987,11 @@ static int npcm_i3c_freq_init(const struct device *dev)
 	} else if (i3c_freq_rate == I3C_CLK_FREQ_96_MHZ) {
 		timing_cfg = npcm_def_speed_cfg[I3C_CLK_FREQ_96MHZ];
 	} else {
-		LOG_ERR("Unsupported i3c freq for %s. freq rate: %d",
-				dev->name, i3c_freq_rate);
+		LOG_ERR("Unsupported i3c freq for %s. freq rate: %d", dev->name, i3c_freq_rate);
 		return -EINVAL;
 	}
 
-	ret = npcm_i3c_get_scl_config(&timing_cfg, i3c_freq_rate, scl_pp,
-			scl_od, scl_i2c);
+	ret = npcm_i3c_get_scl_config(&timing_cfg, i3c_freq_rate, scl_pp, scl_od, scl_i2c);
 	if (ret != 0x0) {
 		LOG_ERR("Adjust I3C frequency fail");
 		return -EINVAL;
@@ -3331,10 +3348,8 @@ static int npcm_i3c_i2c_api_configure(const struct device *dev, uint32_t dev_con
 	return -ENOSYS;
 }
 
-static int npcm_i3c_i2c_api_transfer(const struct device *dev,
-				     struct i2c_msg *msgs,
-				     uint8_t num_msgs,
-				     uint16_t addr)
+static int npcm_i3c_i2c_api_transfer(const struct device *dev, struct i2c_msg *msgs,
+				     uint8_t num_msgs, uint16_t addr)
 {
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 	uint32_t intmask;
@@ -3365,8 +3380,8 @@ static int npcm_i3c_i2c_api_transfer(const struct device *dev,
 		 * Emit start if this is the first message or that
 		 * the RESTART flag is set in message.
 		 */
-		bool emit_start = (i == 0) ||
-				  ((msgs[i].flags & I2C_MSG_RESTART) == I2C_MSG_RESTART);
+		bool emit_start =
+			(i == 0) || ((msgs[i].flags & I2C_MSG_RESTART) == I2C_MSG_RESTART);
 
 		bool emit_stop = (msgs[i].flags & I2C_MSG_STOP) == I2C_MSG_STOP;
 
@@ -3438,7 +3453,8 @@ out_xfer_i2c_stop_unlock:
  *
  * return  Number of bytes transferred, or negative if error.
  */
-static int npcm_i3c_target_tx_write(const struct device *dev, uint8_t *buf, uint16_t len)
+static int npcm_i3c_target_tx_write(const struct device *dev, uint8_t *buf, uint16_t len,
+				    uint8_t hdr_mode)
 {
 	int ret = 0;
 
@@ -3571,10 +3587,10 @@ static const struct i3c_driver_api npcm_i3c_driver_api = {
 		.clocks.i3c_pp_scl_hz = DT_INST_PROP_OR(inst, i3c_scl_hz, 0),                      \
 		.clocks.i3c_od_scl_hz = DT_INST_PROP_OR(inst, i3c_od_scl_hz, 0),                   \
 		.clocks.i2c_scl_hz = DT_INST_PROP_OR(inst, i2c_scl_hz, 0),                         \
-		IF_ENABLED(CONFIG_I3C_NPCM_DMA, ( \
-			.pdma_rx = (struct pdma_dsct_reg *)DT_INST_REG_ADDR_BY_IDX(inst, 1), \
-			.pdma_tx = (struct pdma_dsct_reg *)DT_INST_REG_ADDR_BY_IDX(inst, 2), \
-			)) };                  \
+		IF_ENABLED(                                                                        \
+			CONFIG_I3C_NPCM_DMA,                                                       \
+			(.pdma_rx = (struct pdma_dsct_reg *)DT_INST_REG_ADDR_BY_IDX(inst, 1),      \
+			 .pdma_tx = (struct pdma_dsct_reg *)DT_INST_REG_ADDR_BY_IDX(inst, 2), ))}; \
 	static struct npcm_i3c_data npcm_i3c_data_##inst = {                                       \
 		.common.ctrl_config.is_secondary = DT_INST_PROP_OR(inst, secondary, false),        \
 		.config_target.static_addr = DT_INST_PROP_OR(inst, static_address, 0),             \
