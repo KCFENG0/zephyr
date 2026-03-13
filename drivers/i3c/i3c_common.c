@@ -1394,9 +1394,11 @@ int i3c_bus_init(const struct device *dev, const struct i3c_dev_list *dev_list)
 	/*
 	 * Set static addresses as dynamic addresses.
 	 */
-	ret = i3c_bus_prepare_setdasa(dev, dev_list, &need_daa, &need_aasa);
-	if (ret != 0) {
-		goto err_out;
+	if (!IS_ENABLED(CONFIG_I3C_BUS_INIT_SETDASA_BYPASS)) {
+		ret = i3c_bus_prepare_setdasa(dev, dev_list, &need_daa, &need_aasa);
+		if (ret != 0) {
+			goto err_out;
+		}
 	}
 
 	/*
