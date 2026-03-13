@@ -1864,15 +1864,31 @@ static int npcm_i3c_do_daa(const struct device *dev)
 				LOG_INF("%s: PID 0x%04x%08x is not in registered device "
 					"list, given dynamic address 0x%02x",
 					dev->name, vendor_id, part_no, dyn_addr);
+				/* Mark address slot; no descriptor to attach */
+				i3c_addr_slots_mark_i3c(&data->common.attached_dev.addr_slots,
+							dyn_addr);
 			} else {
 				/* Update target descriptor */
 				target->dynamic_addr = dyn_addr;
 				target->bcr = rx_buf[6];
 				target->dcr = rx_buf[7];
-			}
 
-			/* Mark the address as I3C device */
-			i3c_addr_slots_mark_i3c(&data->common.attached_dev.addr_slots, dyn_addr);
+				if (i3c_device_desc_in_pool(target)) {
+					/*
+					 * Device was not in the DTS dev_list; its descriptor was
+					 * allocated from the pool. Set the bus reference and attach
+					 * it so it appears in attached_dev and is discoverable via
+					 * I3C_BUS_FOR_EACH_I3CDEV. i3c_attach_i3c_device also
+					 * marks the address slot, so skip the manual mark below.
+					 */
+					target->bus = dev;
+					(void)i3c_attach_i3c_device(target);
+				} else {
+					/* DTS-known device already in attached list; just mark slot */
+					i3c_addr_slots_mark_i3c(&data->common.attached_dev.addr_slots,
+								dyn_addr);
+				}
+			}
 
 			/*
 			 * If the device has static address, after address assignment,
