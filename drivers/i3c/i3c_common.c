@@ -1348,7 +1348,7 @@ int i3c_bus_init(const struct device *dev, const struct i3c_dev_list *dev_list)
 {
 	int i, ret = 0;
 	bool need_daa = true;
-	bool need_aasa = true;
+	bool need_aasa = false;
 	struct i3c_ccc_events i3c_events;
 
 #ifdef CONFIG_I3C_INIT_RSTACT
@@ -1399,15 +1399,26 @@ int i3c_bus_init(const struct device *dev, const struct i3c_dev_list *dev_list)
 		if (ret != 0) {
 			goto err_out;
 		}
+	} else {
+		/* SETDASA is bypassed, but still check per-device SETAASA support */
+		for (i = 0; i < dev_list->num_i3c; i++) {
+			if (dev_list->i3c[i].flags & I3C_SUPPORTS_SETAASA) {
+				need_aasa = true;
+				break;
+			}
+		}
 	}
 
 	/*
 	 * Perform Set All Addresses to Static Address if possible.
+	 * If it fails, fall back to DAA so those devices are not left
+	 * without a dynamic address.
 	 */
 	if (need_aasa) {
 		ret = i3c_bus_setaasa(dev);
 		if (ret != 0) {
-			LOG_ERR("failed to perform setaasa");
+			LOG_ERR("failed to perform setaasa, falling back to DAA");
+			need_daa = true;
 		}
 	}
 
