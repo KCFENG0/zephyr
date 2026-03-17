@@ -80,6 +80,7 @@ struct npcm_i3c_data {
 	uint16_t dma_rx_len;
 	uint16_t dma_triggered; /* The bit n is set to 1 if the n-th DMA channel is triggered */
 	bool tx_valid;          /* Tx has valid data */
+	struct k_sem tx_complete_sem; /* Semaphore: wait for master private read after IBI */
 #else
 	uint8_t rx_buf[4096];
 	uint16_t rx_len;

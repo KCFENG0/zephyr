@@ -1324,6 +1324,13 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 		/* After STOP, the data in tx fifo is invalid. */
 		data->tx_valid = false;
 
+		/* Signal that the master's private read is complete.
+		 * This unblocks npcm_i3c_target_pending_read_notify() which
+		 * waits for the master to finish reading the response data
+		 * (pending-read-notify flow, similar to v2.6 ibi_complete).
+		 */
+		k_sem_give(&data->tx_complete_sem);
+
 		goto out_pdma_end;
 	} else if (oper_state == I3C_OP_STATE_WR) {
 		is_rx = true;
@@ -1355,7 +1362,11 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 			ret = npcm_i3c_pdma_wait_completion(dev, is_rx);
 			if (ret) {
 				LOG_ERR("i3c wait dma completion timeout");
+				data->dma_rx_len = 0;
+				goto out_pdma_end;
 			}
+
+			data->dma_rx_len = len;
 
 			if (data->dma_rx_len) {
 				if (target_cb != NULL && target_cb->write_received_cb) {
@@ -1364,6 +1375,8 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 									     data->dma_rx_buf[i]);
 					}
 				}
+
+				data->dma_rx_len = 0;
 			}
 		} else {
 			LOG_ERR("rx fifo empty");
@@ -2447,27 +2460,40 @@ static int npcm_i3c_target_ibi_raise(const struct device *dev, struct i3c_ibi *r
 
 		/* Extended data */
 		if (request->payload_len > 1) {
-#ifdef CONFIG_I3C_NPCM_DMA
-			int ret;
+			uint8_t ext_len = request->payload_len - 1;
 
-			ret = npcm_i3c_target_do_request_dma(dev, false, &request->payload[1],
-							     request->payload_len - 1, false);
-			if (ret < 0) {
-				LOG_ERR("DMA write request failed");
-				return -EIO;
+			/*
+			 * Use IBIEXT registers for the extended data bytes (e.g. PEC)
+			 * instead of DMA/FIFO.  This avoids destroying any response
+			 * data that may already be staged in the TX FIFO for a
+			 * pending-read-notify flow.
+			 *
+			 * IBIEXT1 holds up to 3 bytes (EXT1..EXT3).
+			 * IBIEXT2 holds up to 4 more bytes (EXT4..EXT7).
+			 * CNT tells hardware how many extended bytes to send.
+			 */
+			if (ext_len >= 1) {
+				NPCM_SET_REG_FIELD(i3c_inst->IBIEXT1,
+						   NPCM_I3C_IBIEXT1_EXT1,
+						   request->payload[1]);
 			}
-#else
-			int index;
-
-			/* For transaction > 16 bytes, use dma to avoid bus underrun. */
-			for (index = 1; index < (request->payload_len - 1); index++) {
-				i3c_inst->WDATAB = request->payload[index];
+			if (ext_len >= 2) {
+				NPCM_SET_REG_FIELD(i3c_inst->IBIEXT1,
+						   NPCM_I3C_IBIEXT1_EXT2,
+						   request->payload[2]);
+			}
+			if (ext_len >= 3) {
+				NPCM_SET_REG_FIELD(i3c_inst->IBIEXT1,
+						   NPCM_I3C_IBIEXT1_EXT3,
+						   request->payload[3]);
 			}
 
-			i3c_inst->WDATABE = request->payload[index];
-#endif
-			NPCM_SET_REG_FIELD(i3c_inst->IBIEXT1, NPCM_I3C_IBIEXT1_CNT, 0);
+			NPCM_SET_REG_FIELD(i3c_inst->IBIEXT1,
+					   NPCM_I3C_IBIEXT1_CNT, ext_len);
 			i3c_inst->CTRL |= NPCM_I3C_CTRL_EXTDATA;
+		} else {
+			/* No extended data — clear EXTDATA so hw only sends MDB */
+			i3c_inst->CTRL &= ~NPCM_I3C_CTRL_EXTDATA;
 		}
 
 		NPCM_SET_REG_FIELD(i3c_inst->CTRL, NPCM_I3C_CTRL_EVENT, NPCM_I3C_CTRL_EVENT_IBI);
@@ -2636,7 +2662,17 @@ static inline void npcm_i3c_target_STOP_handler(const struct device *dev)
 			LOG_ERR("xfer end handle failed after stop, op state=%d", oper_state);
 		}
 	} else if (oper_state == I3C_OP_STATE_IBI) {
-		npcm_i3c_target_dma_off(dev, false);
+		/*
+		 * IBI STOP: the master ACKed the IBI and sent STOP.
+		 * If tx_valid is set, the target has response data staged via
+		 * npcm_i3c_target_tx_write() for the master's upcoming private
+		 * read (pending-read-notify flow).  Do NOT disable TX DMA or
+		 * flush the TX FIFO — the data must survive until the master
+		 * issues the private read and the read STOP arrives.
+		 */
+		if (!data->tx_valid) {
+			npcm_i3c_target_dma_off(dev, false);
+		}
 	} else {
 		/* Check RXPEND */
 		if ((i3c_inst->STATUS & NPCM_I3C_STATUS_RXPEND) && !(data->tx_valid)) {
@@ -3322,6 +3358,9 @@ static int npcm_i3c_init(const struct device *dev)
 	k_sem_init(&data->ibi_lock_sem, 1, 1);
 	k_sem_init(&data->target_lock_sem, 1, 1);
 	k_sem_init(&data->target_event_lock_sem, 1, 1);
+#ifdef CONFIG_I3C_NPCM_DMA
+	k_sem_init(&data->tx_complete_sem, 0, 1);
+#endif
 
 	ret = i3c_addr_slots_init(dev);
 	if (ret != 0) {
@@ -3542,6 +3581,15 @@ static int npcm_i3c_target_pending_read_notify(const struct device *dev, uint8_t
 					       uint16_t len, struct i3c_ibi *notifier)
 {
 	int ret;
+#ifdef CONFIG_I3C_NPCM_DMA
+	struct npcm_i3c_data *data = dev->data;
+
+	/* Clear any stale signal before starting the TX+IBI sequence.
+	 * Must be done before npcm_i3c_target_tx_write() to avoid a race
+	 * where the ISR gives the sem before we take it.
+	 */
+	k_sem_reset(&data->tx_complete_sem);
+#endif
 
 	ret = npcm_i3c_target_tx_write(dev, buf, len, 0);
 	if (ret < 0) {
@@ -3549,7 +3597,38 @@ static int npcm_i3c_target_pending_read_notify(const struct device *dev, uint8_t
 		return ret;
 	}
 
-	return npcm_i3c_target_ibi_raise(dev, notifier);
+	ret = npcm_i3c_target_ibi_raise(dev, notifier);
+	if (ret < 0) {
+#ifdef CONFIG_I3C_NPCM_DMA
+		/* IBI raise failed; clean up the DMA that was set up by tx_write */
+		data->tx_valid = false;
+		npcm_i3c_target_dma_off(dev, false);
+#endif
+		return ret;
+	}
+
+#ifdef CONFIG_I3C_NPCM_DMA
+	/*
+	 * Block until the master completes the private read that follows the
+	 * IBI (pending-read-notify flow).  The caller's buffer (buf) is passed
+	 * to DMA by npcm_i3c_target_tx_write(); we must keep the buffer alive
+	 * until the transfer is finished.
+	 *
+	 * The semaphore is given in npcm_i3c_target_xfer_end_handle_dma()
+	 * when oper_state == I3C_OP_STATE_RD (master read STOP/Sr).
+	 *
+	 * This mirrors v2.6's k_sem_take(&pDevice->ibi_complete, K_MSEC(100)).
+	 */
+	ret = k_sem_take(&data->tx_complete_sem, K_MSEC(1000));
+	if (ret != 0) {
+		LOG_ERR("wait master private read timeout (%d)", ret);
+		/* Clean up: disable DMA, flush TX FIFO, clear tx_valid */
+		data->tx_valid = false;
+		npcm_i3c_target_dma_off(dev, false);
+	}
+#endif
+
+	return ret;
 }
 
 static int npcm_i3c_target_register(const struct device *dev, struct i3c_target_config *cfg)
