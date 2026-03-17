@@ -26,6 +26,7 @@ LOG_MODULE_REGISTER(npcm_i3c, CONFIG_I3C_LOG_LEVEL);
 #define I3C_BUS_TLOW_OD_MIN_NS   200 /* T_LOW period in open-drain mode */
 #define I3C_TGT_WR_REQ_WAIT_US   10  /* I3C target write request PDMA completion after stop */
 #define I3C_FIFO_SIZE            16
+#define I3C_RX_PREARM_SIZE       256 /* Pre-arm RX DMA buffer size, matches MCTP msg-size */
 #define PPBAUD_DIV_MAX           0xF
 #define I2CBAUD_DIV_MAX          0xF
 #define DAA_TGT_INFO_SZ          0x8         /* 8 bytes = PID(6) + BCR(1) + DCR(1) */
@@ -769,7 +770,7 @@ static int npcm_i3c_pdma_start(const struct device *dev, bool is_rx)
  *
  */
 static int npcm_i3c_pdma_configure(const struct device *dev, enum i3c_config_type type, bool is_rx,
-				   uint8_t *buf, uint8_t buf_sz, bool no_ending)
+				   uint8_t *buf, size_t buf_sz, bool no_ending)
 {
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 	struct npcm_i3c_data *const data = dev->data;
@@ -1106,6 +1107,22 @@ err_out:
 	return ret;
 }
 
+/*
+ * Pre-arm RX DMA so incoming master writes are continuously drained from the
+ * 16-byte FIFO into dma_rx_buf.  Without this, messages >= 16 bytes overflow
+ * the FIFO (ORUN) and lose trailing bytes.  Mirrors v2.6 I3C_Prepare_To_Read_Command().
+ *
+ * Called once from target_register() and re-armed after every completed write
+ * in npcm_i3c_target_xfer_end_handle_dma().
+ */
+static int npcm_i3c_target_prearm_rx_dma(const struct device *dev)
+{
+	struct npcm_i3c_data *const data = dev->data;
+
+	return npcm_i3c_target_do_request_dma(dev, true, data->dma_rx_buf,
+					       I3C_RX_PREARM_SIZE, true);
+}
+
 static int npcm_i3c_ctlr_xfer_read_fifo_dma(const struct device *dev, uint8_t addr,
 					    enum npcm_i3c_mctrl_type op_type, uint8_t *buf,
 					    size_t buf_sz, bool is_rx, bool emit_start,
@@ -1312,7 +1329,7 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 	struct npcm_i3c_data *const data = dev->data;
 	const struct i3c_target_callbacks *target_cb =
 		(data->target_config != NULL) ? data->target_config->callbacks : NULL;
-	uint8_t len = 0;
+	size_t len = 0;
 	uint8_t rx_fifo_count;
 	bool is_rx;
 	int ret = 0;
@@ -1335,52 +1352,60 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 	} else if (oper_state == I3C_OP_STATE_WR) {
 		is_rx = true;
 
-		/* Wait until rx fifo is stable */
-#define RX_FIFO_EMPTY_TIMEOUT 100
-		len = NPCM_GET_REG_FIELD(i3c_inst->DATACTRL, NPCM_I3C_DATACTRL_RXCOUNT);
-		for (i = 0; i < RX_FIFO_EMPTY_TIMEOUT; i++) {
-			/* For 12.5MHz, [data] + [T] = 0.75us */
-			k_busy_wait(10);
-			rx_fifo_count =
-				NPCM_GET_REG_FIELD(i3c_inst->DATACTRL, NPCM_I3C_DATACTRL_RXCOUNT);
+		/*
+		 * RX DMA was pre-armed: RDATAB → dma_rx_buf[I3C_RX_PREARM_SIZE].
+		 * Determine how many bytes DMA transferred, read any FIFO remnant,
+		 * deliver all bytes, then re-arm for the next write.
+		 */
+		int remain = npcm_i3c_pdma_remain_count(dev, is_rx);
 
-			if (len == rx_fifo_count) {
-				break;
+		/* Stop RX PDMA and disable DMAFB (do NOT flush FIFO yet) */
+		NPCM_SET_REG_FIELD(i3c_inst->DMACTRL, NPCM_I3C_DMACTRL_DMAFB,
+				   NPCM_I3C_DMACTRL_DMAFB_DISABLE);
+		npcm_i3c_pdma_stop(dev, is_rx);
+
+		size_t dma_received = 0;
+
+		if (remain >= 0) {
+			dma_received = I3C_RX_PREARM_SIZE - remain;
+		}
+
+		/* Read any bytes still in the FIFO that DMA didn't drain */
+		rx_fifo_count =
+			NPCM_GET_REG_FIELD(i3c_inst->DATACTRL, NPCM_I3C_DATACTRL_RXCOUNT);
+		for (i = 0; i < rx_fifo_count; i++) {
+			if (dma_received + i < sizeof(data->dma_rx_buf)) {
+				data->dma_rx_buf[dma_received + i] =
+					(uint8_t)(i3c_inst->RDATAB & 0xFF);
 			} else {
-				len = rx_fifo_count;
+				/* Buffer full — discard */
+				(void)i3c_inst->RDATAB;
 			}
 		}
 
-		if (len) {
-			ret = npcm_i3c_target_do_request_dma(dev, is_rx, data->dma_rx_buf, len,
-							     false);
-			if (ret < 0) {
-				LOG_ERR("DMA write request failed");
-				goto out_pdma_end;
-			}
+		len = dma_received + rx_fifo_count;
 
-			ret = npcm_i3c_pdma_wait_completion(dev, is_rx);
-			if (ret) {
-				LOG_ERR("i3c wait dma completion timeout");
-				data->dma_rx_len = 0;
-				goto out_pdma_end;
-			}
-
-			data->dma_rx_len = len;
-
-			if (data->dma_rx_len) {
-				if (target_cb != NULL && target_cb->write_received_cb) {
-					for (i = 0; i < data->dma_rx_len; i++) {
-						target_cb->write_received_cb(data->target_config,
-									     data->dma_rx_buf[i]);
-					}
+		/* Deliver received bytes to upper layer */
+		if (len > 0) {
+			if (target_cb != NULL && target_cb->write_received_cb) {
+				for (i = 0; i < len; i++) {
+					target_cb->write_received_cb(data->target_config,
+								     data->dma_rx_buf[i]);
 				}
-
-				data->dma_rx_len = 0;
 			}
 		} else {
-			LOG_ERR("rx fifo empty");
+			LOG_ERR("rx: no data received (dma_remain=%d, fifo=%d)",
+				remain, rx_fifo_count);
 		}
+
+		/* Re-arm RX DMA for the next master write */
+		ret = npcm_i3c_target_prearm_rx_dma(dev);
+		if (ret < 0) {
+			LOG_ERR("Failed to re-arm RX DMA: %d", ret);
+			return ret;
+		}
+
+		return 0;
 	} else {
 		LOG_ERR("oper_state error :%d", oper_state);
 		return -EINVAL;
@@ -3637,12 +3662,28 @@ static int npcm_i3c_target_register(const struct device *dev, struct i3c_target_
 
 	data->target_config = cfg;
 
+#ifdef CONFIG_I3C_NPCM_DMA
+	int ret;
+
+	/* Pre-arm RX DMA so the FIFO is drained during master writes */
+	ret = npcm_i3c_target_prearm_rx_dma(dev);
+	if (ret < 0) {
+		LOG_ERR("Failed to pre-arm RX DMA: %d", ret);
+		return ret;
+	}
+#endif
+
 	return 0;
 }
 
 static int npcm_i3c_target_unregister(const struct device *dev, struct i3c_target_config *cfg)
 {
 	struct npcm_i3c_data *data = dev->data;
+
+#ifdef CONFIG_I3C_NPCM_DMA
+	/* Stop the pre-armed RX DMA */
+	npcm_i3c_target_dma_off(dev, true);
+#endif
 
 	data->target_config = NULL;
 

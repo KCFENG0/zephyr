@@ -76,7 +76,7 @@ int i3c_target_mqueue_read(const struct device *dev, uint8_t *buf, int budget)
 
 	msg = &data->msg_queue[data->out];
 	ret = (msg->size > budget) ? budget : msg->size;
-	LOG_DBG("%s: out = %d, msg size = %d", __func__, data->out, ret);
+	// LOG_DBG("%s: out = %d, msg size = %d", __func__, data->out, ret);
 
 	memcpy(buf, msg->buf, ret);
 	data->out = (data->out + 1) & (data->config->num_of_msgs - 1);
