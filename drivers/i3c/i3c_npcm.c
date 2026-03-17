@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include "zephyr/logging/log_msg.h"
 #define DT_DRV_COMPAT nuvoton_npcm_i3c
 
 #include <zephyr/drivers/clock_control.h>
@@ -2744,9 +2745,16 @@ static void npcm_i3c_target_isr(const struct device *dev)
 		if (intmask & NPCM_I3C_INTMASKED_DACHG) {
 			i3c_inst->STATUS = NPCM_I3C_STATUS_DACHG;
 			if (i3c_inst->DYNADDR & NPCM_I3C_DYNADDR_DAVALID) {
+				LOG_WRN("Dynamic address changed to 0x%02lx",
+					NPCM_GET_REG_FIELD(i3c_inst->DYNADDR,
+							   NPCM_I3C_DYNADDR_DADDR));
 				if (target_config != NULL) {
-					config_target->static_addr = NPCM_GET_REG_FIELD(
+					uint8_t dynaddr = NPCM_GET_REG_FIELD(
 						i3c_inst->DYNADDR, NPCM_I3C_DYNADDR_DADDR);
+					config_target->static_addr = dynaddr;
+					target_config->address = dynaddr;
+				} else {
+					LOG_ERR("Target config is NULL");
 				}
 			}
 		}
@@ -3530,6 +3538,20 @@ static int npcm_i3c_target_tx_write(const struct device *dev, uint8_t *buf, uint
 #endif
 }
 
+static int npcm_i3c_target_pending_read_notify(const struct device *dev, uint8_t *buf,
+					       uint16_t len, struct i3c_ibi *notifier)
+{
+	int ret;
+
+	ret = npcm_i3c_target_tx_write(dev, buf, len, 0);
+	if (ret < 0) {
+		LOG_ERR("target tx write failed: %d", ret);
+		return ret;
+	}
+
+	return npcm_i3c_target_ibi_raise(dev, notifier);
+}
+
 static int npcm_i3c_target_register(const struct device *dev, struct i3c_target_config *cfg)
 {
 	struct npcm_i3c_data *data = dev->data;
@@ -3561,6 +3583,7 @@ static const struct i3c_driver_api npcm_i3c_driver_api = {
 	.i3c_xfers = npcm_i3c_transfer,
 
 	.target_tx_write = npcm_i3c_target_tx_write,
+	.target_pending_read_notify = npcm_i3c_target_pending_read_notify,
 	.target_register = npcm_i3c_target_register,
 	.target_unregister = npcm_i3c_target_unregister,
 #ifdef CONFIG_I3C_USE_IBI
