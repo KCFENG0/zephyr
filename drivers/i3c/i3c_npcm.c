@@ -26,7 +26,7 @@ LOG_MODULE_REGISTER(npcm_i3c, CONFIG_I3C_LOG_LEVEL);
 #define I3C_BUS_TLOW_OD_MIN_NS   200 /* T_LOW period in open-drain mode */
 #define I3C_TGT_WR_REQ_WAIT_US   10  /* I3C target write request PDMA completion after stop */
 #define I3C_FIFO_SIZE            16
-#define I3C_RX_PREARM_SIZE       256 /* Pre-arm RX DMA buffer size, matches MCTP msg-size */
+#define I3C_RX_PREARM_SIZE       256 /* Pre-arm RX DMA buffer, matches v2.6 MAX_READ_LEN */
 #define PPBAUD_DIV_MAX           0xF
 #define I2CBAUD_DIV_MAX          0xF
 #define DAA_TGT_INFO_SZ          0x8         /* 8 bytes = PID(6) + BCR(1) + DCR(1) */
@@ -1112,15 +1112,73 @@ err_out:
  * 16-byte FIFO into dma_rx_buf.  Without this, messages >= 16 bytes overflow
  * the FIFO (ORUN) and lose trailing bytes.  Mirrors v2.6 I3C_Prepare_To_Read_Command().
  *
+ * Uses direct BASIC mode (no scatter-gather) matching v2.6 hal_I3C_DMA_Read():
+ *   1. Disable DMAFB
+ *   2. Enable PDMA channel + clear TDSTS
+ *   3. Configure descriptor: RDATAB → dma_rx_buf, BASIC mode
+ *   4. Enable DMAFB
+ *
  * Called once from target_register() and re-armed after every completed write
  * in npcm_i3c_target_xfer_end_handle_dma().
  */
 static int npcm_i3c_target_prearm_rx_dma(const struct device *dev)
 {
+	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 	struct npcm_i3c_data *const data = dev->data;
+	struct pdma_dsct_reg *dsct_inst = NULL;
+	struct pdma_reg *pdma_inst;
+	uint8_t dsct_idx;
+	uint8_t i3c_mux_id;
+	uint32_t key;
 
-	return npcm_i3c_target_do_request_dma(dev, true, data->dma_rx_buf,
-					       I3C_RX_PREARM_SIZE, true);
+	dsct_idx = npcm_i3c_pdma_dsct(dev, true, &dsct_inst);
+	if (dsct_inst == NULL) {
+		return -EINVAL;
+	}
+
+	pdma_inst = (struct pdma_reg *)NPCM_PDMA_BASE((uint32_t)dsct_inst);
+	if (pdma_inst == NULL) {
+		return -EINVAL;
+	}
+
+	i3c_mux_id = I3C_NPCM_PDMA_MUX_ID((uint32_t)i3c_inst, true);
+
+	key = irq_lock();
+
+	/* Disable DMAFB — stop I3C from issuing DMA requests */
+	NPCM_SET_REG_FIELD(i3c_inst->DMACTRL, NPCM_I3C_DMACTRL_DMAFB,
+			   NPCM_I3C_DMACTRL_DMAFB_DISABLE);
+
+	/* Setup channel request selection */
+	NPCM_SET_REG_FIELD(pdma_inst->PDMA_REQSEL[dsct_idx / NPCM_PDMA_CHANNEL_PER_REQ],
+			   NPCM_PDMA_REQSEL_CHANNEL(dsct_idx % NPCM_PDMA_CHANNEL_PER_REQ),
+			   i3c_mux_id);
+
+	/* Enable PDMA channel */
+	pdma_inst->PDMA_CHCTL |= BIT(dsct_idx);
+
+	/* Clear transfer done flag */
+	pdma_inst->PDMA_TDSTS = BIT(dsct_idx);
+
+	/* Configure descriptor directly in BASIC mode (no scatter-gather) */
+	dsct_inst->CTL = NPCM_PDMA_DSCT_CTL_TXTYPE_SINGLE |
+			 FIELD_PREP(NPCM_PDMA_DSCT_CTL_TXWIDTH, NPCM_PDMA_DSCT_CTL_TX_WIDTH_8) |
+			 FIELD_PREP(NPCM_PDMA_DSCT_CTL_SAINC, NPCM_PDMA_DSCT_CTL_SAINC_FIX) |
+			 FIELD_PREP(NPCM_PDMA_DSCT_CTL_DAINC, 0x0) |
+			 FIELD_PREP(NPCM_PDMA_DSCT_CTL_OPMODE, NPCM_PDMA_DSCT_CTL_OPMODE_BASIC) |
+			 FIELD_PREP(NPCM_PDMA_DSCT_CTL_TXCNT, (I3C_RX_PREARM_SIZE - 1));
+	dsct_inst->SA = (uint32_t)&i3c_inst->RDATAB;
+	dsct_inst->DA = (uint32_t)&data->dma_rx_buf[0];
+
+	/* Enable DMAFB */
+	NPCM_SET_REG_FIELD(i3c_inst->DMACTRL, NPCM_I3C_DMACTRL_DMAFB,
+			   NPCM_I3C_DMACTRL_DMAFB_EN_MANUAL);
+
+	data->dma_triggered |= BIT(dsct_idx);
+
+	irq_unlock(key);
+
+	return 0;
 }
 
 static int npcm_i3c_ctlr_xfer_read_fifo_dma(const struct device *dev, uint8_t addr,
