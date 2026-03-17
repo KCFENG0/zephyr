@@ -192,7 +192,7 @@ struct host_sub_npcm_data host_sub_data;
 						| BIT(NPCM_HIKMST_A2))
 
 /* IO base address of EC Logical Device Configuration */
-#define NPCM_EC_CFG_IO_ADDR 0x4E
+#define NPCM_EC_CFG_IO_ADDR 0x0
 
 /* Timeout to wait for Core-to-Host transaction to be completed. */
 #define NPCM_C2H_TRANSACTION_TIMEOUT_US 200
@@ -1260,17 +1260,17 @@ int npcm_host_periph_write_request(enum lpc_peripheral_opcode op,
 
 void npcm_host_init_subs_host_domain(void)
 {
-	struct mswc_reg *const inst_mswc = host_sub_cfg.inst_mswc;
+	//struct mswc_reg *const inst_mswc = host_sub_cfg.inst_mswc;
 	struct c2h_reg *const inst_c2h = host_sub_cfg.inst_c2h;
 
 	/* Enable Core-to-Host access module */
 	inst_c2h->SIBCTRL |= BIT(NPCM_SIBCTRL_CSAE);
 
-	/* Configure EC legacy configuration IO base address to 0x2E. */
-	if (!NPCM_IS_BIT_SET(inst_mswc->MSWCTL1, NPCM_MSWCTL1_VHCFGA)) {
+	/* Configure EC legacy configuration IO base address to NPCM_EC_CFG_IO_ADDR */
+	/*if (!NPCM_IS_BIT_SET(inst_mswc->MSWCTL1, NPCM_MSWCTL1_VHCFGA)) {
 		inst_mswc->HCBAH = 0x0;
 		inst_mswc->HCBAL = NPCM_EC_CFG_IO_ADDR;
-	}
+	}*/
 
 	if (IS_ENABLED(CONFIG_ESPI_PERIPHERAL_8042_KBC)) {
 		/*

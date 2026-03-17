@@ -105,11 +105,11 @@ static int espi_taf_npcm_configure(const struct device *dev, const struct espi_s
 {
 	ARG_UNUSED(cfg);
 	struct espi_reg *const inst = HAL_INSTANCE(dev);
-	struct espi_taf_npcm_config *config = ((struct espi_taf_npcm_config *)(dev)->config);
 
 #if !defined(CONFIG_ESPI_NPCM_FLASH_SAFS_HW_MODE)
 	inst->FLASHCTL &= ~BIT(NPCM_FLASHCTL_SAF_AUTO_READ);
 #else
+	struct espi_taf_npcm_config *config = ((struct espi_taf_npcm_config *)(dev)->config);
 	inst->FLASHBASE = config->mapped_addr;
 #endif
 	return 0;
