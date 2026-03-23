@@ -10,6 +10,8 @@ zephyr_library_sources(
   hook.c
 )
 
+zephyr_linker_sources(DATA_SECTIONS rom_hooks.ld)
+
 set(NPCM_BIN_NAME ${CONFIG_KERNEL_BIN_NAME}_signed.bin)
 set(NPCM_ELF_NAME ${CONFIG_KERNEL_BIN_NAME}.elf)
 string(TOUPPER "${SOC_NAME}" soc_name_upper)

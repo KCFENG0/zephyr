@@ -8,12 +8,6 @@
 
 SECTIONS
 {
-	SECTION_PROLOGUE(.rom_hooks,, SUBALIGN(4))
-	{
-		KEEP(*(.rom_hooks_data))
-		KEEP(*(.rom_hooks_fn))
-	} GROUP_LINK_IN(ROMABLE_REGION)
-
 	/* Application-defined sections (e.g., .fw_version) */
 #include <snippets-app-sections.ld>
 }
