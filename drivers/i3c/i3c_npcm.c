@@ -1168,7 +1168,7 @@ static int npcm_i3c_target_prearm_rx_dma(const struct device *dev)
 			 FIELD_PREP(NPCM_PDMA_DSCT_CTL_OPMODE, NPCM_PDMA_DSCT_CTL_OPMODE_BASIC) |
 			 FIELD_PREP(NPCM_PDMA_DSCT_CTL_TXCNT, (I3C_RX_PREARM_SIZE - 1));
 	dsct_inst->SA = (uint32_t)&i3c_inst->RDATAB;
-	dsct_inst->DA = (uint32_t)&data->dma_rx_buf[0];
+	dsct_inst->DA = (uint32_t)&data->dma_rx_buf[data->dma_rx_buf_idx][0];
 
 	/* Enable DMAFB */
 	NPCM_SET_REG_FIELD(i3c_inst->DMACTRL, NPCM_I3C_DMACTRL_DMAFB,
@@ -1422,6 +1422,9 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 				   NPCM_I3C_DMACTRL_DMAFB_DISABLE);
 		npcm_i3c_pdma_stop(dev, is_rx);
 
+		/* Save current buffer index - this buffer has the received data */
+		uint8_t proc_buf_idx = data->dma_rx_buf_idx;
+
 		size_t dma_received = 0;
 
 		if (remain >= 0) {
@@ -1432,8 +1435,8 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 		rx_fifo_count =
 			NPCM_GET_REG_FIELD(i3c_inst->DATACTRL, NPCM_I3C_DATACTRL_RXCOUNT);
 		for (i = 0; i < rx_fifo_count; i++) {
-			if (dma_received + i < sizeof(data->dma_rx_buf)) {
-				data->dma_rx_buf[dma_received + i] =
+			if (dma_received + i < sizeof(data->dma_rx_buf[0])) {
+				data->dma_rx_buf[proc_buf_idx][dma_received + i] =
 					(uint8_t)(i3c_inst->RDATAB & 0xFF);
 			} else {
 				/* Buffer full — discard */
@@ -1443,24 +1446,37 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 
 		len = dma_received + rx_fifo_count;
 
-		/* Deliver received bytes to upper layer */
+		/*
+		 * Swap to the other buffer and re-arm RX DMA BEFORE delivering
+		 * bytes to upper layer. This prevents race condition where new
+		 * DMA writes to the same buffer we're reading from for callbacks.
+		 */
+		data->dma_rx_buf_idx = (proc_buf_idx + 1) & 1;
+		ret = npcm_i3c_target_prearm_rx_dma(dev);
+		if (ret < 0) {
+			LOG_ERR("Failed to re-arm RX DMA: %d", ret);
+			return ret;
+		}
+
+		/* Deliver received bytes to upper layer using the saved buffer */
 		if (len > 0) {
+#ifdef CONFIG_I3C_TARGET_BUFFER_MODE
+			/* Use bulk callback if available - much more efficient than byte-by-byte */
+			if (target_cb != NULL && target_cb->buf_write_received_cb) {
+				target_cb->buf_write_received_cb(data->target_config,
+								 data->dma_rx_buf[proc_buf_idx],
+								 len);
+			} else
+#endif
 			if (target_cb != NULL && target_cb->write_received_cb) {
 				for (i = 0; i < len; i++) {
 					target_cb->write_received_cb(data->target_config,
-								     data->dma_rx_buf[i]);
+								     data->dma_rx_buf[proc_buf_idx][i]);
 				}
 			}
 		} else {
 			LOG_ERR("rx: no data received (dma_remain=%d, fifo=%d)",
 				remain, rx_fifo_count);
-		}
-
-		/* Re-arm RX DMA for the next master write */
-		ret = npcm_i3c_target_prearm_rx_dma(dev);
-		if (ret < 0) {
-			LOG_ERR("Failed to re-arm RX DMA: %d", ret);
-			return ret;
 		}
 
 		return 0;
@@ -3724,6 +3740,8 @@ static int npcm_i3c_target_register(const struct device *dev, struct i3c_target_
 	int ret;
 
 	/* Pre-arm RX DMA so the FIFO is drained during master writes */
+	/* Initialize double-buffer index and pre-arm RX DMA */
+	data->dma_rx_buf_idx = 0;
 	ret = npcm_i3c_target_prearm_rx_dma(dev);
 	if (ret < 0) {
 		LOG_ERR("Failed to pre-arm RX DMA: %d", ret);

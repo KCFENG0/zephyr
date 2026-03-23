@@ -76,7 +76,8 @@ struct npcm_i3c_data {
 	enum npcm_i3c_oper_state oper_state; /* Operation state */
 
 #ifdef CONFIG_I3C_NPCM_DMA
-	uint8_t dma_rx_buf[4096];
+	uint8_t dma_rx_buf[2][4096]; /* Double-buffered RX: one for DMA, one for processing */
+	uint8_t dma_rx_buf_idx;      /* Index of buffer currently used by DMA (0 or 1) */
 	uint16_t dma_rx_len;
 	uint16_t dma_triggered; /* The bit n is set to 1 if the n-th DMA channel is triggered */
 	bool tx_valid;          /* Tx has valid data */
