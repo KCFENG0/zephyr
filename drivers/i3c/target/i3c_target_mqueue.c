@@ -38,6 +38,7 @@ struct i3c_target_mqueue_data {
 	int in;
 	int out;
 	int wr_index;
+	struct k_sem msg_avail_sem; /* Semaphore signaled when message is available */
 };
 
 int i3c_target_mqueue_write(const struct device *dev, uint8_t *buf, int len)
@@ -84,6 +85,39 @@ int i3c_target_mqueue_read(const struct device *dev, uint8_t *buf, int budget)
 	return ret;
 }
 
+/**
+ * @brief Blocking read - waits for a message to be available
+ *
+ * @param dev The SMQ device
+ * @param buf Buffer to store the message
+ * @param budget Maximum bytes to read
+ * @param timeout Timeout for waiting (K_FOREVER for indefinite)
+ * @return Number of bytes read, 0 if timeout, negative on error
+ */
+int i3c_target_mqueue_read_blocking(const struct device *dev, uint8_t *buf, int budget,
+				    k_timeout_t timeout)
+{
+	struct i3c_target_mqueue_data *data = dev->data;
+	int ret;
+
+	/*
+	 * Wait for notification that data is available.
+	 * Each k_sem_give() from stop_cb corresponds to one message,
+	 * so we always take the semaphore to keep count synchronized.
+	 */
+	ret = k_sem_take(&data->msg_avail_sem, timeout);
+	if (ret != 0) {
+		/* Timeout or error - check if data arrived anyway */
+		if (data->out != data->in) {
+			return i3c_target_mqueue_read(dev, buf, budget);
+		}
+		return 0;
+	}
+
+	/* Read the message */
+	return i3c_target_mqueue_read(dev, buf, budget);
+}
+
 static int i3c_target_mq_write_requested_cb(struct i3c_target_config *config)
 {
 	struct i3c_target_mqueue_data *data =
@@ -113,6 +147,30 @@ static int i3c_target_mq_write_received_cb(struct i3c_target_config *config, uin
 	return 0;
 }
 
+#ifdef CONFIG_I3C_TARGET_BUFFER_MODE
+/**
+ * @brief Bulk write received callback - receives entire buffer at once
+ *
+ * This is much more efficient than byte-by-byte delivery for DMA-based
+ * transfers, as it allows a single memcpy instead of per-byte function calls.
+ */
+static void i3c_target_mq_buf_write_received_cb(struct i3c_target_config *config,
+						uint8_t *ptr, uint32_t len)
+{
+	struct i3c_target_mqueue_data *data =
+		CONTAINER_OF(config, struct i3c_target_mqueue_data, target_config);
+	uint32_t max_len = data->config->msg_size - data->msg_curr->size;
+
+	if (len > max_len) {
+		LOG_WRN("buf_write_received: truncating %u to %u bytes", len, max_len);
+		len = max_len;
+	}
+
+	memcpy(&data->msg_curr->buf[data->msg_curr->size], ptr, len);
+	data->msg_curr->size += len;
+}
+#endif
+
 static int i3c_target_mq_read_requested_cb(struct i3c_target_config *config, uint8_t *val)
 {
 	return 0;
@@ -125,6 +183,12 @@ static int i3c_target_mq_read_processed_cb(struct i3c_target_config *config, uin
 
 static int i3c_target_mq_stop_cb(struct i3c_target_config *config)
 {
+	struct i3c_target_mqueue_data *data =
+		CONTAINER_OF(config, struct i3c_target_mqueue_data, target_config);
+
+	/* Signal that a message is available for reading */
+	k_sem_give(&data->msg_avail_sem);
+
 	return 0;
 }
 
@@ -134,6 +198,9 @@ static const struct i3c_target_callbacks i3c_target_mq_callbacks = {
 	.read_requested_cb = i3c_target_mq_read_requested_cb,
 	.read_processed_cb = i3c_target_mq_read_processed_cb,
 	.stop_cb = i3c_target_mq_stop_cb,
+#ifdef CONFIG_I3C_TARGET_BUFFER_MODE
+	.buf_write_received_cb = i3c_target_mq_buf_write_received_cb,
+#endif
 };
 
 static int i3c_target_mqueue_register(const struct device *dev)
@@ -162,6 +229,9 @@ static int i3c_target_mqueue_register(const struct device *dev)
 	data->in = 0;
 	data->msg_curr = &data->msg_queue[data->in];
 	data->target_config.callbacks = &i3c_target_mq_callbacks;
+
+	/* Initialize semaphore for message available notification */
+	k_sem_init(&data->msg_avail_sem, 0, config->num_of_msgs);
 
 	LOG_INF("register %s to I3C controller %s", dev->name, config->controller->name);
 
