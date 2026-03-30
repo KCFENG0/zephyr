@@ -406,7 +406,8 @@ static int qspi_npcm_fiu_uma_transceive(const struct device *dev, struct npcm_tr
 
 	if ((flags & NPCM_TRANSCEIVE_ACCESS_READ) != 0) {
 		if (cfg->rx_buf == NULL) {
-			return -EINVAL;
+			ret = -EINVAL;
+			goto release_and_exit;
 		}
 		for (size_t i = 0; i < cfg->rx_count; i++) {
 			qspi_npcm_uma_read_byte(dev, cfg->rx_buf + i);
