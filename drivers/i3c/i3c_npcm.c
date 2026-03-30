@@ -921,7 +921,7 @@ static int npcm_i3c_pdma_configure(const struct device *dev, enum i3c_config_typ
 	return 0;
 }
 
-static uint8_t npcm_i3c_pdma_get_index(const struct device *dev, bool is_rx)
+static int npcm_i3c_pdma_get_index(const struct device *dev, bool is_rx)
 {
 	struct pdma_dsct_reg *dsct_inst = NULL;
 	uint8_t dsct_idx;
@@ -964,8 +964,12 @@ static int npcm_i3c_controller_dma_off(const struct device *dev, bool is_rx)
 {
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 	struct npcm_i3c_data *const data = dev->data;
-	uint8_t dsct_idx = npcm_i3c_pdma_get_index(dev, is_rx);
+	int dsct_idx = npcm_i3c_pdma_get_index(dev, is_rx);
 	int ret = 0;
+
+	if (dsct_idx < 0) {
+		return dsct_idx;
+	}
 
 	/* Only disable set DMA */
 	if (!(data->dma_triggered & BIT(dsct_idx))) {
@@ -1021,8 +1025,12 @@ static int npcm_i3c_target_dma_off(const struct device *dev, bool is_rx)
 {
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 	struct npcm_i3c_data *const data = dev->data;
-	uint8_t dsct_idx = npcm_i3c_pdma_get_index(dev, is_rx);
+	int dsct_idx = npcm_i3c_pdma_get_index(dev, is_rx);
 	int ret = 0;
+
+	if (dsct_idx < 0) {
+		return dsct_idx;
+	}
 
 	/* Only disable set DMA */
 	if (!(data->dma_triggered & BIT(dsct_idx))) {
