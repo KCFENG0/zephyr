@@ -73,7 +73,7 @@ struct npcm_i3c_data {
 	struct k_sem target_lock_sem;       /* Semaphore used for i3c target */
 	struct k_sem target_event_lock_sem; /* Semaphore used for i3c target ibi_raise() */
 
-	enum npcm_i3c_oper_state oper_state; /* Operation state */
+	volatile enum npcm_i3c_oper_state oper_state; /* Operation state */
 
 	/* Hardware capabilities read from CAPABILITIES register */
 	uint8_t hw_fifo_rx;         /* RX FIFO size in entries (2/4/8/16) */
@@ -86,8 +86,9 @@ struct npcm_i3c_data {
 	uint8_t dma_rx_buf[2][4096]; /* Double-buffered RX: one for DMA, one for processing */
 	uint8_t dma_rx_buf_idx;      /* Index of buffer currently used by DMA (0 or 1) */
 	uint16_t dma_rx_len;
-	uint16_t dma_triggered; /* The bit n is set to 1 if the n-th DMA channel is triggered */
-	bool tx_valid;          /* Tx has valid data */
+	volatile uint16_t
+		dma_triggered;  /* The bit n is set to 1 if the n-th DMA channel is triggered */
+	volatile bool tx_valid; /* Tx has valid data */
 	struct k_sem tx_complete_sem; /* Semaphore: wait for master private read after IBI */
 #else
 	uint8_t rx_buf[4096];

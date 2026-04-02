@@ -437,8 +437,9 @@ static int npcm_i3c_recover_bus(const struct device *dev)
 		npcm_i3c_request_emit_stop(i3c_inst);
 	};
 
-	/* Exhaust all target initiated IBI */
-	while (i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_SLVSTART) {
+	/* Exhaust all target initiated IBI (bounded to prevent infinite loop) */
+	for (int ibi_tries = 0; ibi_tries < 10 && (i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_SLVSTART);
+	     ibi_tries++) {
 		/* Tell the controller to perform auto IBI. */
 		npcm_i3c_request_auto_ibi(i3c_inst);
 
@@ -495,7 +496,7 @@ static inline void npcm_i3c_xfer_reset(struct i3c_reg *i3c_inst)
  * return  Number of bytes written, or negative if error.
  *
  */
-static int npcm_i3c_xfer_write_fifo(struct i3c_reg *i3c_inst, uint8_t *buf, uint8_t buf_sz,
+static int npcm_i3c_xfer_write_fifo(struct i3c_reg *i3c_inst, uint8_t *buf, size_t buf_sz,
 				    bool no_ending)
 {
 	int offset = 0;
@@ -535,7 +536,7 @@ static int npcm_i3c_xfer_write_fifo(struct i3c_reg *i3c_inst, uint8_t *buf, uint
  * return  Number of bytes read, or negative if error.
  *
  */
-static int npcm_i3c_xfer_read_fifo(struct i3c_reg *i3c_inst, uint8_t *buf, uint8_t rd_sz)
+static int npcm_i3c_xfer_read_fifo(struct i3c_reg *i3c_inst, uint8_t *buf, size_t rd_sz)
 {
 	bool is_done = false;
 	int offset = 0;
@@ -705,9 +706,9 @@ static int npcm_i3c_pdma_stop(const struct device *dev, bool is_rx)
 
 	key = irq_lock();
 
-	/* Clear transfer done flag */
+	/* Clear transfer done flag (W1C) */
 	if (pdma_inst->PDMA_TDSTS & BIT(dsct_idx)) {
-		pdma_inst->PDMA_TDSTS |= BIT(dsct_idx);
+		pdma_inst->PDMA_TDSTS = BIT(dsct_idx);
 	}
 
 	pdma_inst->PDMA_CHCTL &= ~BIT(dsct_idx);
@@ -743,9 +744,9 @@ static int npcm_i3c_pdma_start(const struct device *dev, bool is_rx)
 
 	key = irq_lock();
 
-	/* Clear transfer done flag */
+	/* Clear transfer done flag (W1C) */
 	if (pdma_inst->PDMA_TDSTS & BIT(dsct_idx)) {
-		pdma_inst->PDMA_TDSTS |= BIT(dsct_idx);
+		pdma_inst->PDMA_TDSTS = BIT(dsct_idx);
 	}
 
 	/* Start PDMA */
@@ -1639,13 +1640,13 @@ static int npcm_i3c_xfer_target_write_fifo(struct i3c_reg *i3c_inst, uint8_t *bu
  * return  Number of bytes read, or negative if error.
  *
  */
-static int npcm_i3c_xfer_target_read_fifo(struct i3c_reg *i3c_inst, uint8_t *buf)
+static int npcm_i3c_xfer_target_read_fifo(struct i3c_reg *i3c_inst, uint8_t *buf, size_t buf_sz)
 {
 	bool is_done = false;
 	int offset = 0;
 
 	while (is_done == false) {
-		/* Check tarnsaction is done */
+		/* Check transaction is done */
 		if ((i3c_inst->STATUS & NPCM_I3C_STATUS_STOP) ||
 		    (i3c_inst->STATUS & NPCM_I3C_STATUS_START)) {
 			is_done = true;
@@ -1675,7 +1676,8 @@ static int npcm_i3c_xfer_target_read_fifo(struct i3c_reg *i3c_inst, uint8_t *buf
 			 * Read in a tight loop to reduce chance of losing
 			 * FIFO data when the i3c speed is high.
 			 */
-			while (NPCM_GET_REG_FIELD(i3c_inst->DATACTRL, NPCM_I3C_DATACTRL_RXCOUNT)) {
+			while (offset < buf_sz &&
+			       NPCM_GET_REG_FIELD(i3c_inst->DATACTRL, NPCM_I3C_DATACTRL_RXCOUNT)) {
 				buf[offset++] = (uint8_t)i3c_inst->RDATAB;
 			}
 		}
@@ -2060,7 +2062,7 @@ static int npcm_i3c_do_daa(const struct device *dev)
 				LOG_DBG("Free static address 0x%02x", target->static_addr);
 
 				i3c_addr_slots_mark_free(&data->common.attached_dev.addr_slots,
-							 dyn_addr);
+							 target->static_addr);
 			}
 
 			/* Emit process DAA again to send the address to the device */
@@ -2759,7 +2761,8 @@ static inline int npcm_i3c_target_MATCHED_handler(const struct device *dev)
 			}
 
 			/* Fill write data to rx buffer */
-			ret = npcm_i3c_xfer_target_read_fifo(i3c_inst, data->rx_buf);
+			ret = npcm_i3c_xfer_target_read_fifo(i3c_inst, data->rx_buf,
+							     sizeof(data->rx_buf));
 			if (ret < 0) {
 				LOG_ERR("Read rx FIFO failed");
 			} else {
@@ -3503,6 +3506,7 @@ static int npcm_i3c_configure(const struct device *dev, enum i3c_config_type typ
 		}
 
 		npcm_i3c_target_init(dev);
+		return 0;
 	}
 
 	LOG_ERR("Not supported mode %d", type);
