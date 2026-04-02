@@ -8,6 +8,7 @@
 #define DT_DRV_COMPAT nuvoton_npcm_i3c
 
 #include <zephyr/drivers/clock_control.h>
+#include <zephyr/cache.h>
 #include <zephyr/drivers/i3c.h>
 #include <zephyr/drivers/pinctrl.h>
 #include "i3c_npcm.h"
@@ -916,6 +917,9 @@ static int npcm_i3c_pdma_configure(const struct device *dev, enum i3c_config_typ
 		}
 	}
 
+	/* Flush scatter-gather descriptors so DMA engine reads current values */
+	sys_cache_data_flush_range((void *)data->dsct_sg, sizeof(data->dsct_sg));
+
 	irq_unlock(key);
 
 	return 0;
@@ -1097,6 +1101,14 @@ static int npcm_i3c_target_do_request_dma(const struct device *dev, bool is_rx, 
 		goto err_out;
 	}
 
+	if (is_rx) {
+		/* Invalidate RX buffer before DMA writes into it */
+		sys_cache_data_invd_range((void *)buf, buf_sz);
+	} else {
+		/* Flush TX buffer so DMA reads current data from RAM */
+		sys_cache_data_flush_range((void *)buf, buf_sz);
+	}
+
 	/* Enable PDMA */
 	if (npcm_i3c_target_dma_on(dev, is_rx) < 0) {
 		ret = -EIO;
@@ -1178,6 +1190,10 @@ static int npcm_i3c_target_prearm_rx_dma(const struct device *dev)
 	dsct_inst->SA = (uint32_t)&i3c_inst->RDATAB;
 	dsct_inst->DA = (uint32_t)&data->dma_rx_buf[data->dma_rx_buf_idx][0];
 
+	/* Invalidate RX buffer before DMA writes into it */
+	sys_cache_data_invd_range((void *)data->dma_rx_buf[data->dma_rx_buf_idx],
+				  I3C_RX_PREARM_SIZE);
+
 	/* Enable DMAFB */
 	NPCM_SET_REG_FIELD(i3c_inst->DMACTRL, NPCM_I3C_DMACTRL_DMAFB,
 			   NPCM_I3C_DMACTRL_DMAFB_EN_MANUAL);
@@ -1241,6 +1257,9 @@ out_read_fifo_dma:
 	}
 
 	if (ret == 0 && (buf && buf_sz)) {
+		/* Invalidate RX buffer so CPU reads DMA-written data from RAM */
+		sys_cache_data_invd_range((void *)buf, buf_sz);
+
 		ret = npcm_i3c_pdma_remain_count(dev, true);
 		if (ret >= 0) {
 			ret = buf_sz - ret;
@@ -1268,6 +1287,9 @@ static int npcm_i3c_ctlr_xfer_write_fifo_dma(const struct device *dev, uint8_t a
 	if (ret) {
 		return ret;
 	}
+
+	/* Flush TX buffer so DMA reads current data from RAM */
+	sys_cache_data_flush_range((void *)buf, buf_sz);
 
 	/*
 	 * For write operation, we enable dma after emit start. Disable all interrupts
@@ -1432,6 +1454,10 @@ static int npcm_i3c_target_xfer_end_handle_dma(const struct device *dev,
 
 		/* Save current buffer index - this buffer has the received data */
 		uint8_t proc_buf_idx = data->dma_rx_buf_idx;
+
+		/* Invalidate the DMA RX buffer so CPU sees data written by DMA */
+		sys_cache_data_invd_range((void *)data->dma_rx_buf[proc_buf_idx],
+					  I3C_RX_PREARM_SIZE);
 
 		size_t dma_received = 0;
 
