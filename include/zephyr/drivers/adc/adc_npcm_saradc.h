@@ -140,6 +140,20 @@ int adc_npcm_v2t_set_channels(const struct device *dev, uint32_t channel_mask);
  */
 uint32_t adc_npcm_v2t_get_channels(const struct device *dev);
 
+/**
+ * @brief Start V2T (Voltage-to-Temperature) conversion
+ *
+ * Starts the V2T conversion sequence for the channels previously configured
+ * via adc_npcm_v2t_set_channels(). Sets up the ADC in repetitive scan mode
+ * and enables the V2T temperature conversion interrupt.
+ *
+ * @param dev Pointer to the ADC device
+ *
+ * @retval 0 on success
+ * @retval negative error code on failure
+ */
+int adc_npcm_v2t_start(const struct device *dev);
+
 #endif /* CONFIG_ADC_V2T_NPCX */
 
 /**

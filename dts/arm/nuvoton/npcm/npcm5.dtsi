@@ -133,10 +133,12 @@
 
 		saradc: saradc@400d1000 {
 			compatible = "nuvoton,npcm-sar-adc";
-			reg = <0x400d1000 0x1ca>;
+			/* 0x1C8: last reg ADCTD7-6PO at offset 0x1C6 (4 pairs for 8 temp channels) */
+			reg = <0x400d1000 0x1cc>;
 			interrupts = <21 3>;
 			clocks = <&pcc NPCM_CLOCK_ADC>;
-			channel-count = <16>;
+			/* ADCCS supports CC0-CC13 only (14 channels per datasheet) */
+			channel-count = <14>;
 			threshold-count = <3>;
 			vref-mv = <3300>;
 			resolution-bits = <10>;

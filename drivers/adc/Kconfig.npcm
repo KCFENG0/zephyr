@@ -20,3 +20,50 @@ config ADC_NPCM_SARADC
           This option enables the SARADC driver for NPCM family of
           processors.
           Say y if you wish to use SARADC channels on NPCM MCU.
+
+if ADC_NPCM_SARADC
+
+config ADC_V2T_NPCX
+        bool "NPCM5 SARADC voltage-to-temperature conversion"
+        default n
+        help
+          Enable the voltage-to-temperature (V2T) conversion feature of
+          the NPCM5 SAR ADC. Allows reading thermistor temperature via
+          TCHNnDAT registers (CC0-CC7 channels only).
+
+config ADC_CMP_NPCX
+        bool "NPCM5 SARADC threshold comparator / event detection"
+        default n
+        help
+          Enable threshold event detection using the three independent
+          threshold detectors (THRCTLm, THR_DCTLm). Provides single and
+          dual hysteresis threshold modes with optional k_work callback.
+
+if ADC_CMP_NPCX
+
+config ADC_CMP_NPCX_WORKQUEUE
+        bool "NPCM5 SARADC threshold detection dedicated work queue"
+        help
+          Use a dedicated work queue (instead of the system work queue)
+          for threshold event callback delivery.
+
+if ADC_CMP_NPCX_WORKQUEUE
+
+config ADC_CMP_NPCX_WORKQUEUE_PRIORITY
+        int "NPCM5 SARADC threshold work queue priority"
+        default SYSTEM_WORKQUEUE_PRIORITY
+        help
+          Priority for the dedicated ADC threshold detection work queue.
+
+config ADC_CMP_NPCX_WORKQUEUE_STACK_SIZE
+        int "NPCM5 SARADC threshold work queue stack size"
+        default 768
+        help
+          Stack size in bytes for the dedicated ADC threshold detection
+          work queue.
+
+endif # ADC_CMP_NPCX_WORKQUEUE
+
+endif # ADC_CMP_NPCX
+
+endif # ADC_NPCM_SARADC
