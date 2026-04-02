@@ -75,6 +75,13 @@ struct npcm_i3c_data {
 
 	enum npcm_i3c_oper_state oper_state; /* Operation state */
 
+	/* Hardware capabilities read from CAPABILITIES register */
+	uint8_t hw_fifo_rx;         /* RX FIFO size in entries (2/4/8/16) */
+	uint8_t hw_fifo_tx;         /* TX FIFO size in entries (2/4/8/16) */
+	uint8_t hw_ibi_max_payload; /* Max IBI payload bytes from hardware */
+	bool hw_has_dma;            /* Hardware supports DMA */
+	bool hw_has_hdr;            /* Hardware supports HDR-DDR */
+
 #ifdef CONFIG_I3C_NPCM_DMA
 	uint8_t dma_rx_buf[2][4096]; /* Double-buffered RX: one for DMA, one for processing */
 	uint8_t dma_rx_buf_idx;      /* Index of buffer currently used by DMA (0 or 1) */
@@ -125,5 +132,11 @@ uint64_t npcm_i3c_get_target_pid(const struct device *dev);
  * Call npcm_i3c_switch_role(..., true) afterwards to write it to hardware.
  */
 void npcm_i3c_set_target_pid(const struct device *dev, uint64_t pid);
+
+/* Enable or disable NACK-all mode for target.
+ * When enabled, the target NACKs all incoming transactions.
+ * Must only be called when the bus is in the stopped state.
+ */
+int npcm_i3c_target_set_nack(const struct device *dev, bool nack);
 
 #endif /* ZEPHYR_DRIVERS_I3C_I3C_NPCM_H_ */

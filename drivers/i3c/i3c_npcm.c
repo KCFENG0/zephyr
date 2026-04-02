@@ -26,13 +26,11 @@ LOG_MODULE_REGISTER(npcm_i3c, CONFIG_I3C_LOG_LEVEL);
 #define I3C_BUS_TLOW_PP_MIN_NS   24  /* T_LOW period in push-pull mode */
 #define I3C_BUS_TLOW_OD_MIN_NS   200 /* T_LOW period in open-drain mode */
 #define I3C_TGT_WR_REQ_WAIT_US   10  /* I3C target write request PDMA completion after stop */
-#define I3C_FIFO_SIZE            16
 #define I3C_RX_PREARM_SIZE       256 /* Pre-arm RX DMA buffer, matches v2.6 MAX_READ_LEN */
 #define PPBAUD_DIV_MAX           0xF
 #define I2CBAUD_DIV_MAX          0xF
 #define DAA_TGT_INFO_SZ          0x8         /* 8 bytes = PID(6) + BCR(1) + DCR(1) */
 #define I3C_TRANS_TIMEOUT_MS     K_MSEC(100) /*  Default maximum allow time for an I3C transfer */
-#define I3C_IBI_MAX_PAYLOAD_SIZE 32
 #define I3C_STATUS_CLR_MASK                                                                        \
 	(NPCM_I3C_MSTATUS_SLVSTART | NPCM_I3C_MSTATUS_MCTRLDONE | NPCM_I3C_MSTATUS_COMPLETE |      \
 	 NPCM_I3C_MSTATUS_IBIWON | NPCM_I3C_MSTATUS_NOWCNTLR)
@@ -642,11 +640,18 @@ static int npcm_i3c_pdma_wait_completion(const struct device *dev, bool is_rx)
 		return -EINVAL;
 	}
 
-	/* Check dma transfer done */
-	if (WAIT_FOR(NPCM_IS_BIT_SET(pdma_inst->PDMA_TDSTS, dsct_idx), I3C_CHK_TIMEOUT_US, NULL) ==
-	    false) {
+	/* Check dma transfer done or aborted */
+	if (WAIT_FOR((pdma_inst->PDMA_TDSTS | pdma_inst->PDMA_ABTSTS) & BIT(dsct_idx),
+		     I3C_CHK_TIMEOUT_US, NULL) == false) {
 		LOG_ERR("Check dma transfer done timed out");
 		return -ETIMEDOUT;
+	}
+
+	/* Check if transfer was aborted by target */
+	if (pdma_inst->PDMA_ABTSTS & BIT(dsct_idx)) {
+		LOG_ERR("PDMA ch%d target abort", dsct_idx);
+		pdma_inst->PDMA_ABTSTS = BIT(dsct_idx); /* W1C */
+		return -EIO;
 	}
 
 	return 0;
@@ -821,8 +826,8 @@ static int npcm_i3c_pdma_configure(const struct device *dev, enum i3c_config_typ
 	dsct_inst->CTL = NPCM_PDMA_DSCT_CTL_OPMODE_SGM;
 	dsct_inst->SA = 0x0;
 	dsct_inst->DA = 0x0;
-	dsct_inst->NEXT = (is_rx) ? ((uint32_t)&data->dsct_sg[0]) & 0xFFFF
-				  : ((uint32_t)&data->dsct_sg[2]) & 0xFFFF;
+	dsct_inst->NEXT = (is_rx) ? ((uint32_t)&data->dsct_sg[0]) & 0xFFFC
+				  : ((uint32_t)&data->dsct_sg[2]) & 0xFFFC;
 
 	/* Configure scatter-gather table base MSB address. */
 	pdma_inst->PDMA_SCATBA = (is_rx) ? ((uint32_t)&data->dsct_sg[0]) & 0xFFFF0000
@@ -1587,7 +1592,7 @@ static int npcm_i3c_target_xfer_end_handle(const struct device *dev,
  *
  */
 static int npcm_i3c_xfer_target_write_fifo(struct i3c_reg *i3c_inst, uint8_t *buf, uint8_t buf_sz,
-					   bool no_ending)
+					   bool no_ending, uint8_t fifo_size)
 {
 	int remaining;
 	int offset;
@@ -1598,12 +1603,12 @@ static int npcm_i3c_xfer_target_write_fifo(struct i3c_reg *i3c_inst, uint8_t *bu
 	for (offset = 0, remaining = buf_sz - 1; remaining > 0;
 	     offset += tx_remain, remaining -= tx_remain) {
 		if (WAIT_FOR(NPCM_GET_REG_FIELD(i3c_inst->DATACTRL, NPCM_I3C_DATACTRL_TXCOUNT) <
-				     I3C_FIFO_SIZE,
+				     fifo_size,
 			     I3C_CHK_TIMEOUT_US, NULL) == false) {
 			return -ETIMEDOUT;
 		}
 
-		tx_remain = I3C_FIFO_SIZE -
+		tx_remain = fifo_size -
 			    NPCM_GET_REG_FIELD(i3c_inst->DATACTRL, NPCM_I3C_DATACTRL_TXCOUNT);
 		tx_remain = (tx_remain > remaining) ? remaining : tx_remain;
 
@@ -1892,6 +1897,12 @@ static int npcm_i3c_transfer(const struct device *dev, struct i3c_device_desc *t
 	/* Emit stop if error occurs or stop flag not in the msg */
 	if ((ret != 0) || (is_xfer_done == false)) {
 		npcm_i3c_request_emit_stop(i3c_inst);
+	}
+
+	/* If SCL timeout occurred, attempt full bus recovery */
+	if (i3c_inst->MERRWARN & NPCM_I3C_MERRWARN_TIMEOUT) {
+		LOG_WRN("SCL timeout detected, recovering bus");
+		npcm_i3c_recover_bus(dev);
 	}
 
 	npcm_i3c_errwarn_clear_all(i3c_inst);
@@ -2580,8 +2591,9 @@ static int npcm_i3c_target_ibi_raise(const struct device *dev, struct i3c_ibi *r
 		}
 
 		/* The payload length is too long */
-		if (request->payload_len > I3C_IBI_MAX_PAYLOAD_SIZE) {
-			LOG_ERR("IBI payload too long, use dma instead");
+		if (request->payload_len > data->hw_ibi_max_payload) {
+			LOG_ERR("IBI payload too long (%u > %u), use dma instead",
+				request->payload_len, data->hw_ibi_max_payload);
 			return -EINVAL;
 		}
 
@@ -2727,7 +2739,8 @@ static inline int npcm_i3c_target_MATCHED_handler(const struct device *dev)
 			/* Fill tx FIFO */
 			if (data->tx_len) {
 				ret = npcm_i3c_xfer_target_write_fifo(i3c_inst, data->tx_buf,
-								      data->tx_len, false);
+								      data->tx_len, false,
+								      data->hw_fifo_tx);
 				if (ret < 0) {
 					LOG_ERR("Write tx FIFO failed");
 				}
@@ -3212,6 +3225,34 @@ static int npcm_i3c_freq_init(const struct device *dev)
 	return 0;
 }
 
+/* FIFO size encoding in CAPABILITIES register: 0=2, 1=4, 2=8, 3=16 */
+static const uint8_t fifo_size_map[] = {2, 4, 8, 16};
+
+static void npcm_i3c_read_capabilities(const struct device *dev)
+{
+	struct npcm_i3c_data *data = dev->data;
+	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
+	uint32_t caps = i3c_inst->CAPABILITIES;
+	uint8_t fiforx_idx, fifotx_idx;
+
+	data->hw_has_dma = !!(caps & NPCM_I3C_CAPABILITIES_DMA);
+	data->hw_has_hdr = !!(caps & NPCM_I3C_CAPABILITIES_HDRSUPP);
+
+	fiforx_idx = NPCM_GET_REG_FIELD(caps, NPCM_I3C_CAPABILITIES_FIFORX);
+	fifotx_idx = NPCM_GET_REG_FIELD(caps, NPCM_I3C_CAPABILITIES_FIFOTX);
+	data->hw_fifo_rx = fifo_size_map[fiforx_idx & 0x3];
+	data->hw_fifo_tx = fifo_size_map[fifotx_idx & 0x3];
+
+	/*
+	 * IBI_MR_HJ[20:16] encodes IBI/MR/HJ capability bits.
+	 * Bit 17: IBI has payload. Max payload is limited by FIFO RX size.
+	 */
+	data->hw_ibi_max_payload = data->hw_fifo_rx;
+
+	LOG_DBG("CAPABILITIES: 0x%08x (FIFO RX=%u TX=%u DMA=%d HDR=%d)", caps, data->hw_fifo_rx,
+		data->hw_fifo_tx, data->hw_has_dma, data->hw_has_hdr);
+}
+
 static int npcm_i3c_controller_init(const struct device *dev, uint8_t mode)
 {
 	const struct npcm_i3c_config *config = dev->config;
@@ -3322,6 +3363,11 @@ static int npcm_i3c_target_init(const struct device *dev)
 	LOG_DBG("max read len: %d", config_target->max_read_len);
 	LOG_DBG("max write len: %d", config_target->max_write_len);
 
+	/* Set timing control clock for GETXTIME CCC response */
+	NPCM_SET_REG_FIELD(i3c_inst->TCCLOCK, NPCM_I3C_TCCLOCK_FREQ,
+			   DIV_ROUND_UP(i3c_freq_rate, MHZ(1)) * 2);
+	NPCM_SET_REG_FIELD(i3c_inst->TCCLOCK, NPCM_I3C_TCCLOCK_ACCURACY, 2); /* 1% */
+
 	/* Ignore DA and detect all START and STOP */
 	i3c_inst->CONFIG &= ~NPCM_I3C_CONFIG_MATCHSS;
 
@@ -3346,6 +3392,9 @@ static void npcm_i3c_dev_init(const struct device *dev)
 
 	/* Reset I3C module */
 	npcm_i3c_reset_module(dev);
+
+	/* Read hardware capabilities after reset */
+	npcm_i3c_read_capabilities(dev);
 
 	if (I3C_BCR_DEVICE_ROLE(config_target->bcr) == I3C_BCR_DEVICE_ROLE_I3C_CONTROLLER_CAPABLE) {
 		if (config_cntlr->is_secondary) {
@@ -3404,6 +3453,25 @@ void npcm_i3c_set_target_pid(const struct device *dev, uint64_t pid)
 	data->config_target.pid = pid & 0x0000FFFFFFFFFFFFULL;
 	LOG_DBG("%s: target pid set to 0x%012llx", dev->name,
 		(unsigned long long)data->config_target.pid);
+}
+
+int npcm_i3c_target_set_nack(const struct device *dev, bool nack)
+{
+	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
+
+	/* Spec: NACK bit must only be updated when bus is in stopped state */
+	if (i3c_inst->STATUS & NPCM_I3C_STATUS_STNOTSTOP) {
+		LOG_ERR("Cannot change NACK while bus is not stopped");
+		return -EBUSY;
+	}
+
+	if (nack) {
+		i3c_inst->CONFIG |= NPCM_I3C_CONFIG_NACK;
+	} else {
+		i3c_inst->CONFIG &= ~NPCM_I3C_CONFIG_NACK;
+	}
+
+	return 0;
 }
 
 static int npcm_i3c_configure(const struct device *dev, enum i3c_config_type type, void *config)
@@ -3629,6 +3697,12 @@ out_xfer_i2c_stop_unlock:
 		npcm_i3c_request_emit_stop(i3c_inst);
 	}
 
+	/* If SCL timeout occurred, attempt full bus recovery */
+	if (i3c_inst->MERRWARN & NPCM_I3C_MERRWARN_TIMEOUT) {
+		LOG_WRN("SCL timeout detected, recovering bus");
+		npcm_i3c_recover_bus(dev);
+	}
+
 	npcm_i3c_errwarn_clear_all(i3c_inst);
 	npcm_i3c_status_clear_all(i3c_inst);
 
@@ -3685,16 +3759,17 @@ static int npcm_i3c_target_tx_write(const struct device *dev, uint8_t *buf, uint
 	data->tx_buf = buf;
 
 	/* Check buffer length */
-	if (len > I3C_FIFO_SIZE) {
+	if (len > data->hw_fifo_tx) {
 		no_ending = true;
-		data->tx_len = I3C_FIFO_SIZE;
+		data->tx_len = data->hw_fifo_tx;
 	} else {
 		no_ending = false;
 		data->tx_len = len;
 	}
 
 	/* Write tx fifo */
-	ret = npcm_i3c_xfer_target_write_fifo(i3c_inst, data->tx_buf, data->tx_len, no_ending);
+	ret = npcm_i3c_xfer_target_write_fifo(i3c_inst, data->tx_buf, data->tx_len, no_ending,
+					      data->hw_fifo_tx);
 	if (ret < 0) {
 		LOG_ERR("do xfer fail");
 	} else if (len > ret) {
