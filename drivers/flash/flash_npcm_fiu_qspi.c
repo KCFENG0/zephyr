@@ -20,9 +20,23 @@ LOG_MODULE_REGISTER(npcm_fiu_qspi, CONFIG_FLASH_LOG_LEVEL);
 
 #define NPCM_FIU_CHK_TIMEOUT_US	10000
 
-#define NPCM_FIU_PVT_CS		NPCM_QSPI_SW_CS0
-#define NPCM_FIU_SHD_CS		NPCM_QSPI_SW_CS1
-#define NPCM_FIU_BACK_CS	NPCM_QSPI_SW_CS2
+/*
+ * NPCM500 physical CS to FIU register-role mapping:
+ *
+ * FIU0:
+ *   SW_CS1 (SHD flash)  -> SHD  role: DEV_NUM=1 in UMA_CTS, SHD_4B (bit5), RD_CMD_SHD
+ *   SW_CS2 (PVT flash)  -> BACK role: DEV_NUM_BACK=1 in UMA_ECTS, BACK_4B (bit6), RD_CMD_BACK
+ * FIU1:
+ *   SW_CS1 (HyperRAM)   -> SHD  role: DEV_NUM=1 in UMA_CTS, SHD_4B (bit5), RD_CMD_SHD
+ * FIU2:
+ *   SW_CS0 (MCP flash)  -> PVT  role: DEV_NUM=0 in UMA_CTS, PVT_4B (bit4), RD_CMD_PVT
+ *
+ * SW_CS0 was unused on NPCM400; on NPCM500 the private flash uses SW_CS2 in the
+ * BACK register role. The DTS assigns qspi-flags accordingly.
+ */
+#define NPCM_FIU_SHD_CS		NPCM_QSPI_SW_CS1  /* SHD role: DEV_NUM=1 */
+#define NPCM_FIU_BACK_CS	NPCM_QSPI_SW_CS2  /* BACK role: DEV_NUM_BACK=1 (PVT flash on NPCM500) */
+#define NPCM_FIU_PVT_CS		NPCM_QSPI_SW_CS0  /* PVT role: DEV_NUM=0 (MCP flash on FIU2) */
 
 /* Driver convenience defines */
 #define HAL_INSTANCE(dev) \
@@ -56,7 +70,8 @@ static const struct npcm_scfg_config npcm_scfg_cfg = {
 #define NPCM_FIU_FLASH_WP       BIT(0)
 #define NPCM_SPIM_FLASH_WP      BIT(1)
 #define NPCM_DEV_CTL3_WP_INT_FL 0
-#define NPCM_DEV_CTL3_WP_GPIO55 1
+/* NPCM500: DEV_CTL3[1] is renamed GPWRP vs NPCM400; bit position is unchanged */
+#define NPCM_DEV_CTL3_WP_GPIO55 1 /* GPWRP on NPCM500 (GPIO55 write-protect) */
 #define NPCM_DEV_CTL3_WP_GPIO76 2
 static int npcm_pinctrl_flash_write_protect_set(int interface)
 {
@@ -159,7 +174,14 @@ static inline void qspi_npcm_config_uma_mode(const struct device *dev,
 {
 	struct fiu_reg *const inst = HAL_INSTANCE(dev);
 
-	/* back flash select, otherwise share or pvt */
+	/*
+	 * NPCM500 UMA chip-select selection:
+	 *   SW_CS2 (BACK role, PVT flash on FIU0): set DEV_NUM_BACK in UMA_ECTS.
+	 *     DEV_NUM in UMA_CTS is ignored when DEV_NUM_BACK=1.
+	 *   SW_CS1 (SHD role): clear DEV_NUM_BACK, set DEV_NUM=1 in UMA_CTS
+	 *     (handled in write/read_byte via UMA_FLD_SHD_SL).
+	 *   SW_CS0 (PVT role, MCP flash on FIU2): clear DEV_NUM_BACK, DEV_NUM=0.
+	 */
 	if (qspi_cfg->flags & NPCM_FIU_BACK_CS) {
 		inst->UMA_ECTS |= BIT(NPCM_UMA_ECTS_DEV_NUM_BACK);
 	} else {
@@ -248,15 +270,26 @@ static inline void qspi_npcm_config_dra_4byte_mode(const struct device *dev,
 	struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
 	struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
 	uint8_t addr_4b_en;
-    bool flash_4b_en_status;
+	bool flash_4b_en_status;
 
+	/*
+	 * NPCM500 4B_EN register bit mapping (offset 0x3D):
+	 *   Bit 4: PVT_4B  - PVT role  (SW_CS0, MCP flash on FIU2)
+	 *   Bit 5: SHD_4B  - SHD role  (SW_CS1, SHD/HyperRAM)
+	 *   Bit 6: BACK_4B - BACK role (SW_CS2, PVT flash on FIU0)
+	 *
+	 * The SW_CS_MASK << 4 shift only produces the correct bit mapping when
+	 * SW_CS0->bit4, SW_CS1->bit5, SW_CS2->bit6, which matches the NPCM500
+	 * register layout exactly (SW_CS flags are BIT(0), BIT(1), BIT(2)).
+	 * This is preserved and documented here for clarity.
+	 */
 	addr_4b_en = (qspi_cfg->flags & NPCM_QSPI_SW_CS_MASK) << 4;
 
-    /* Read actual flash chip ADS status */
-    flash_4b_en_status = qspi_npcm_read_flash_4b_en_status(dev, qspi_cfg);
+	/* Read actual flash chip ADS (current address mode) status */
+	flash_4b_en_status = qspi_npcm_read_flash_4b_en_status(dev, qspi_cfg);
 
-    /* Configure hardware ADDR_4B_EN based on actual flash chip status */
-    if (flash_4b_en_status) {
+	/* Configure hardware ADDR_4B_EN based on actual flash chip state */
+	if (flash_4b_en_status) {
 		core_inst->ADDR_4B_EN |= addr_4b_en;
 		host_inst->ADDR_4B_EN |= addr_4b_en;
 	} else {
@@ -268,32 +301,34 @@ static inline void qspi_npcm_config_dra_4byte_mode(const struct device *dev,
 
 int flash_npcm_fiu_set_4b_mode(const struct device *dev, bool enable)
 {
-
 #if defined(CONFIG_FLASH_NPCM_FIU_SUPP_DRA_4B_ADDR)
-    struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
-    struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
-    struct npcm_qspi_data *qspi_data = dev->data;
-    const struct npcm_qspi_cfg *qspi_cfg = qspi_data->cur_cfg;
-    uint8_t addr_4b_en_mask;
+	struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
+	struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
+	struct npcm_qspi_data *qspi_data = dev->data;
+	const struct npcm_qspi_cfg *qspi_cfg = qspi_data->cur_cfg;
+	uint8_t addr_4b_en_mask;
 
-    if (qspi_cfg == NULL) {
-        return -EINVAL;
-    }
+	if (qspi_cfg == NULL) {
+		return -EINVAL;
+	}
 
-    addr_4b_en_mask = (qspi_cfg->flags & NPCM_QSPI_SW_CS_MASK) << 4;
+	/*
+	 * Bit mapping: SW_CS0->PVT_4B(bit4), SW_CS1->SHD_4B(bit5),
+	 *              SW_CS2->BACK_4B(bit6). The << 4 shift is correct for
+	 *              NPCM500 since SW_CS flags are BIT(0..2).
+	 */
+	addr_4b_en_mask = (qspi_cfg->flags & NPCM_QSPI_SW_CS_MASK) << 4;
 
-    /* Directly set or clear the ADDR_4B_EN bits */
-    if (enable) {
-        core_inst->ADDR_4B_EN |= addr_4b_en_mask;
-        host_inst->ADDR_4B_EN |= addr_4b_en_mask;
-    } else {
-        core_inst->ADDR_4B_EN &= ~addr_4b_en_mask;
-        host_inst->ADDR_4B_EN &= ~addr_4b_en_mask;
-    }
-#else
+	if (enable) {
+		core_inst->ADDR_4B_EN |= addr_4b_en_mask;
+		host_inst->ADDR_4B_EN |= addr_4b_en_mask;
+	} else {
+		core_inst->ADDR_4B_EN &= ~addr_4b_en_mask;
+		host_inst->ADDR_4B_EN &= ~addr_4b_en_mask;
+	}
 #endif /* CONFIG_FLASH_NPCM_FIU_SUPP_DRA_4B_ADDR */
 
-    return 0;
+	return 0;
 }
 
 static inline void qspi_npcm_config_dra_mode(const struct device *dev,
@@ -304,28 +339,29 @@ static inline void qspi_npcm_config_dra_mode(const struct device *dev,
 	uint8_t rd_mode, rd_burst = NPCM_BURST_CFG_R_BURST_16B;
 
 	switch (qspi_cfg->rd_mode) {
-		case NPCM_RD_MODE_NORMAL:
-			rd_mode = NPCM_SPI_FL_CFG_RD_MODE_NORMAL;
-			break;
-		case NPCM_RD_MODE_FAST:
-			rd_mode = NPCM_SPI_FL_CFG_RD_MODE_FAST;
-			break;
-		case NPCM_RD_MODE_FAST_DUAL:
-		case NPCM_RD_MODE_QUAD:
-			rd_mode = NPCM_SPI_FL_CFG_RD_MODE_FAST_DUAL;
-			break;
-                default:
-			LOG_ERR("un-support rd mode:%d", qspi_cfg->rd_mode);
-			return;
+	case NPCM_RD_MODE_NORMAL:
+		rd_mode = NPCM_SPI_FL_CFG_RD_MODE_NORMAL;
+		break;
+	case NPCM_RD_MODE_FAST:
+		rd_mode = NPCM_SPI_FL_CFG_RD_MODE_FAST;
+		break;
+	case NPCM_RD_MODE_FAST_DUAL:
+	case NPCM_RD_MODE_QUAD:
+		rd_mode = NPCM_SPI_FL_CFG_RD_MODE_FAST_DUAL;
+		break;
+	default:
+		LOG_ERR("unsupported rd mode: %d", qspi_cfg->rd_mode);
+		return;
 	}
 
-	/* Selects the SPI read access type of Direct Read Access mode,
-	 * for quad mode, need enable extra configuration.
+	/* Select SPI read access type for Direct Read Access (DRA) mode;
+	 * quad mode also requires RESP_CFG.QUAD_EN to be enabled below.
 	 */
 	SET_FIELD(core_inst->SPI_FL_CFG, NPCM_SPI_FL_CFG_RD_MODE, rd_mode);
 	SET_FIELD(host_inst->SPI_FL_CFG, NPCM_SPI_FL_CFG_RD_MODE, rd_mode);
 
 	if (qspi_cfg->rd_mode == NPCM_RD_MODE_QUAD) {
+		/* Quad-I/O (4-1-4): RESP_CFG.QUAD_EN enables quad data path */
 		core_inst->RESP_CFG |= BIT(NPCM_RESP_CFG_QUAD_EN);
 		host_inst->RESP_CFG |= BIT(NPCM_RESP_CFG_QUAD_EN);
 	} else {
@@ -333,11 +369,55 @@ static inline void qspi_npcm_config_dra_mode(const struct device *dev,
 		host_inst->RESP_CFG &= ~BIT(NPCM_RESP_CFG_QUAD_EN);
 	}
 
-	/* set read max burst 16 bytes */
+	/*
+	 * NPCM500 QPI (4-4-4) mode for HyperRAM (FIU1):
+	 * Per reference code fiu_dir_acc_quadrw(), Q_P_EN = 0xC1:
+	 *   bit7: CMD_QUAD_EN   - command phase quad mode
+	 *   bit6: ADDR_QUAD_EN  - address phase quad mode
+	 *   bit0: QUAD_P_EN     - data phase quad for UMA write
+	 *
+	 * Per spec §4.1.7, UMA_QUADREAD (bit4) controls quad mode for the
+	 * data phase of UMA read transactions.  The reference code omitted
+	 * it because it only exercised DRA mode (where SPI_FL_CFG.RD_MODE
+	 * + RESP_CFG.QUAD_EN govern the read data path instead).
+	 * We set bit4 here so UMA reads also work in QPI 4-4-4 mode.
+	 *
+	 * Result: Q_P_EN = 0xD1 (bits 7,6,4,0)
+	 */
+	if (qspi_cfg->flags & NPCM_QSPI_QPI_MODE) {
+		core_inst->Q_P_EN |= BIT(NPCM_Q_P_EN_CMD_QUAD_EN) |
+				     BIT(NPCM_Q_P_EN_ADDR_QUAD_EN) |
+				     BIT(NPCM_Q_P_EN_UMA_QUADREAD) |
+				     BIT(NPCM_Q_P_EN_QUAD_P_EN);
+		host_inst->Q_P_EN |= BIT(NPCM_Q_P_EN_CMD_QUAD_EN) |
+				     BIT(NPCM_Q_P_EN_ADDR_QUAD_EN) |
+				     BIT(NPCM_Q_P_EN_UMA_QUADREAD) |
+				     BIT(NPCM_Q_P_EN_QUAD_P_EN);
+		/*
+		 * Enable SPI direct write (BURST_CFG.SPI_WR_EN, bit7).
+		 * Per reference code: BURST_CFG = 0x83 (SPI_WR_EN | R_BURST=16B).
+		 * Without this bit, AMBA writes to the HyperRAM address space
+		 * (0x9000_0000) are silently dropped by the FIU.
+		 * Per spec §4.1.7 hint #5: "Set up BURST_CFG" for direct_wr.
+		 */
+		core_inst->BURST_CFG |= BIT(NPCM_BURST_CFG_SPI_WR_EN);
+		host_inst->BURST_CFG |= BIT(NPCM_BURST_CFG_SPI_WR_EN);
+	} else {
+		core_inst->Q_P_EN &= ~(BIT(NPCM_Q_P_EN_CMD_QUAD_EN) |
+				       BIT(NPCM_Q_P_EN_ADDR_QUAD_EN) |
+				       BIT(NPCM_Q_P_EN_UMA_QUADREAD) |
+				       BIT(NPCM_Q_P_EN_QUAD_P_EN));
+		host_inst->Q_P_EN &= ~(BIT(NPCM_Q_P_EN_CMD_QUAD_EN) |
+				       BIT(NPCM_Q_P_EN_ADDR_QUAD_EN) |
+				       BIT(NPCM_Q_P_EN_UMA_QUADREAD) |
+				       BIT(NPCM_Q_P_EN_QUAD_P_EN));
+	}
+
+	/* Set read burst to max 16 bytes */
 	SET_FIELD(core_inst->BURST_CFG, NPCM_BURST_CFG_R_BURST, rd_burst);
 	SET_FIELD(host_inst->BURST_CFG, NPCM_BURST_CFG_R_BURST, rd_burst);
 
-	/* Enable/Disable 4 byte address mode for Direct Read Access (DRA) */
+	/* Enable/Disable 4-byte address mode for Direct Read Access (DRA) */
 	qspi_npcm_config_dra_4byte_mode(dev, qspi_cfg);
 }
 

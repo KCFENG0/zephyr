@@ -808,7 +808,7 @@ struct fiu_reg {
 /* 0x026: CRC Control Register */
 #define NPCM_CRCCON_CALCEN			0
 #define NPCM_CRCCON_CKSMCRC			1
-#define NCPM_CRCCON_UMAENT			2
+#define NPCM_CRCCON_UMAENT			2
 
 
 /* 0x033: FIU Extended Configuration Register */
@@ -816,13 +816,13 @@ struct fiu_reg {
 
 /* 0x03C: Set command enable 4 bytes address mode */
 #define NPCM_SET_CMD_EN_PVT_CMD_EN		4
-#define NCPM_SET_CMD_EN_SHD_CMD_EN		5
-#define NCPM_SET_CMD_EN_BACK_CMD_EN		6
+#define NPCM_SET_CMD_EN_SHD_CMD_EN		5
+#define NPCM_SET_CMD_EN_BACK_CMD_EN		6
 
 /* 0x03D: 4 bytes address mode enable */
 #define NPCM_ADDR_4B_EN_PVT_4B			4
-#define NCPM_ADDR_4B_EN_SHD_4B			5
-#define NCPM_ADDR_4B_EN_BACK_4B			6
+#define NPCM_ADDR_4B_EN_SHD_4B			5
+#define NPCM_ADDR_4B_EN_BACK_4B			6
 
 /* 0x042: Master FIU status */
 #define NPCM_FIU_MSR_STS_RD_PEND_UMA		0
@@ -835,10 +835,21 @@ struct fiu_reg {
 #define NPCM_FIU_MSR_IE_CFG_MSTR_INACT_IE	2
 #define NPCM_FIU_MSR_IE_CFG_UMA_BLOCK		3
 
-/* 0x044: Quad program enable register */
-#define NPCM_Q_P_EN_QUAD_P_EN			0
+/* 0x044: Quad program enable register (NPCM500 extended)
+ * Bit 7: Cmd_quad_en  - command phase quad mode (QPI)
+ * Bit 6: Addr_quad_en - address phase quad mode (QPI)
+ * Bit 5: Reserved
+ * Bit 4: UMA_quadread - UMA read quad mode (QPI)
+ * Bit 3-1: Reserved
+ * Bit 0: Quad_P_EN   - data phase quad for UMA write
+ */
+#define NPCM_Q_P_EN_QUAD_P_EN			0 /* Quad data phase for UMA write */
+#define NPCM_Q_P_EN_UMA_QUADREAD		4 /* UMA quad read enable (QPI mode) */
+/* bit 5: Reserved */
+#define NPCM_Q_P_EN_ADDR_QUAD_EN		6 /* Address phase quad mode (QPI) */
+#define NPCM_Q_P_EN_CMD_QUAD_EN			7 /* Command phase quad mode (QPI) */
 
-/* 0x048: Extended data byte configurartion */
+/* 0x048: Extended data byte configuration */
 #define NPCM_EXT_DB_CFG_D_SIZE_DB		FIELD(0, 5)
 #define NPCM_EXT_DB_CFG_EXT_DB_EN		5
 
