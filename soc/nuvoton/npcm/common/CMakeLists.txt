@@ -19,14 +19,19 @@ if(NOT CONFIG_XIP)
   zephyr_linker_sources(DATA_SECTIONS rom_hooks.ld)
 endif()
 
-set(NPCM_BIN_NAME ${CONFIG_KERNEL_BIN_NAME}_signed.bin)
-set(NPCM_ELF_NAME ${CONFIG_KERNEL_BIN_NAME}.elf)
-string(TOUPPER "${SOC_NAME}" soc_name_upper)
+# NPCM4 still uses the legacy esiost booter header (${KERNEL_BIN_NAME}_signed.bin).
+# NPCM5 consumes the raw ${KERNEL_BIN_NAME} downstream and the application wraps
+# it in the Caliptra flash-image format, so no SoC-level signing is needed here.
+if(CONFIG_SOC_SERIES_NPCM4)
+  set(NPCM_BIN_NAME ${CONFIG_KERNEL_BIN_NAME}_signed.bin)
+  set(NPCM_ELF_NAME ${CONFIG_KERNEL_BIN_NAME}.elf)
+  string(TOUPPER "${SOC_NAME}" soc_name_upper)
 
-set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
-  COMMAND ${PYTHON_EXECUTABLE} ${SOC_${soc_name_upper}_DIR}/common/esiost/esiost.py
-  -i ${KERNEL_BIN_NAME}
-  -elf ${NPCM_ELF_NAME}
-  -o ${NPCM_BIN_NAME}
-  -v
-  )
+  set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
+    COMMAND ${PYTHON_EXECUTABLE} ${SOC_${soc_name_upper}_DIR}/common/esiost/esiost.py
+    -i ${KERNEL_BIN_NAME}
+    -elf ${NPCM_ELF_NAME}
+    -o ${NPCM_BIN_NAME}
+    -v
+    )
+endif()
