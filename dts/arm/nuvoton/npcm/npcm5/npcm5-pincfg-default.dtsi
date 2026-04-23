@@ -335,15 +335,23 @@
 		nuvoton,id = <GPIO17__CLKOUT__RIA__SDA6B>;
 	};
 
-	/* GPIOC0 / CR_SIN3 / SINC */
+	/* GPIOC0 / CR_SIN3 / SINC
+	 *
+	 * ALT6C[4] URT6_UST3_SL is a CR-UART subsystem-global mux. It must be set for
+	 * CR_SIN3/CR_SOUT3 to reach the MCU-side UART3. It is hitched to this CR_SIN3
+	 * pin-def so that selecting CR_UART3 pinctrl also programs the mux. Side-effect:
+	 * selecting group 0 (GPIO) or group 2 (SINC) on this pin will CLEAR it, which
+	 * can knock out any other CR-UART that relies on the same mux setting. Safe
+	 * as long as CR-UART pins stay assigned to CR_UART functions.
+	 */
 	gpioc0__cr_sin3__sinc: pin_gpioc0__cr_sin3__sinc {
 		nuvoton,pin-hw-def;
 		nuvoton,pin-reg = <NPCM_PINCTRL_ALT31_6_URTI3_SL
 				NPCM_PINCTRL_ALT62_0_SINC_SL
-				NPCM_PIN_REG_NULL
+				NPCM_PINCTRL_ALT6C_4_URT6_UST3_SL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL>;
-		nuvoton,alt = <0 0x10 0x8 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL>;
+		nuvoton,alt = <0 0x14 0x8 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL>;
 		nuvoton,id = <GPIOC0__CR_SIN3__SINC>;
 	};
 
