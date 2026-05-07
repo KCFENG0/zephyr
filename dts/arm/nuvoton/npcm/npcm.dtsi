@@ -50,7 +50,7 @@
 			compatible = "nuvoton,npcm-pinctrl";
 			/* First reg region is System Configuration Device */
 			/* Second reg region is System Glue Device */
-			reg = <0x400c3000 0x7C
+			reg = <0x400c3000 0x100
 				   0x400a5000 0x2000>;
 			reg-names = "scfg", "glue";
 		};

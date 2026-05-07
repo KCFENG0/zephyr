@@ -348,7 +348,8 @@ static int wdt_npcm_init(const struct device *dev)
 
 	/*
 	 * TWCFG (Timer Watchdog Configuration) setting
-	 * [7:6]- Reserved = 0
+	 * [7]  - Reserved = 0
+	 * [6]  - WDCT0I_SEL = 1: Required for WD reset to propagate (RD)
 	 * [5]  - WDSDME   = 1: Feed watchdog by writing 5Ch to WDSDM
 	 * [4]  - WDCT0I   = 1: Select T0IN as watchdog prescaler clock
 	 * [3]  - LWDCNT   = 0: Don't lock WDCNT register
@@ -356,7 +357,7 @@ static int wdt_npcm_init(const struct device *dev)
 	 * [1]  - LTWCP    = 0: Don't lock TWCP register
 	 * [0]  - LTWCFG   = 0: Don't lock TWCFG register
 	 */
-	inst->TWCFG = BIT(NPCM_TWCFG_WDSDME) | BIT(NPCM_TWCFG_WDCT0I);
+	inst->TWCFG = BIT(6) | BIT(NPCM_TWCFG_WDSDME) | BIT(NPCM_TWCFG_WDCT0I);
 
 	/* Disable early touch functionality */
 	inst->T0CSR = (inst->T0CSR & ~BIT(NPCM_T0CSR_WDRST_STS)) |
