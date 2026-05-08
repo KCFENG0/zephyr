@@ -102,7 +102,7 @@ static inline int wdt_t0out_reload(const struct device *dev)
 	uint64_t st;
 
 	/* Reload and restart T0 timer */
-	inst->T0CSR = (inst->T0CSR & ~BIT(NPCM_T0CSR_WDRST_STS)) |
+	inst->T0CSR = (inst->T0CSR | BIT(NPCM_T0CSR_WDRST_STS)) |
 		      BIT(NPCM_T0CSR_RST);
 	/* Wait for timer is loaded and restart */
 	st = k_uptime_get();
@@ -151,7 +151,7 @@ static void npcm_dbg_freeze_enable(const struct device *dev, bool enable)
 
        inst->DBGFRZEN3 = enable ? (inst->DBGFRZEN3 & ~BIT(NPCM_DBGFRZEN3_GLBL_FRZ_DIS))
                                 : (inst->DBGFRZEN3 | BIT(NPCM_DBGFRZEN3_GLBL_FRZ_DIS));
-}    
+}
 
 /* WDT local functions */
 static void wdt_t0out_isr(const struct device *dev, struct npcm_wui *wui)
@@ -360,7 +360,7 @@ static int wdt_npcm_init(const struct device *dev)
 	inst->TWCFG = BIT(6) | BIT(NPCM_TWCFG_WDSDME) | BIT(NPCM_TWCFG_WDCT0I);
 
 	/* Disable early touch functionality */
-	inst->T0CSR = (inst->T0CSR & ~BIT(NPCM_T0CSR_WDRST_STS)) |
+	inst->T0CSR = (inst->T0CSR | BIT(NPCM_T0CSR_WDRST_STS)) |
 		      BIT(NPCM_T0CSR_TESDIS);
 	/*
 	 * Plan clock frequency of T0 timer and watchdog timer as below:
