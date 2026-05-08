@@ -123,10 +123,18 @@ static inline int wdt_wait_stopped(const struct device *dev)
 {
 	struct twd_reg *const inst = HAL_INSTANCE(dev);
 	uint64_t st;
+	/* Fallback iteration cap for callers at PRE_KERNEL_1, before
+	 * sys_clock_driver_init() runs and k_uptime_get() advances.
+	 */
+	int spins = 100000;
 
 	st = k_uptime_get();
 	/* If watchdog is still running? */
 	while (NPCM_IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_WD_RUN)) {
+		if (--spins <= 0) {
+			LOG_ERR("Timeout: stop watchdog timer!");
+			return -ETIMEDOUT;
+		}
 		if (k_uptime_get() - st > NPCM_WATCHDOG_STOP_TIMEOUT) {
 			/* WD_RUN bit is still set? */
 			if (NPCM_IS_BIT_SET(inst->T0CSR, NPCM_T0CSR_WD_RUN)) {
@@ -293,11 +301,20 @@ static int wdt_npcm_disable(const struct device *dev)
 	struct twd_reg *const inst = HAL_INSTANCE(dev);
 
 	/*
-	 * Ensure we have waited at least 3 watchdog ticks before
-	 * stopping watchdog
+	 * Ensure we have waited at least 3 watchdog ticks before stopping
+	 * the watchdog. Skip the wait if we have not touched the WDT in
+	 * this session (last_watchdog_touch == 0): the boot-time path
+	 * (CONFIG_WDT_DISABLE_AT_BOOT) runs at PRE_KERNEL_1 before the
+	 * sys_clock driver inits, so k_uptime_get() returns 0 and the loop
+	 * would never terminate. ROM/MCUboot/PRE_KERNEL_1 elapsed time
+	 * already exceeds NPCM_WDT_MIN_WND_TIME relative to any pre-reset
+	 * feed, so the hardware constraint is still satisfied.
 	 */
-	while (k_uptime_get() - data->last_watchdog_touch < NPCM_WDT_MIN_WND_TIME) {
-		continue;
+	if (data->last_watchdog_touch != 0) {
+		while (k_uptime_get() - data->last_watchdog_touch <
+		       NPCM_WDT_MIN_WND_TIME) {
+			continue;
+		}
 	}
 
 	/*
