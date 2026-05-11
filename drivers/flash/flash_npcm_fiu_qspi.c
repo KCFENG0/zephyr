@@ -198,13 +198,24 @@ static inline void qspi_npcm_fiu_uma_release(const struct device *dev)
 
 static inline int qspi_npcm_fiu_uma_lock(const struct device *dev)
 {
+	const struct npcm_qspi_fiu_config *cfg = dev->config;
 	struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
-	struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
 
-	if (WAIT_FOR(NPCM_IS_BIT_SET(host_inst->FIU_MSR_STS, NPCM_FIU_MSR_STS_MSTR_INACT),
-			NPCM_FIU_CHK_TIMEOUT_US, NULL) == false) {
-		LOG_ERR("wait host fiu inactive timeout");
-		return -ETIMEDOUT;
+	/*
+	 * Host arbitration only applies to FIU instances with a separate
+	 * host register bank (FIU0: core 0x40020000 + host 0x40021000).
+	 * FIU1/FIU2 are single-master -- no host interface -- so the
+	 * MSTR_INACT bit is undefined and polling it would time out.
+	 */
+	if (cfg->host_base != cfg->core_base) {
+		struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
+
+		if (WAIT_FOR(NPCM_IS_BIT_SET(host_inst->FIU_MSR_STS,
+				NPCM_FIU_MSR_STS_MSTR_INACT),
+				NPCM_FIU_CHK_TIMEOUT_US, NULL) == false) {
+			LOG_ERR("wait host fiu inactive timeout");
+			return -ETIMEDOUT;
+		}
 	}
 
 	core_inst->FIU_MSR_IE_CFG |= BIT(NPCM_FIU_MSR_IE_CFG_UMA_BLOCK);
@@ -376,7 +387,7 @@ static inline void qspi_npcm_config_dra_mode(const struct device *dev,
 	 *   bit6: ADDR_QUAD_EN  - address phase quad mode
 	 *   bit0: QUAD_P_EN     - data phase quad for UMA write
 	 *
-	 * Per spec §4.1.7, UMA_QUADREAD (bit4) controls quad mode for the
+	 * Per spec sec.4.1.7, UMA_QUADREAD (bit4) controls quad mode for the
 	 * data phase of UMA read transactions.  The reference code omitted
 	 * it because it only exercised DRA mode (where SPI_FL_CFG.RD_MODE
 	 * + RESP_CFG.QUAD_EN govern the read data path instead).
@@ -398,7 +409,7 @@ static inline void qspi_npcm_config_dra_mode(const struct device *dev,
 		 * Per reference code: BURST_CFG = 0x83 (SPI_WR_EN | R_BURST=16B).
 		 * Without this bit, AMBA writes to the HyperRAM address space
 		 * (0x9000_0000) are silently dropped by the FIU.
-		 * Per spec §4.1.7 hint #5: "Set up BURST_CFG" for direct_wr.
+		 * Per spec sec.4.1.7 hint #5: "Set up BURST_CFG" for direct_wr.
 		 */
 		core_inst->BURST_CFG |= BIT(NPCM_BURST_CFG_SPI_WR_EN);
 		host_inst->BURST_CFG |= BIT(NPCM_BURST_CFG_SPI_WR_EN);
