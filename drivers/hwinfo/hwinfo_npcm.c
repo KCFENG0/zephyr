@@ -58,40 +58,61 @@ static int npcm_hwinfo_init(void)
 #endif /* !CONFIG_SOC_NPCM500 */
 
 #if CONFIG_SOC_NPCM500
-/* NPCM500 reads the SCFG.RSTST register directly */
-#define NPCM500_RSTST_ADDR       DT_INST_REG_ADDR(0)
+/* NPCM500 reads M7 reset cause from SYSREG.scratchpad0[15:8] (a.k.a.
+ * RESET_STATUS_LOG), populated by MCU ROM. MCU ROM is the sole clearer
+ * of RSTST.WDTRST_STS, so the M7 side no longer touches RSTST here.
+ *
+ * Layout (set by MCU ROM in npcm-common/src/npcm_boot_status.rs):
+ *   scratchpad0[31:24] = SOC_BOOT_COUNT
+ *   scratchpad0[23:16] = SOC_WDT_COUNT
+ *   scratchpad0[15:8]  = RESET_STATUS_LOG  <-- snapshot of RSTST[7:0]
+ *   scratchpad0[7:0]   = FLASH_SELECTION
+ *
+ * The contract is documented in caliptra-mcu-sw:
+ *   docs/superpowers/specs/2026-05-11-m7-wdt-recovery-clear-ownership-design.md
+ *
+ * Scratchpad0 lives inside the SCFG register window declared by the
+ * pinctrl node (npcm.dtsi: pinctrl@400c3000, reg-name "scfg") at
+ * offset 0xB0. Derive the address from DT so the binding stays the
+ * single source of truth for the SCFG base.
+ */
+#define NPCM500_SCFG_BASE              DT_REG_ADDR_BY_NAME(DT_NODELABEL(pinctrl), scfg)
+#define NPCM500_SCRATCHPAD0_OFFSET     0xB0
+#define NPCM500_SCRATCHPAD0_ADDR       (NPCM500_SCFG_BASE + NPCM500_SCRATCHPAD0_OFFSET)
+#define NPCM500_RESET_STATUS_LOG_MASK  0x0000FF00UL
+#define NPCM500_RESET_STATUS_LOG_SHIFT 8
+
 #define NPCM500_RSTST_PORST_STS  BIT(0)
 #define NPCM500_RSTST_CORST_STS  BIT(1)
 #define NPCM500_RSTST_DBGRST_STS BIT(2)
 #define NPCM500_RSTST_WDTRST_STS BIT(3)
-#define NPCM500_RSTST_CAUSE_MASK                                                                   \
-	(NPCM500_RSTST_PORST_STS | NPCM500_RSTST_CORST_STS | NPCM500_RSTST_DBGRST_STS |            \
-	 NPCM500_RSTST_WDTRST_STS)
+
 #define NPCM500_SUPPORTED_RESET_CAUSE_FLAG                                                         \
 	(RESET_POR | RESET_PIN | RESET_DEBUG | RESET_WATCHDOG)
 
 static int npcm_hwinfo_init(void)
 {
-	uint8_t rstst = sys_read8(NPCM500_RSTST_ADDR);
+	uint32_t spad0 = sys_read32(NPCM500_SCRATCHPAD0_ADDR);
+	uint8_t cause = (uint8_t)((spad0 & NPCM500_RESET_STATUS_LOG_MASK) >>
+				  NPCM500_RESET_STATUS_LOG_SHIFT);
 
-	if (rstst & NPCM500_RSTST_PORST_STS) {
+	if (cause & NPCM500_RSTST_PORST_STS) {
 		npcm_reset_cause |= RESET_POR;
 	}
-	if (rstst & NPCM500_RSTST_CORST_STS) {
+	if (cause & NPCM500_RSTST_CORST_STS) {
 		npcm_reset_cause |= RESET_PIN;
 	}
-	if (rstst & NPCM500_RSTST_DBGRST_STS) {
+	if (cause & NPCM500_RSTST_DBGRST_STS) {
 		npcm_reset_cause |= RESET_DEBUG;
 	}
-	if (rstst & NPCM500_RSTST_WDTRST_STS) {
+	if (cause & NPCM500_RSTST_WDTRST_STS) {
 		npcm_reset_cause |= RESET_WATCHDOG;
 	}
 
-	/* Clear latched cause bits (R/W1C); CPU_STS bits 5-4 are RO. */
-	sys_write8(rstst & NPCM500_RSTST_CAUSE_MASK, NPCM500_RSTST_ADDR);
+	/* Do NOT clear scratchpad0 -- MCU ROM is the sole writer/clearer. */
 
-	/* Also clear the WDT module's own T0CSR.WDRST_STS latch (separate
-	 * from RSTST.WDTRST_STS so both must be cleared).
+	/* T0CSR.WDRST_STS is the WDT module's own latch and must still be
+	 * cleared by M7 (unrelated to MCU-owned RSTST.WDTRST_STS).
 	 */
 	sys_write8(sys_read8(NPCM_WDT_BASE + NPCM_WDT_T0CSR_OFFSET) | BIT(NPCM_T0CSR_WDRST_STS),
 		   NPCM_WDT_BASE + NPCM_WDT_T0CSR_OFFSET);
