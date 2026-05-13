@@ -2744,9 +2744,13 @@ struct usbd_reg {
 #define NPCM_USBD_SETUP7_6_SETUP6         FIELD(0, 8)
 #define NPCM_USBD_SETUP7_6_SETUP7         FIELD(8, 8)
 
+#if CONFIG_SOC_NPCM500
+#define NPCM_USBD_CEPBUFSTART_SADDR       FIELD(0, 13)
+#define NPCM_USBD_CEPBUFEND_EADDR         FIELD(0, 13)
+#else
 #define NPCM_USBD_CEPBUFSTART_SADDR       FIELD(0, 12)
-
 #define NPCM_USBD_CEPBUFEND_EADDR         FIELD(0, 12)
+#endif
 
 #define NPCM_USBD_DMACTL_EPNUM            FIELD(0, 4)
 #define NPCM_USBD_DMACTL_EPNUM_MASK       GENMASK(3, 0)
@@ -2808,9 +2812,13 @@ struct usbd_reg {
 #define NPCM_USBD_EPCFG_EPDIR             (3)
 #define NPCM_USBD_EPCFG_EPNUM             FIELD(4, 4)
 
+#if CONFIG_SOC_NPCM500
+#define NPCM_USBD_EPBUFSTART_SADDR        FIELD(0, 13)
+#define NPCM_USBD_EPBUFEND_EADDR          FIELD(0, 13)
+#else
 #define NPCM_USBD_EPBUFSTART_SADDR        FIELD(0, 12)
-
 #define NPCM_USBD_EPBUFEND_EADDR          FIELD(0, 12)
+#endif
 
 #define NPCM_USBD_DMAADDR_DMAADDR         FIELD(0, 32)
 
