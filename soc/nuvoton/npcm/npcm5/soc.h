@@ -13,6 +13,7 @@
 
 /* Add include for DTS generated information */
 #include <zephyr/devicetree.h>
+#include <zephyr/toolchain.h>
 #include <cmsis_core_m_defaults.h>
 
 #include <reg/reg_access.h>
@@ -29,6 +30,16 @@
 #define NPCM_PUPD_EN_OFFSET(n)		(((n) == 2 ) ? 0x073 : ((n) == 3 ) ? 0x07b : (0x028 + n))
 
 #define SCFG_BASE_ADDR (0x400C3000)
+
+/**
+ * @brief Trigger a full SoC-level cold reset via the NPCM watchdog.
+ *
+ * Configures and arms the NPCM Timer-Watchdog (TWD) so the watchdog
+ * underflow drives a reset that propagates to the Cortex-M7 core. Does not
+ * return. Safe to call with interrupts locked / the kernel torn down: it is
+ * the SYS_REBOOT_COLD path of sys_arch_reboot().
+ */
+FUNC_NORETURN void npcm_soc_reset(void);
 
 /**
  * @brief Check if the post kernel stage is done
