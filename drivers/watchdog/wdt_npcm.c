@@ -65,6 +65,10 @@ LOG_MODULE_REGISTER(wdt_npcm, CONFIG_WDT_LOG_LEVEL);
 /* Debug Interface registers */
 #define NPCM_DBGCTRL_OFFSET 0x22
 
+/* SCFG Watchdog Reset Control register */
+#define NPCM_SCFG_WDTRST_CTL_OFFSET  0x8C
+#define NPCM_WDTRST_CTL_CM7          0
+
 /* Device config */
 struct wdt_npcm_config {
 	/* wdt controller base address */
@@ -357,11 +361,21 @@ static const struct wdt_driver_api wdt_npcm_driver_api = {
 
 static int wdt_npcm_init(const struct device *dev)
 {
+	const struct wdt_npcm_config *const config = dev->config;
 	struct twd_reg *const inst = HAL_INSTANCE(dev);
 
 #ifdef CONFIG_WDT_DISABLE_AT_BOOT
 	wdt_npcm_disable(dev);
 #endif
+
+	/*
+	 * Enable CM7 reset on watchdog event. WDTRST_CTL defaults to 0 after
+	 * VSB power-up reset; set bit 0 (CM7) so the watchdog reset propagates
+	 * to the Cortex-M7 core even when the MCU ROM has not run.
+	 */
+	volatile uint32_t *wdtrst_ctl =
+		(volatile uint32_t *)(config->base_scfg + NPCM_SCFG_WDTRST_CTL_OFFSET);
+	*wdtrst_ctl |= BIT(NPCM_WDTRST_CTL_CM7);
 
 	/*
 	 * TWCFG (Timer Watchdog Configuration) setting
