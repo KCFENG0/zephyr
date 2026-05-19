@@ -414,12 +414,7 @@
 		};
 	};
 
-	/* PWM */
-	/omit-if-no-ref/ pwm0_gpio82: periph-pwm0 {
-		pwm {
-			pinmux = <GPIO82__I3C5_SCL__PWM0 2>;
-		};
-	};
+	/* PWM - Note: PWM0 and PWM3 do not exist in NPCM500 */
 
 	/omit-if-no-ref/ pwm1_gpio04: periph-pwm1 {
 		pwm {
@@ -433,11 +428,7 @@
 		};
 	};
 
-	/omit-if-no-ref/ pwm3_gpio64: periph-pwm3 {
-		pwm {
-			pinmux = <GPIO64__RESETCON__DPWROKI__PWM3 3>;
-		};
-	};
+	/* PWM3 does not exist in NPCM500 */
 
 	/omit-if-no-ref/ pwm4_gpioa0: periph-pwm4 {
 		pwm {

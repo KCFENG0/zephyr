@@ -674,11 +674,7 @@
 	status = "okay";
 };
 
-&pwm1 {
-	pinctrl-0 = <&pwm0_gpio82>;
-	pinctrl-names = "default";
-	status = "okay";
-};
+/* PWM0 does not exist in NPCM500 */
 
 &pwm2 {
 	pinctrl-0 = <&pwm1_gpio04>;
@@ -692,11 +688,7 @@
 	status = "okay";
 };
 
-&pwm4 {
-	pinctrl-0 = <&pwm3_gpio64>;
-	pinctrl-names = "default";
-	status = "okay";
-};
+/* PWM3 does not exist in NPCM500 */
 
 &pwm5 {
 	pinctrl-0 = <&pwm4_gpioa0>;

@@ -750,13 +750,7 @@
 			status = "disabled";
 		};
 
-		pwm1: pwm@40080000 {
-			compatible = "nuvoton,npcm-pwm";
-			reg = <0x40080000 0x2000>;
-			clocks = <&pcc NPCM_CLOCK_PWM_A>;
-			#pwm-cells = <3>;
-			status = "disabled";
-		};
+		/* PWM_0 does not exist in NPCM500 - only PWM_1,2,4-9 available */
 
 		pwm2: pwm@40082000 {
 			compatible = "nuvoton,npcm-pwm";
@@ -774,13 +768,7 @@
 			status = "disabled";
 		};
 
-		pwm4: pwm@40086000 {
-			compatible = "nuvoton,npcm-pwm";
-			reg = <0x40086000 0x2000>;
-			clocks = <&pcc NPCM_CLOCK_PWM_D>;
-			#pwm-cells = <3>;
-			status = "disabled";
-		};
+		/* PWM_3 does not exist in NPCM500 - skip to PWM_4 */
 
 		pwm5: pwm@40088000 {
 			compatible = "nuvoton,npcm-pwm";
