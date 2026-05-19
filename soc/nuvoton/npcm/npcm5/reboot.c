@@ -36,6 +36,17 @@
 /* TWCFG bit 6 (WDCT0I_SEL) — required for the watchdog reset to propagate. */
 #define NPCM_TWCFG_WDCT0I_SEL BIT(6)
 
+/*
+ * CR_GLUE scratchpad register 1 (SPAD1). Survives the watchdog/core reset
+ * driven by npcm_soc_reset(), so it carries the kernel reboot type across
+ * the reset for post-reset code to read back.
+ */
+#define NPCM_SCFG_SCRATCHPAD1 (SCFG_BASE_ADDR + 0xB4)
+
+/* SPAD1[15:8] records the reboot type: 0 = cold reboot, 1 = warm reboot. */
+#define NPCM_SPAD1_REBOOT_TYPE_MASK  GENMASK(15, 8)
+#define NPCM_SPAD1_REBOOT_TYPE_SHIFT 8
+
 FUNC_NORETURN void npcm_soc_reset(void)
 {
 	struct twd_reg *const twd = (struct twd_reg *)NPCM_TWD_BASE;
@@ -83,9 +94,37 @@ FUNC_NORETURN void npcm_soc_reset(void)
 	}
 }
 
+/*
+ * Map a Zephyr reboot type to the value stored in SPAD1[15:8]: only an
+ * explicit SYS_REBOOT_WARM records 1; a cold reboot and any other caller
+ * (e.g. a fault handler invoking sys_arch_reboot() directly) record 0.
+ */
+static uint8_t npcm_reboot_type_to_spad1(int type)
+{
+	return (type == SYS_REBOOT_WARM) ? 1U : 0U;
+}
+
+/* Record the reboot type in SPAD1[15:8], preserving the other SPAD1 bits. */
+static void npcm_scratchpad1_record_reboot(int type)
+{
+	volatile uint32_t *const spad1 =
+		(volatile uint32_t *)NPCM_SCFG_SCRATCHPAD1;
+	uint32_t val = *spad1;
+
+	val &= ~NPCM_SPAD1_REBOOT_TYPE_MASK;
+	val |= ((uint32_t)npcm_reboot_type_to_spad1(type)
+		<< NPCM_SPAD1_REBOOT_TYPE_SHIFT) & NPCM_SPAD1_REBOOT_TYPE_MASK;
+	*spad1 = val;
+}
+
 extern void sys_arch_reboot(int type);
 
 void sys_arch_reboot(int type)
 {
+	/* SPAD1 reboot-type logging is an FPGA bring-up aid only. */
+	if (IS_ENABLED(CONFIG_NPCM500_FPGA_REBOOT_TYPE_LOG)) {
+		npcm_scratchpad1_record_reboot(type);
+	}
+
 	npcm_soc_reset();
 }
