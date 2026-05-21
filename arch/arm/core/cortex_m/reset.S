@@ -68,6 +68,33 @@ SECTION_SUBSEC_FUNC(TEXT,_reset_section,z_arm_reset)
  */
 SECTION_SUBSEC_FUNC(TEXT,_reset_section,__start)
 
+#if defined(CONFIG_NPCM500_FPGA_INIT_ARM_REGISTERS)
+    /*
+     * Zero r0-r12 at the very start of __start to suppress RTL
+     * X-state propagation on FPGA. At reset the GPRs come up X,
+     * and once an X value reaches a memory write (stack push from
+     * the first bl) it can propagate indefinitely through later
+     * pops. Clearing here, before any bl, guarantees every push
+     * stores a known value.
+     *
+     * r13 (SP) is initialized later by the Zephyr boot path.
+     * r14 (lr) is set by the next bl and never read before that.
+     */
+    mov r0,  #0
+    mov r1,  #0
+    mov r2,  #0
+    mov r3,  #0
+    mov r4,  #0
+    mov r5,  #0
+    mov r6,  #0
+    mov r7,  #0
+    mov r8,  #0
+    mov r9,  #0
+    mov r10, #0
+    mov r11, #0
+    mov r12, #0
+#endif /* CONFIG_NPCM500_FPGA_INIT_ARM_REGISTERS */
+
 #if defined(CONFIG_DEBUG_THREAD_INFO)
     /* Clear z_sys_post_kernel flag for RTOS aware debuggers */
     movs.n r0, #0
@@ -160,32 +187,6 @@ SECTION_SUBSEC_FUNC(TEXT,_reset_section,__start)
      * after the ISB instruction execute using the new stack pointer.
      */
     isb
-
-#if defined(CONFIG_NPCM500_FPGA_INIT_ARM_REGISTERS)
-    /*
-     * Zero r0-r12 to eliminate RTL X-state propagation on FPGA.
-     * Must be here in pure assembly after ALL bl calls have completed.
-     * Any bl return will restore r4-r11 from the stack (C epilogue
-     * pop), and r0-r3 are scratch so callers clobber them freely.
-     * After this isb there are no more bl calls before z_prep_c, which
-     * never returns, so no epilogue can undo the zeroing.
-     * r13 (SP) was set above; r14 (lr) is overwritten by bl z_prep_c
-     * below but z_prep_c never returns so lr is not observable.
-     */
-    mov r0,  #0
-    mov r1,  #0
-    mov r2,  #0
-    mov r3,  #0
-    mov r4,  #0
-    mov r5,  #0
-    mov r6,  #0
-    mov r7,  #0
-    mov r8,  #0
-    mov r9,  #0
-    mov r10, #0
-    mov r11, #0
-    mov r12, #0
-#endif /* CONFIG_NPCM500_FPGA_INIT_ARM_REGISTERS */
 
     /*
      * 'bl' jumps the furthest of the branch instructions that are
