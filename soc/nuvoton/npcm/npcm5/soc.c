@@ -7,6 +7,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/init.h>
+#include <zephyr/cache.h>
 #include <zephyr/linker/sections.h>
 #include <cmsis_core.h>
 #include <soc.h>
@@ -17,15 +18,12 @@ LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 #ifdef CONFIG_SOC_RESET_HOOK
 void soc_reset_hook(void)
 {
-#if defined(CONFIG_ICACHE)
-	SCB_InvalidateICache();
-	SCB_EnableICache();
-#endif
-#if defined(CONFIG_DCACHE)
-	SCB_InvalidateDCache();
-	SCB_EnableDCache();
-#endif
-
+	/*
+	 * Cache enable moved to npcm5_cache_init() (PRE_KERNEL_1, prio 0)
+	 * so it runs after z_arm_mpu_init() has programmed Device/nocache
+	 * MPU regions. Enabling D-cache before MPU is configured risks
+	 * caching lines from regions whose attributes are about to change.
+	 */
 	uintptr_t scfg_base = SCFG_BASE_ADDR;
 	struct scfg_reg *inst_scfg = (struct scfg_reg *)scfg_base;
 
@@ -36,6 +34,37 @@ void soc_reset_hook(void)
 #endif
 }
 #endif
+
+/*
+ * Enable I-cache and D-cache after MPU regions are programmed.
+ *
+ * Boot order on Cortex-M:
+ *   soc_reset_hook -> z_arm_init_arch_hw_at_boot -> z_cstart
+ *     -> arch_kernel_init() [runs z_arm_mpu_init + static MPU regions]
+ *     -> SYS_INIT(PRE_KERNEL_1) chain  <-- this function runs here
+ *
+ * Calls CMSIS SCB_* directly (not sys_cache_*) so caches come up
+ * regardless of CONFIG_CACHE_MANAGEMENT. Runtime DMA flush/invalidate
+ * in drivers should still go through the Zephyr sys_cache_* API.
+ */
+static int npcm5_cache_init(void)
+{
+	/*
+	 * SCB_Enable{I,D}Cache() invalidates the cache as part of the
+	 * enable sequence (only when CCR.{IC,DC} is 0). For a warm reset
+	 * where CCR survives, z_arm_init_arch_hw_at_boot() has already
+	 * disabled and invalidated caches before we get here.
+	 */
+#if defined(CONFIG_ICACHE)
+	SCB_EnableICache();
+#endif
+#if defined(CONFIG_DCACHE)
+	SCB_EnableDCache();
+#endif
+
+	return 0;
+}
+SYS_INIT(npcm5_cache_init, PRE_KERNEL_1, 0);
 
 #if CONFIG_SOC_LATE_INIT_HOOK
 __pinned_bss bool npcm_sys_application;
