@@ -7,6 +7,7 @@
 #define DT_DRV_COMPAT nuvoton_npcm_pdma
 
 #include <zephyr/device.h>
+#include <zephyr/cache.h>
 #include <zephyr/drivers/dma.h>
 #include <zephyr/dt-bindings/dma/npcm_pdma.h>
 #include <zephyr/irq.h>
@@ -29,6 +30,10 @@ volatile uint32_t u32PDMA_Done = 0;
 struct dma_npcm_channel {
 	dma_callback_t cb;
 	void *user_data;
+	enum dma_channel_direction direction;
+	uint32_t src_addr;
+	uint32_t dst_addr;
+	size_t block_size;
 };
 
 struct dma_npcm_config {
@@ -50,6 +55,24 @@ static int npcm_pdma_dsct(const struct device *dev, uint32_t channel,
 	const struct dma_npcm_config *config = dev->config;
 
 	*dsct_inst = (struct pdma_dsct_reg *)(config->reg_base + channel);
+
+	return 0;
+}
+
+static int dma_npcm_cache_maintain(const void *addr, size_t size, bool flush)
+{
+	int ret;
+
+	if ((addr == NULL) || (size == 0)) {
+		return 0;
+	}
+
+	ret = flush ? sys_cache_data_flush_range((void *)addr, size)
+		    : sys_cache_data_invd_range((void *)addr, size);
+	if (ret < 0 && ret != -ENOTSUP) {
+		LOG_ERR("cache %s failed (%d)", flush ? "flush" : "invalidate", ret);
+		return ret;
+	}
 
 	return 0;
 }
@@ -235,6 +258,10 @@ static int dma_npcm_config(const struct device *dev, uint32_t channel,
 	channel_control = &data->channels[channel];
 	channel_control->cb = dma_cfg->dma_callback;
 	channel_control->user_data = dma_cfg->user_data;
+	channel_control->direction = dma_cfg->channel_direction;
+	channel_control->src_addr = dma_cfg->head_block->source_address;
+	channel_control->dst_addr = dma_cfg->head_block->dest_address;
+	channel_control->block_size = dma_cfg->head_block->block_size;
 
 	LOG_DBG("Configured channel %d for %08X to %08X (%u)",
 		channel,
@@ -304,6 +331,7 @@ static void dma_npcm_pdma_isr(const struct device *dev)
  static int dma_npcm_reload(const struct device *dev, uint32_t channel, uint32_t src,
 			      uint32_t dst, size_t size)
 {
+	struct dma_npcm_data *data = dev->data;
 	struct pdma_dsct_reg *dsct_inst = NULL;
 
 	npcm_pdma_dsct(dev, channel, &dsct_inst);
@@ -321,6 +349,10 @@ static void dma_npcm_pdma_isr(const struct device *dev)
 			  NPCM_PDMA_DSCT_CTL_OPMODE_SGM ?
 			  (uint32_t)&(((struct dma_npcm_data *)dev->data)->dsct_sg[channel % 2 * 2]) & 0xFFFF : 0x0;
 
+	data->channels[channel].src_addr = src;
+	data->channels[channel].dst_addr = dst;
+	data->channels[channel].block_size = size;
+
 	LOG_DBG("Reloaded channel %d for %08X to %08X (%zu)",
 		channel,
 		dsct_inst->SA,
@@ -333,9 +365,31 @@ static void dma_npcm_pdma_isr(const struct device *dev)
 static int dma_npcm_start(const struct device *dev, uint32_t channel)
 {
 	struct dma_npcm_data *data = dev->data;
+	struct dma_npcm_channel *channel_control;
 	struct dma_npcm_config *cfg = (struct dma_npcm_config *)dev->config;
 	struct pdma_reg *pdma_inst = (struct pdma_reg *)cfg->reg_base;
 	uint32_t key;
+	int ret;
+
+	if (channel >= NPCM_CH_NUMS) {
+		return -EINVAL;
+	}
+
+	channel_control = &data->channels[channel];
+
+	if (channel_control->direction == MEMORY_TO_PERIPHERAL) {
+		ret = dma_npcm_cache_maintain((void *)(uintptr_t)channel_control->src_addr,
+					      channel_control->block_size, true);
+		if (ret < 0) {
+			return ret;
+		}
+	} else if (channel_control->direction == PERIPHERAL_TO_MEMORY) {
+		ret = dma_npcm_cache_maintain((void *)(uintptr_t)channel_control->dst_addr,
+					      channel_control->block_size, false);
+		if (ret < 0) {
+			return ret;
+		}
+	}
 
 	key = irq_lock();
 
@@ -368,6 +422,14 @@ static int dma_npcm_start(const struct device *dev, uint32_t channel)
 	pdma_inst->PDMA_INTEN &= ~BIT(channel);
 
 	irq_unlock(key);
+
+	if (channel_control->direction == PERIPHERAL_TO_MEMORY) {
+		ret = dma_npcm_cache_maintain((void *)(uintptr_t)channel_control->dst_addr,
+					      channel_control->block_size, false);
+		if (ret < 0) {
+			return ret;
+		}
+	}
 
 	return 0;
 }
