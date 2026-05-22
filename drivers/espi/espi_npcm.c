@@ -166,11 +166,11 @@ static const struct npcm_vw_out_config vw_out_tbl[] = {
 
 /*  Virtual wire GPIOs for platform level usage */
 static const struct npcm_vw_in_config vw_in_gpio_tbl1[] = {
-        /* index 9fh (In) */
-        NPCM_DT_VW_IN_CONF(ESPI_VWIRE_SIGNAL_TARGET_GPIO_124, vw_slv_gpio_124),
-        NPCM_DT_VW_IN_CONF(ESPI_VWIRE_SIGNAL_TARGET_GPIO_125, vw_slv_gpio_125),
-        NPCM_DT_VW_IN_CONF(ESPI_VWIRE_SIGNAL_TARGET_GPIO_126, vw_slv_gpio_126),
-        NPCM_DT_VW_IN_CONF(ESPI_VWIRE_SIGNAL_TARGET_GPIO_127, vw_slv_gpio_127),
+	/* index 9fh (In) */
+	NPCM_DT_VW_IN_CONF(ESPI_VWIRE_SIGNAL_TARGET_GPIO_124, vw_slv_gpio_124),
+	NPCM_DT_VW_IN_CONF(ESPI_VWIRE_SIGNAL_TARGET_GPIO_125, vw_slv_gpio_125),
+	NPCM_DT_VW_IN_CONF(ESPI_VWIRE_SIGNAL_TARGET_GPIO_126, vw_slv_gpio_126),
+	NPCM_DT_VW_IN_CONF(ESPI_VWIRE_SIGNAL_TARGET_GPIO_127, vw_slv_gpio_127),
 };
 
 static const struct npcm_vw_out_config vw_out_gpio_tbl1[] = {
@@ -392,7 +392,11 @@ static void espi_bus_reset_isr(const struct device *dev)
 #if !defined(CONFIG_ESPI_NPCM_FLASH_SAFS_HW_MODE)
 	inst->FLASHCTL &= ~BIT(NPCM_FLASHCTL_SAF_AUTO_READ);
 #else
+#if defined(CONFIG_NPCM500_FPGA)
+	inst->FLASHBASE = 0xC0000000;
+#else
 	inst->FLASHBASE = 0x70000000;
+#endif
 #endif
 #endif
 }
@@ -461,7 +465,11 @@ static void espi_bus_cfg_update_isr(const struct device *dev)
 			LOG_INF("FLASHCTL 0x%x", inst->FLASHCTL);
 		}
 #else
+#if defined(CONFIG_NPCM500_FPGA)
+		inst->FLASHBASE = 0xC0000000;
+#else
 		inst->FLASHBASE = 0x70000000;
+#endif
 #endif
 		if (0 == k_sem_count_get(&data->tafs_tx_lock))
 			k_sem_give(&data->tafs_tx_lock);
@@ -878,7 +886,11 @@ static int espi_npcm_configure(const struct device *dev, struct espi_cfg *cfg)
 #if !defined(CONFIG_ESPI_NPCM_FLASH_SAFS_HW_MODE)
 		inst->FLASHCTL &= ~BIT(NPCM_FLASHCTL_SAF_AUTO_READ);
 #else
+#if defined(CONFIG_NPCM500_FPGA)
+		inst->FLASHBASE = 0xC0000000;
+#else
 		inst->FLASHBASE = 0x70000000;
+#endif
 #endif
 #endif
 	}

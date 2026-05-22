@@ -30,7 +30,7 @@
 		/*
 		 * Virtual wires for platform level usage
 		 */
-		/* index 9Fh (In) */
+		/* index 9Fh (In) - VWGPMS15 */
 		vw_slv_gpio_124 {
 			vw-reg = <NPCM_VWGPMS15 0x01>;
 			vw-wui = <&wui_none>;
@@ -48,7 +48,7 @@
 			vw-wui = <&wui_none>;
 		};
 
-		/* index 80h (Out) */
+		/* index 80h (Out) - VWGPSM0 */
 		vw_slv_gpio_0 {
 			vw-reg = <NPCM_VWGPSM0 0x01 0x00>;
 		};
