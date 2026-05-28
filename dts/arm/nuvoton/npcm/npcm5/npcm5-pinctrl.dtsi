@@ -495,4 +495,23 @@
 			pinmux = <GPIO07__EMAC_MDC__RIB__TA9 1>;
 		};
 	};
+
+	/* JTAG Master */
+	/omit-if-no-ref/ jtag_master_gpio62_63_e2_57_b1: periph-jtag-master {
+		jtag_tck {
+			pinmux = <GPIO62__RSTOUT0__JTAGM_TCK 2>;
+		};
+		jtag_tms {
+			pinmux = <GPIO63__ATXPGD__JTAGM_TMS 2>;
+		};
+		jtag_tdi {
+			pinmux = <GPIOE2__PWROK0__JTAGM_TDI 2>;
+		};
+		jtag_tdo {
+			pinmux = <GPIO57__JTAGM_TDO 1>;
+		};
+		jtag_trst {
+			pinmux = <GPIOB1__CLKRUN__JTAGM_TRST 2>;
+		};
+	};
 };

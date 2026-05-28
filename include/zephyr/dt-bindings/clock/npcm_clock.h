@@ -1,5 +1,4 @@
-/*
- * Copyright (c) 2024 Nuvoton Technology Corporation.
+/* * Copyright (c) 2024 Nuvoton Technology Corporation.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -56,7 +55,9 @@
 #define NPCM_CLOCK_MFT1    NPCM_CLOCK_CFG(NPCM_CLOCK_BUS_APB1, 1, 1, 5)
 #define NPCM_CLOCK_MFT2    NPCM_CLOCK_CFG(NPCM_CLOCK_BUS_APB1, 1, 1, 6)
 #define NPCM_CLOCK_MFT3    NPCM_CLOCK_CFG(NPCM_CLOCK_BUS_APB1, 1, 1, 7)
+/* PWDWN_CTL[2] bit 0: NPCM4 -> PWM_A (APB2), NPCM5 -> JTAGM (APB3) */
 #define NPCM_CLOCK_PWM_A   NPCM_CLOCK_CFG(NPCM_CLOCK_BUS_APB2, 1, 2, 0)
+#define NPCM_CLOCK_JTAGM   NPCM_CLOCK_CFG(NPCM_CLOCK_BUS_APB3, 1, 2, 0)
 #define NPCM_CLOCK_PWM_B   NPCM_CLOCK_CFG(NPCM_CLOCK_BUS_APB2, 1, 2, 1)
 #define NPCM_CLOCK_PWM_C   NPCM_CLOCK_CFG(NPCM_CLOCK_BUS_APB2, 1, 2, 2)
 #define NPCM_CLOCK_PWM_D   NPCM_CLOCK_CFG(NPCM_CLOCK_BUS_APB2, 1, 2, 3)
