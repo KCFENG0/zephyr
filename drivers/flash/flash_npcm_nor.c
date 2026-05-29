@@ -7,6 +7,7 @@
 #define DT_DRV_COMPAT nuvoton_npcm_nor
 
 #include <zephyr/kernel.h>
+#include <zephyr/cache.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/drivers/flash/npcm_flash_api_ex.h>
 #include <zephyr/drivers/pinctrl.h>
@@ -268,6 +269,9 @@ static int flash_npcm_nor_read(const struct device *dev, off_t addr,
 	qspi_data->qspi_ops->lock_configure(config->qspi_bus, &config->qspi_cfg,
 				       dev_data->operation);
 
+	/* Invalidate the D-cache range over the DRA window before memcpy */
+	sys_cache_data_invd_range((void *)(config->mapped_addr + addr), size);
+
 	/* Trigger Direct Read Access (DRA) via reading memory mapped-address */
 	memcpy(data, (void *)(config->mapped_addr + addr), size);
 
@@ -304,25 +308,36 @@ static int flash_npcm_nor_erase(const struct device *dev, off_t addr, size_t siz
 		flash_npcm_transceive_cmd_only(dev, SPI_NOR_CMD_WREN);
 		/* Send chip erase command */
 		flash_npcm_transceive_cmd_only(dev, SPI_NOR_CMD_CE);
-		return flash_npcm_nor_wait_until_ready(dev);
+		ret = flash_npcm_nor_wait_until_ready(dev);
+		if (ret == 0 && config->mapped_addr != MAPPED_ADDR_NOT_SUPPORT) {
+			sys_cache_data_invd_range((void *)config->mapped_addr,
+						  config->flash_size);
+		}
+		return ret;
 	}
 
 	while (size > 0) {
+		size_t blk_sz;
+
 		flash_npcm_transceive_cmd_only(dev, SPI_NOR_CMD_WREN);
 		/* Send page/block erase command with addr */
 		if ((size >= BLOCK_64K_SIZE) && SPI_NOR_IS_64K_ALIGNED(addr)) {
 			flash_npcm_transceive_cmd_by_addr(dev, SPI_NOR_CMD_BE, addr);
-			addr += BLOCK_64K_SIZE;
-			size -= BLOCK_64K_SIZE;
+			blk_sz = BLOCK_64K_SIZE;
 		} else {
 			flash_npcm_transceive_cmd_by_addr(dev, SPI_NOR_CMD_SE, addr);
-			addr += BLOCK_4K_SIZE;
-			size -= BLOCK_4K_SIZE;
+			blk_sz = BLOCK_4K_SIZE;
 		}
 		ret = flash_npcm_nor_wait_until_ready(dev);
 		if (ret != 0) {
 			break;
 		}
+		if (config->mapped_addr != MAPPED_ADDR_NOT_SUPPORT) {
+			sys_cache_data_invd_range(
+				(void *)(config->mapped_addr + addr), blk_sz);
+		}
+		addr += blk_sz;
+		size -= blk_sz;
 	}
 
 	return ret;
@@ -371,6 +386,11 @@ static int flash_npcm_nor_write(const struct device *dev, off_t addr,
 			break;
 		}
 
+		if (config->mapped_addr != MAPPED_ADDR_NOT_SUPPORT) {
+			sys_cache_data_invd_range(
+				(void *)(config->mapped_addr + addr), sz_write);
+		}
+
 		size -= sz_write;
 		tx_buf += sz_write;
 		addr += sz_write;
@@ -409,10 +429,55 @@ static int flash_npcm_nor_set_4b_mode(const struct device *dev, bool enable)
     return flash_npcm_fiu_set_4b_mode(fiu_dev, enable);
 }
 
+/*
+ * For opcodes that mutate the flash data array, invalidate the matching
+ * range of the DRA window so a subsequent DRA read sees fresh contents.
+ * Non-mutating opcodes (reads, status-reg, JEDEC ID, ...) are no-ops.
+ */
+static void flash_npcm_nor_ex_invd_after_op(
+	const struct flash_npcm_nor_config *config,
+	const struct npcm_ex_ops_transceive_in *op_in)
+{
+	size_t len;
+
+	if (config->mapped_addr == MAPPED_ADDR_NOT_SUPPORT) {
+		return;
+	}
+
+	switch (op_in->opcode) {
+	case SPI_NOR_CMD_PP:
+	case SPI_NOR_CMD_PP_1_1_2:
+	case SPI_NOR_CMD_PP_1_1_4:
+	case SPI_NOR_CMD_PP_1_4_4:
+		len = op_in->tx_count;
+		break;
+	case SPI_NOR_CMD_SE:
+	case SPI_NOR_CMD_SE_4B:
+		len = BLOCK_4K_SIZE;
+		break;
+	case SPI_NOR_CMD_BE_32K:
+		len = KB(32);
+		break;
+	case SPI_NOR_CMD_BE:
+		len = BLOCK_64K_SIZE;
+		break;
+	case SPI_NOR_CMD_CE:
+		sys_cache_data_invd_range((void *)config->mapped_addr,
+					  config->flash_size);
+		return;
+	default:
+		return;
+	}
+
+	sys_cache_data_invd_range(
+		(void *)(config->mapped_addr + op_in->addr), len);
+}
+
 static int flash_npcm_nor_ex_exec_transceive(const struct device *dev,
 				      const struct npcm_ex_ops_transceive_in *op_in,
 				      const struct npcm_ex_ops_transceive_out *op_out)
 {
+	const struct flash_npcm_nor_config *config = dev->config;
 	int flag = 0;
 	struct npcm_transceive_cfg cfg;
     int ret;
@@ -442,6 +507,9 @@ static int flash_npcm_nor_ex_exec_transceive(const struct device *dev,
 	}
 
     ret = flash_npcm_transceive(dev, &cfg, flag);
+    if (ret == 0) {
+        flash_npcm_nor_ex_invd_after_op(config, op_in);
+    }
     return ret;
 }
 
