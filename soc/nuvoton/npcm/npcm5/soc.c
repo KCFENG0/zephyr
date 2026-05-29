@@ -27,11 +27,16 @@ void soc_reset_hook(void)
 	uintptr_t scfg_base = SCFG_BASE_ADDR;
 	struct scfg_reg *inst_scfg = (struct scfg_reg *)scfg_base;
 
+	/* RMW only bit 0; other DEVALT10 bits may be programmed by the ROM
+	 * (e.g. SPI quad-mode straps) and a plain byte write would clear them.
+	 */
+	uint8_t devalt10 = inst_scfg->DEVALT10;
+
+	devalt10 &= ~BIT(NPCM_DEVALT10_CRGPIO_SELECT_SL);
 #ifdef CONFIG_GPIO_NPCM_RESET_SL_POWER_UP
-	inst_scfg->DEVALT10 = NPCM_DEVALT10_CRGPIO_SELECT_SL_POWER;
-#else
-	inst_scfg->DEVALT10 = NPCM_DEVALT10_CRGPIO_SELECT_SL_CORE;
+	devalt10 |= BIT(NPCM_DEVALT10_CRGPIO_SELECT_SL);
 #endif
+	inst_scfg->DEVALT10 = devalt10;
 }
 #endif
 

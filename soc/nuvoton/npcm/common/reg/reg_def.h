@@ -182,8 +182,8 @@ struct scfg_reg {
 #define NPCM_DEVPU0_I2C2_0_PUE                4
 #define NPCM_DEVPU0_I2C3_0_PUE                6
 #define NPCM_DEVPU1_F_SPI_PUD_EN              7
-#define NPCM_DEVALT10_CRGPIO_SELECT_SL_CORE   0
-#define NPCM_DEVALT10_CRGPIO_SELECT_SL_POWER  1
+/* DEVALT10 bit 0: 0 = CR_GPIO reset by core domain, 1 = by VSB power-up. */
+#define NPCM_DEVALT10_CRGPIO_SELECT_SL        0
 #define NPCM_DEVALTCX_GPIO_PULL_EN            7
 
 #define NPCM_DEVALT6A_SIOX1_PU_EN             2
