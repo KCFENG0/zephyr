@@ -182,3 +182,8 @@
 		};
 	};
 };
+
+/* NPCM5 is Cortex-M7; npcm.dtsi defaults cpu0 to M4 for the NPCM4 series. */
+&cpu0 {
+	compatible = "arm,cortex-m7";
+};
