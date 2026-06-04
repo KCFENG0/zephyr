@@ -105,7 +105,7 @@ static void kcs_set_state(const struct device *dev, enum kcs_state stat)
 {
 	uint32_t reg;
 	struct kcs_npcm_data *kcs = (struct kcs_npcm_data *)dev->data;
-	struct kcs_npcm_config *cfg = (struct kcs_npcm_config *)dev->config;
+	const struct kcs_npcm_config *cfg = (const struct kcs_npcm_config *)dev->config;
 
 	reg = sys_read8(cfg->base + kcs->str);
 	reg &= ~(KCS_STR_STATE_MASK);
@@ -116,7 +116,7 @@ static void kcs_set_state(const struct device *dev, enum kcs_state stat)
 static void kcs_write_data(const struct device *dev, uint8_t data)
 {
 	struct kcs_npcm_data *kcs = (struct kcs_npcm_data *)dev->data;
-	struct kcs_npcm_config *cfg = (struct kcs_npcm_config *)dev->config;
+	const struct kcs_npcm_config *cfg = (const struct kcs_npcm_config *)dev->config;
 
 	sys_write8(data, cfg->base + kcs->odr);
 }
@@ -124,7 +124,7 @@ static void kcs_write_data(const struct device *dev, uint8_t data)
 static uint8_t kcs_read_data(const struct device *dev)
 {
 	struct kcs_npcm_data *kcs = (struct kcs_npcm_data *)dev->data;
-	struct kcs_npcm_config *cfg = (struct kcs_npcm_config *)dev->config;
+	const struct kcs_npcm_config *cfg = (const struct kcs_npcm_config *)dev->config;
 
 	return sys_read8(cfg->base + kcs->idr);
 }
@@ -261,7 +261,7 @@ void kcs_npcm_isr(const struct device *dev)
 {
 	uint32_t stat;
 	struct kcs_npcm_data *kcs = (struct kcs_npcm_data *)dev->data;
-	struct kcs_npcm_config *cfg = (struct kcs_npcm_config *)dev->config;
+	const struct kcs_npcm_config *cfg = (const struct kcs_npcm_config *)dev->config;
 
 	stat = sys_read8(cfg->base + kcs->str);
 	if (stat & KCS_STR_IBF) {
@@ -344,7 +344,7 @@ static int kcs_npcm_init(const struct device *dev)
 {
 	int rc;
 	struct kcs_npcm_data *kcs = (struct kcs_npcm_data *)dev->data;
-	struct kcs_npcm_config *cfg = (struct kcs_npcm_config *)dev->config;
+	const struct kcs_npcm_config *cfg = (const struct kcs_npcm_config *)dev->config;
 
 	kcs->ibuf_idx = 0;
 	kcs->ibuf_avail = 0;

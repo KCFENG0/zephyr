@@ -81,7 +81,7 @@ static int dma_npcm_config(const struct device *dev, uint32_t channel,
 			   struct dma_config *dma_cfg)
 {
 	struct dma_npcm_channel *channel_control;
-	struct dma_npcm_config *cfg = (struct dma_npcm_config *)dev->config;
+	const struct dma_npcm_config *cfg = (const struct dma_npcm_config *)dev->config;
 	struct dma_npcm_data *data = dev->data;
 	struct pdma_dsct_reg *dsct_inst = NULL;
 	struct pdma_reg *pdma_inst = (struct pdma_reg *)cfg->reg_base;
@@ -301,7 +301,7 @@ static int dma_npcm_config(const struct device *dev, uint32_t channel,
 
 static void dma_npcm_pdma_isr(const struct device *dev)
 {
-	struct dma_npcm_config *cfg = (struct dma_npcm_config *)dev->config;
+	const struct dma_npcm_config *cfg = (const struct dma_npcm_config *)dev->config;
 	struct pdma_reg *pdma_inst = (struct pdma_reg *)cfg->reg_base;
 	uint32_t status = pdma_inst->PDMA_INTSTS;
 
@@ -366,7 +366,7 @@ static int dma_npcm_start(const struct device *dev, uint32_t channel)
 {
 	struct dma_npcm_data *data = dev->data;
 	struct dma_npcm_channel *channel_control;
-	struct dma_npcm_config *cfg = (struct dma_npcm_config *)dev->config;
+	const struct dma_npcm_config *cfg = (const struct dma_npcm_config *)dev->config;
 	struct pdma_reg *pdma_inst = (struct pdma_reg *)cfg->reg_base;
 	uint32_t key;
 	int ret;
@@ -437,7 +437,7 @@ static int dma_npcm_start(const struct device *dev, uint32_t channel)
 static int dma_npcm_stop(const struct device *dev, uint32_t channel)
 {
 	struct dma_npcm_data *data = dev->data;
-	struct dma_npcm_config *cfg = (struct dma_npcm_config *)dev->config;
+	const struct dma_npcm_config *cfg = (const struct dma_npcm_config *)dev->config;
 	struct pdma_reg *pdma_inst = (struct pdma_reg *)cfg->reg_base;
 	uint32_t key;
 
@@ -462,7 +462,7 @@ static int dma_npcm_get_status(const struct device *dev,
 			       struct dma_status *stat)
 {
 	struct dma_npcm_data *data = dev->data;
-	struct dma_npcm_config *cfg = (struct dma_npcm_config *)dev->config;
+	const struct dma_npcm_config *cfg = (const struct dma_npcm_config *)dev->config;
 
 	stat->busy = (data->dma_triggered & BIT(channel)) ? 1 : 0;
 	stat->dir = cfg->direction;

@@ -556,7 +556,7 @@ static void rtc_npcm_isr(const struct device *dev, struct npcm_wui *wui)
 
 static int rtc_npcm_init(const struct device *dev)
 {
-	struct rtc_npcm_config *cfg = (struct rtc_npcm_config *)dev->config;
+	const struct rtc_npcm_config *cfg = (const struct rtc_npcm_config *)dev->config;
 	struct c2h_reg *const inst_c2h = cfg->inst_c2h;
 	const struct device *c2h_dev = cfg->c2h_dev;
 	uint8_t val;
