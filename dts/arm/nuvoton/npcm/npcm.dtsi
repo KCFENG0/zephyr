@@ -41,9 +41,9 @@
 			reg-names = "pmc", "cdcg";
 		};
 
-		rstc: rstc@100c7f00 {
+		rstc: rstc@400c3084 {
 			compatible = "nuvoton,npcm-rstc";
-			reg = <0x100c7f00 0x84>;
+			reg = <0x400c3084 0x4>;
 		};
 
 		pinctrl: pinctrl@400c3000 {

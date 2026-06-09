@@ -69,10 +69,3 @@
 	pinctrl-0 = <&tach3_gpio81>;
 	pinctrl-names = "default";
 };
-
-/* NPCM500: rstc points at the SCFG.RSTST register (offset 0x84 in
- * SCFG @ 0x400c3000).
- */
-&rstc {
-	reg = <0x400c3084 0x4>;
-};
