@@ -484,6 +484,11 @@
 			pinmux = <GPIO81__TA3 1>;
 		};
 	};
+	/omit-if-no-ref/ tach2_gpio37: periph-tach2 {
+		tach {
+			pinmux = <GPIO37__AFD__P1_DGH__TA2__SDA4A 3>; /* AF3 = TA2 */
+		};
+	};
 
 	/* EMAC */
 	/omit-if-no-ref/ emac_gpio01_06: periph-emac {

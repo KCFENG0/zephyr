@@ -98,6 +98,9 @@ static inline void tach_npcm_start(const struct device *dev)
 	inst->TCNT1 = NPCM_TACHO_CNT_MAX;
 	inst->TCRA  = NPCM_TACHO_CNT_MAX;
 
+	/* Set mode 5 to tachometer module */
+	SET_FIELD(inst->TMCTRL, NPCM_TMCTRL_MDSEL_FIELD, NPCM_TACH_MDSEL);
+
 	/*
 	 * Set the edge detection polarity to falling (high-to-low transition)
 	 * and enable the functionality to capture TCNT1 into TCRA and preset
@@ -167,8 +170,7 @@ static int tach_npcm_configure(const struct device *dev)
 	struct tach_npcm_data *const data = dev->data;
 	struct tach_reg *const inst = HAL_INSTANCE(dev);
 
-	/* Set mode 5 to tachometer module */
-	SET_FIELD(inst->TMCTRL, NPCM_TMCTRL_MDSEL_FIELD, NPCM_TACH_MDSEL);
+	/* Mode 5 is selected in tach_npcm_start() after the counter is preset */
 
 	/* Configure clock module and its frequency of tachometer */
 	if (config->sample_clk == 0) {
