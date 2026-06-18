@@ -467,6 +467,26 @@
 	};
 
 	/* Tach */
+	/omit-if-no-ref/ tach9_gpio07: periph-tach9 {
+		tach {
+			pinmux = <GPIO07__EMAC_MDC__RIB__TA9 3>; /* AF3 = TA9 */
+		};
+	};
+	/omit-if-no-ref/ tach8_gpio03: periph-tach8 {
+		tach {
+			pinmux = <GPIO03__EMAC_TXD1__DTRB__TA8 3>; /* AF3 = TA8 */
+		};
+	};
+	/omit-if-no-ref/ tach7_gpio01: periph-tach7 {
+		tach {
+			pinmux = <GPIO01__EMAC_RXD0__DSRB__TA7 3>; /* AF3 = TA7 */
+		};
+	};
+	/omit-if-no-ref/ tach6_gpioa6: periph-tach6 {
+		tach {
+			pinmux = <GPIOA6__TA6__USB20 1>; /* AF1 = TA6 */
+		};
+	};
 	/omit-if-no-ref/ tach5_gpioa4: periph-tach5 {
 		tach {
 			pinmux = <GPIOA4__TA5__IOX2_SCLK 1>;
@@ -487,6 +507,16 @@
 	/omit-if-no-ref/ tach2_gpio37: periph-tach2 {
 		tach {
 			pinmux = <GPIO37__AFD__P1_DGH__TA2__SDA4A 3>; /* AF3 = TA2 */
+		};
+	};
+	/omit-if-no-ref/ tach1_gpio05: periph-tach1 {
+		tach {
+			pinmux = <GPIO05__EMAC_TX_EN__SOUTB__CR_SOUT1__TA1 4>; /* AF4 = TA1 */
+		};
+	};
+	/omit-if-no-ref/ tach0_gpio83: periph-tach0 {
+		tach {
+			pinmux = <GPIO83__I3C5_SDA__TA0 2>; /* AF2 = TA0 */
 		};
 	};
 
