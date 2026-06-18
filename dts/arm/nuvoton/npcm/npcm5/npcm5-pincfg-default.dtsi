@@ -1626,10 +1626,11 @@
 		nuvoton,pin-hw-def;
 		nuvoton,pin-reg = <NPCM_PINCTRL_ALT7_3_GP96_SL
 				NPCM_PINCTRL_ALT7_2_I3C6_SL
+				NPCM_PINCTRL_ALTE_5_SMB6A_SL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL>;
-		nuvoton,alt = <0x10 0x8 0 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL>;
+		nuvoton,alt = <0x10 0x8 0x4 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL>;
 		nuvoton,pull-up-down-reg = <NPCM_PINCTRL_DEVPD1_1_SMB6A_PUE>;
 		bias-pull-up;
 		nuvoton,pull-up-down-sup = <0x4>;
@@ -1642,9 +1643,10 @@
 		nuvoton,pin-reg = <NPCM_PINCTRL_ALT7_4_GP97_SL
 				NPCM_PINCTRL_ALT5_4_PECI_EN
 				NPCM_PINCTRL_ALT7_2_I3C6_SL
+				NPCM_PINCTRL_ALTE_5_SMB6A_SL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL>;
-		nuvoton,alt = <0x10 0x8 0x4 0 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL>;
+		nuvoton,alt = <0x10 0x8 0x4 0x2 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL>;
 		nuvoton,pull-up-down-reg = <NPCM_PINCTRL_DEVPD3_4_I3C6_PUE>;
 		bias-pull-up;
 		nuvoton,pull-up-down-sup = <0x4>;
