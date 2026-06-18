@@ -7,9 +7,11 @@
 #define DT_DRV_COMPAT nuvoton_npcm_i2c
 
 #include <zephyr/drivers/clock_control.h>
+#include <zephyr/cache.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
+#include <string.h>
 #include <soc.h>
 
 #include <zephyr/logging/log.h>
@@ -87,6 +89,8 @@ struct i2c_npcm_data {
 
 /* Driver convenience defines */
 #define I2C_INSTANCE(dev) ((struct i2c_reg *)((const struct i2c_npcm_config *)(dev)->config)->base)
+
+
 
 
 /* This macro should be set only when in Controller mode or when requesting Controller mode.
@@ -435,6 +439,7 @@ static void i2c_npcm_ctrl_isr(const struct device *dev)
 			}
 		} else if (data->ctrl_oper_state == I2C_NPCM_OPER_STA_WRITE) {
 			/* Set DMA register to send data */
+			sys_cache_data_flush_range((void *)data->tx_buf, data->tx_cnt);
 			i2c_npcm_start_DMA(dev, (uint32_t)data->tx_buf, data->tx_cnt);
 		} else {
 			/* Error */
@@ -447,6 +452,7 @@ static void i2c_npcm_ctrl_isr(const struct device *dev)
 	if (inst->SMBnST & BIT(NPCM_SMBnST_STASTR)) {
 		if (data->ctrl_oper_state == I2C_NPCM_OPER_STA_READ) {
 			/* Set DMA register to read data */
+			sys_cache_data_invd_range(data->rx_buf, data->rx_cnt);
 			i2c_npcm_DMA_lastbyte(dev);
 			i2c_npcm_start_DMA(dev, (uint32_t)data->rx_buf, data->rx_cnt);
 		} else if (data->ctrl_oper_state == I2C_NPCM_OPER_STA_QUICK) {
@@ -484,6 +490,7 @@ static void i2c_npcm_ctrl_isr(const struct device *dev)
 			i2c_npcm_stop(dev);
 			data->ctrl_oper_state = I2C_NPCM_OPER_STA_IDLE;
 			data->rx_cnt = i2c_npcm_get_DMA_cnt(dev);
+			sys_cache_data_invd_range(data->rx_buf, data->rx_cnt);
 			i2c_npcm_notify(dev, 0);
 		}
 		/* Clear DMA flag */
@@ -584,6 +591,7 @@ static void i2c_npcm_target_isr(const struct device *dev)
 			/* target received Read-Address */
 			if (data->target_oper_state != I2C_NPCM_OPER_STA_START) {
 				/* target received data before */
+				sys_cache_data_invd_range(data->rx_buf, sizeof(data->rx_buf));
 				len = 0;
 				while (len < i2c_npcm_get_dma_cnt(dev)) {
 					target_cb->write_received(data->target_cfg[i],
@@ -611,6 +619,7 @@ static void i2c_npcm_target_isr(const struct device *dev)
 
 			if (data->tx_cnt != 0) {
 				/* Set DMA register to send data */
+				sys_cache_data_flush_range((void *)data->tx_buf, data->tx_cnt);
 				i2c_npcm_start_DMA(dev, (uint32_t)data->tx_buf, data->tx_cnt);
 			} else {
 				data->target_oper_state = I2C_NPCM_OPER_STA_QUICK;
@@ -619,6 +628,7 @@ static void i2c_npcm_target_isr(const struct device *dev)
 			/* target received Write-Address */
 			data->target_oper_state = I2C_NPCM_OPER_STA_READ;
 			/* Set DMA register to get data */
+			sys_cache_data_invd_range(data->rx_buf, sizeof(data->rx_buf));
 			i2c_npcm_start_DMA(dev, (uint32_t)data->rx_buf, sizeof(data->rx_buf));
 			target_cb->write_requested(data->target_cfg[i]);
 		}
@@ -635,6 +645,7 @@ static void i2c_npcm_target_isr(const struct device *dev)
 		if (data->target_oper_state == I2C_NPCM_OPER_STA_READ) {
 			/* Over Flow */
 			overflow_data = inst->SMBnSDA;
+			sys_cache_data_invd_range(data->rx_buf, sizeof(data->rx_buf));
 
 			len = 0;
 			while (len < i2c_npcm_get_dma_cnt(dev)) {
@@ -658,6 +669,7 @@ static void i2c_npcm_target_isr(const struct device *dev)
 		const struct i2c_target_callbacks *target_cb =
 			data->target_cfg[data->match_addr_no]->callbacks;
 		if (data->target_oper_state == I2C_NPCM_OPER_STA_READ) {
+			sys_cache_data_invd_range(data->rx_buf, sizeof(data->rx_buf));
 			len = 0;
 			while (len < i2c_npcm_get_dma_cnt(dev)) {
 				target_cb->write_received(data->target_cfg[data->match_addr_no], data->rx_buf[len]);
@@ -924,7 +936,7 @@ static int i2c_npcm_init(const struct device *dev)
 	data->bitrate = config->default_bitrate;
 	LOG_DBG("bitrate: %d", data->bitrate);
 	i2c_npcm_set_baudrate(dev, data->bitrate);
-	inst->SMBnCTL5=0x07;
+	//inst->SMBnCTL5=0x07;
 
 	/* Enable I2C module */
 	inst->SMBnCTL2 |= BIT(NPCM_SMBnCTL2_ENABLE);
@@ -1135,6 +1147,7 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 	ret = i2c_npcm_wait_completion(dev);
 
 	if (data->rx_cnt != 0) {
+		sys_cache_data_invd_range(data->rx_buf, data->rx_cnt);
 		gdma_memcpy_u8(data->rx_msg_buf, data->rx_buf, data->rx_cnt);
 	}
 
