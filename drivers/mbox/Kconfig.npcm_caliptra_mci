@@ -1,0 +1,58 @@
+# Copyright (c) 2026 Nuvoton Technology Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+config MBOX_NPCM_CALIPTRA_MCI
+	bool "Nuvoton NPCM Caliptra MCU_MBOX driver"
+	default y
+	depends on DT_HAS_NUVOTON_NPCM_CALIPTRA_MCI_MBOX_ENABLED
+	help
+	  M7-side driver for the Caliptra MCU_MBOX hardware mailbox.
+
+if MBOX_NPCM_CALIPTRA_MCI
+
+choice MBOX_NPCM_CALIPTRA_MCI_NOTIFY
+	prompt "MCU_MBOX notification source"
+	default MBOX_NPCM_CALIPTRA_MCI_POLL
+
+config MBOX_NPCM_CALIPTRA_MCI_POLL
+	bool "Polling"
+	help
+	  A driver thread polls EXECUTE / CMD_STATUS. Use until the M7
+	  mailbox interrupt has been verified.
+
+config MBOX_NPCM_CALIPTRA_MCI_IRQ
+	bool "Interrupt"
+	help
+	  Use the hardware interrupt. Requires a valid interrupts property
+	  in devicetree.
+
+endchoice
+
+config MBOX_NPCM_CALIPTRA_MCI_POLL_THREAD_STACK_SIZE
+	int "Poll thread stack size"
+	default 768
+	depends on MBOX_NPCM_CALIPTRA_MCI_POLL
+
+config MBOX_NPCM_CALIPTRA_MCI_POLL_THREAD_PRIO
+	int "Poll thread priority"
+	default 7
+	depends on MBOX_NPCM_CALIPTRA_MCI_POLL
+
+config MBOX_NPCM_CALIPTRA_MCI_BUSID
+	hex "M7 SOC AXI USER (written to MCI BUSID_CTL0 at init)"
+	default 0x1
+	help
+	  AXI USER value the M7 advertises to the Caliptra MCI bus. Must match
+	  one of the slots the MCU ROM provisioned via configure_mcu_mbox_axi_users();
+	  otherwise mailbox CSR/SRAM writes from the M7 are silently filtered.
+
+config MBOX_NPCM_CALIPTRA_MCI_FORCE_TARGET_USER
+	bool "Force TARGET_USER / TARGET_USER_VALID writes on requester send"
+	default n
+	help
+	  FPGA bring-up quirk workaround. Per spec the SOC Sender -> MCU flow
+	  does not require setting TARGET_USER/VALID, but earlier FPGA images
+	  needed it to wake the MCU's CMD_AVAIL handler. Enable only if you
+	  see the requester block forever in CMD_STATUS polling.
+
+endif # MBOX_NPCM_CALIPTRA_MCI

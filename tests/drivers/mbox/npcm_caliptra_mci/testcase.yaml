@@ -1,0 +1,7 @@
+common:
+  tags: drivers mbox
+tests:
+  drivers.mbox.npcm_caliptra_mci.proto:
+    platform_allow:
+      - native_sim
+      - native_sim/native/64

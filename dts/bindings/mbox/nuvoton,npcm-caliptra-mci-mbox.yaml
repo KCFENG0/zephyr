@@ -1,0 +1,39 @@
+# Copyright (c) 2026 Nuvoton Technology Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Nuvoton NPCM M7-side view of a Caliptra MCU_MBOX instance.
+  Each node exposes two mbox channels: channel 0 = requester, channel 1 = responder.
+
+compatible: "nuvoton,npcm-caliptra-mci-mbox"
+
+include: [base.yaml, mailbox-controller.yaml]
+
+properties:
+  reg:
+    required: true
+    description: Two tuples - SRAM aperture then CSR control page.
+
+  reg-names:
+    required: true
+    description: Must be ["sram", "csr"].
+
+  interrupts:
+    required: false
+    description: Optional - consumed only when MBOX_NPCM_CALIPTRA_MCI_IRQ is selected.
+
+  sram-size:
+    type: int
+    required: true
+    description: Usable mailbox SRAM in bytes (aperture is 0x200000).
+
+  poll-interval-ms:
+    type: int
+    default: 5
+    description: Poll-mode cadence in milliseconds.
+
+  "#mbox-cells":
+    const: 1
+
+mbox-cells:
+  - channel
