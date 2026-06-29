@@ -236,6 +236,7 @@
 	i3c-od-scl-hz = <4170000>;
 	i2c-scl-hz = <1000000>;
 	pinctrl-0 = <&i3c1_scl_sda_gpio21_22>;
+	bcr = <0x26>;
 	pinctrl-names = "default";
 	status = "disabled";
 };
@@ -245,6 +246,7 @@
 	i3c-od-scl-hz = <4170000>;
 	i2c-scl-hz = <1000000>;
 	pinctrl-0 = <&i3c2_scl_sda_gpio23_24>;
+	bcr = <0x26>;
 	pinctrl-names = "default";
 	status = "disabled";
 };
@@ -254,6 +256,7 @@
 	i3c-od-scl-hz = <4170000>;
 	i2c-scl-hz = <1000000>;
 	pinctrl-0 = <&i3c3_scl_sda_gpio26_25>;
+	bcr = <0x26>;
 	pinctrl-names = "default";
 	status = "disabled";
 };
@@ -263,6 +266,7 @@
 	i3c-od-scl-hz = <4170000>;
 	i2c-scl-hz = <1000000>;
 	pinctrl-0 = <&i3c4_scl_sda_gpiod0_d1>;
+	bcr = <0x26>;
 	pinctrl-names = "default";
 	status = "disabled";
 };
@@ -272,6 +276,7 @@
 	i3c-od-scl-hz = <4170000>;
 	i2c-scl-hz = <1000000>;
 	pinctrl-0 = <&i3c5_scl_sda_gpio82_83>;
+	bcr = <0x26>;
 	pinctrl-names = "default";
 	status = "okay";
 };
@@ -281,6 +286,7 @@
 	i3c-od-scl-hz = <4170000>;
 	i2c-scl-hz = <1000000>;
 	pinctrl-0 = <&i3c6_scl_sda_gpio96_97>;
+	bcr = <0x26>;
 	pinctrl-names = "default";
 	status = "okay";
 };
