@@ -131,17 +131,17 @@
 		nuvoton,id = <GPIO07__EMAC_MDC__RIB__TA9>;
 	};
 
-	/* GPIOB1 / CLKRUN */
+	/* GPIOB1 / CLKRUN / JTAGM_TRST */
 	gpiob1__clkrun: pin_gpiob1__clkrun {
 		nuvoton,pin-hw-def;
 		nuvoton,pin-reg = <NPCM_PINCTRL_ALT0_5_CLKRN_SL
-				NPCM_PIN_REG_NULL
+				NPCM_PINCTRL_ALTE_3_JTAGM_SL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL>;
-		nuvoton,alt = <0 0x10 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL
+		nuvoton,alt = <0 0x10 0x8 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL
 			NPCM_PIN_CFG_NULL>;
-		nuvoton,id = <GPIOB1__CLKRUN>;
+		nuvoton,id = <GPIOB1__CLKRUN__JTAGM_TRST>;
 	};
 
 	/*
@@ -999,56 +999,56 @@
 		nuvoton,id = <GPIO61__RSTOUT1__SDA1A>;
 	};
 
-	/* GPIO62 / RSTOUT0 */
+	/* GPIO62 / RSTOUT0 / JTAGM_TCK */
 	gpio62__rstout0: pin_gpio62__rstout0 {
 		nuvoton,pin-hw-def;
 		nuvoton,pin-reg = <NPCM_PINCTRL_ALT5D_0_ACPI_GPIO62_SEL
-				NPCM_PIN_REG_NULL
+				NPCM_PINCTRL_ALTE_3_JTAGM_SL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL>;
-		nuvoton,alt = <0x10 0 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL
+		nuvoton,alt = <0x10 0 0x8 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL
 			NPCM_PIN_CFG_NULL>;
-		nuvoton,id = <GPIO62__RSTOUT0>;
+		nuvoton,id = <GPIO62__RSTOUT0__JTAGM_TCK>;
 	};
 
-	/* GPIO63 / ATXPGD */
+	/* GPIO63 / ATXPGD / JTAGM_TMS */
 	gpio63__atxpgd: pin_gpio63__atxpgd {
 		nuvoton,pin-hw-def;
 		nuvoton,pin-reg = <NPCM_PINCTRL_ALT5F_2_ACPI_GPIO63_SEL
-				NPCM_PIN_REG_NULL
+				NPCM_PINCTRL_ALTE_3_JTAGM_SL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL>;
-		nuvoton,alt = <0x10 0 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL
+		nuvoton,alt = <0x10 0 0x8 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL
 			NPCM_PIN_CFG_NULL>;
-		nuvoton,id = <GPIO63__ATXPGD>;
+		nuvoton,id = <GPIO63__ATXPGD__JTAGM_TMS>;
 	};
 
-	/* GPIOE2 / PWROK0 */
+	/* GPIOE2 / PWROK0 / JTAGM_TDI */
 	gpioe2__pwrok0: pin_gpioe2__pwrok0 {
 		nuvoton,pin-hw-def;
 		nuvoton,pin-reg = <NPCM_PINCTRL_ALT5E_3_ACPI_GPIOE2_SEL
-				NPCM_PIN_REG_NULL
+				NPCM_PINCTRL_ALTE_3_JTAGM_SL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL>;
-		nuvoton,alt = <0x10 0 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL
+		nuvoton,alt = <0x10 0 0x8 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL
 			NPCM_PIN_CFG_NULL>;
-		nuvoton,id = <GPIOE2__PWROK0>;
+		nuvoton,id = <GPIOE2__PWROK0__JTAGM_TDI>;
 	};
 
-	/* GPIO57 */
+	/* GPIO57 / JTAGM_TDO */
 	gpio57: pin_gpio57 {
 		nuvoton,pin-hw-def;
-		nuvoton,pin-reg = <NPCM_PIN_REG_NULL
+		nuvoton,pin-reg = <NPCM_PINCTRL_ALTE_3_JTAGM_SL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL
 				NPCM_PIN_REG_NULL>;
-		nuvoton,alt = <NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL
-			NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL>;
-		nuvoton,id = <GPIO57>;
+		nuvoton,alt = <0 0x10 NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL
+			NPCM_PIN_CFG_NULL NPCM_PIN_CFG_NULL>;
+		nuvoton,id = <GPIO57__JTAGM_TDO>;
 	};
 
 	/* GPIO64 / RESETCON / DPWROKI / PWM3 */
