@@ -139,5 +139,10 @@
 		 * 'reg' prop. Please overwrite 'status' prop. to 'okay' if you
 		 * want to switch the interface from io to specific peripheral.
 		 */
+		rtc: rtc_sib{
+			compatible = "nuvoton,npcm-rtc";
+			rtc-wk = <&wui_rtc>;
+			status = "disabled";
+		};
 	};
 };
