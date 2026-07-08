@@ -20,21 +20,6 @@ LOG_MODULE_REGISTER(uart_npcm, CONFIG_UART_LOG_LEVEL);
 
 void uart_set_npcm_baud_rate(const struct device *dev, int baud_rate, uint32_t src_clk);
 
-/*
- * FPGA bring-up workaround: bound otherwise-unbounded UART busy-poll loops
- * with an iteration cap. NPCM500 FPGA bitstream has flaky UART4 status
- * registers — RX FIFO level reads stuck non-zero (traps the init drain),
- * and TBE (TX Buffer Empty) never asserts (would trap the next poll_out).
- * Mirrors BSP raw-UART defensive pattern (npcm500_bsp/src/main.c:43-47).
- *
- * Real silicon completes each loop body well before the cap fires; broken
- * status regs exit via the cap so boot/print can make forward progress.
- *
- * Remove this define + the `&& --busy_to` guards in uart_npcm_clear_rx_fifo()
- * and uart_npcm_poll_out() once the UART4 silicon issue is fixed.
- */
-#define UART_NPCM_BUSY_POLL_TIMEOUT  10000U
-
 /* Driver config */
 struct uart_npcm_config {
 	struct uart_reg *base;
@@ -93,10 +78,9 @@ static void uart_npcm_clear_rx_fifo(const struct device *dev)
 	const struct uart_npcm_config *const config = dev->config;
 	struct uart_reg *const inst = config->base;
 	uint8_t scratch;
-	uint32_t busy_to = UART_NPCM_BUSY_POLL_TIMEOUT;
 
 	/* Read all dummy bytes out from Rx FIFO */
-	while (uart_npcm_rx_fifo_available(dev) && --busy_to)
+	while (uart_npcm_rx_fifo_available(dev))
 		scratch = inst->URBUF;
 }
 
@@ -243,9 +227,7 @@ static int uart_npcm_poll_in(const struct device *dev, unsigned char *c)
  */
 static void uart_npcm_poll_out(const struct device *dev, unsigned char c)
 {
-	uint32_t busy_to = UART_NPCM_BUSY_POLL_TIMEOUT;
-
-	while (!uart_npcm_fifo_fill(dev, &c, 1) && --busy_to) {
+	while (!uart_npcm_fifo_fill(dev, &c, 1)) {
 		continue;
 	}
 }
@@ -276,9 +258,8 @@ static void uart_npcm_poll_out(const struct device *dev, unsigned char c)
 {
 	const struct uart_npcm_config *const config = dev->config;
 	struct uart_reg *const inst = config->base;
-	uint32_t busy_to = UART_NPCM_BUSY_POLL_TIMEOUT;
 
-	while (!NPCM_IS_BIT_SET(inst->UICTRL, NPCM_UICTRL_TBE) && --busy_to) {
+	while (!NPCM_IS_BIT_SET(inst->UICTRL, NPCM_UICTRL_TBE)) {
 		continue;
 	}
 	inst->UTBUF = c;
