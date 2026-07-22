@@ -1,0 +1,14 @@
+{
+  "version": "a2",
+  "description": "A2 full-Caliptra flash image: partition table at 0, slot A at slot_base_offset. Fills the slots reserved in a1.json: the signed Caliptra FMC+RT bundle and the SoC manifest.",
+  "slot_base_offset": "0x10000",
+  "partition": { "active": "a", "a": "valid", "b": "invalid", "rollback": "enable" },
+  "images": [
+    { "id": "0x00000000", "name": "caliptra_fw",  "source": "caliptra-fw" },
+    { "id": "0x00000001", "name": "soc_manifest", "source": "soc-manifest" },
+    { "id": "0x00000002", "name": "mcu_runtime",  "source": "mcu-fw" },
+    { "id": "0x00001000", "name": "soc_fw",       "source": "soc-fw" },
+    { "id": "0x00001001", "name": "npcm_header",  "source": "soc-header" },
+    { "id": "0x00001002", "name": "flash_otp",    "source": "soc-otp" }
+  ]
+}
