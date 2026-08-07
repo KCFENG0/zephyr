@@ -16,6 +16,19 @@
 #define REGION_DEVICE_512M_ATTR \
 	{ (DEVICE_NON_SHAREABLE | NOT_EXEC | REGION_512M | P_RW_U_NA_Msk) }
 
+#if defined(CONFIG_SOC_NPCM5_HYPERRAM_MPU_DEVICE)
+/*
+ * HyperRAM at 0x90000000 (FIU1 DRA space, 256 MB allocated).
+ * Must be Device Shareable (TEX=0, C=0, B=1, S=1) so the CM7 issues
+ * each store as a non-bufferable, non-speculative AXI transaction.
+ * Without this, the CM7 write buffer may issue 32-bit volatile stores as
+ * narrow (AWSIZE=2) SINGLE beats which the FPGA FIU DRA rejects (SLVERR).
+ * Device memory forces full-width AXI transactions with byte-enable strobes.
+ */
+#define REGION_HYPERRAM_DEVICE_ATTR \
+	{ (DEVICE_SHAREABLE | NOT_EXEC | REGION_256M | P_RW_U_NA_Msk) }
+#endif /* CONFIG_SOC_NPCM5_HYPERRAM_MPU_DEVICE */
+
 static const struct arm_mpu_region mpu_regions[] = {
 	MPU_REGION_ENTRY("FLASH_0",
 			 CONFIG_FLASH_BASE_ADDRESS,
@@ -26,6 +39,11 @@ static const struct arm_mpu_region mpu_regions[] = {
 	MPU_REGION_ENTRY("DTCM_ALIAS_DEVICE",
 			 0x20000000,
 			 REGION_DEVICE_512M_ATTR),
+#if defined(CONFIG_SOC_NPCM5_HYPERRAM_MPU_DEVICE)
+	MPU_REGION_ENTRY("HYPERRAM",
+			 0x90000000,
+			 REGION_HYPERRAM_DEVICE_ATTR),
+#endif /* CONFIG_SOC_NPCM5_HYPERRAM_MPU_DEVICE */
 };
 
 const struct arm_mpu_config mpu_config = {

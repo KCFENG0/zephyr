@@ -54,3 +54,23 @@ config PLATFORM_SPECIFIC_INIT
 	default n if SOC_SERIES_NPCM5
 	help
 	  Disable deprecated PLATFORM_SPECIFIC_INIT for NPCM5 as it uses SOC_RESET_HOOK instead.
+
+config SOC_NPCM5_HYPERRAM_MPU_DEVICE
+	bool "Map HyperRAM (0x90000000) as Device Shareable in MPU"
+	depends on SOC_SERIES_NPCM5
+	default n
+	help
+	  When enabled, the FIU1 DRA HyperRAM window (0x90000000-0x9FFFFFFF)
+	  is mapped as Device Shareable (TEX=0, C=0, B=1, S=1) in the MPU.
+
+	  Without this, the CM7 write buffer may issue 32-bit volatile stores
+	  as narrow (AWSIZE=2) AXI SINGLE beats. The FIU DRA slave rejects
+	  sub-bus-width SINGLE transactions with SLVERR, causing a BUS FAULT
+	  on any isolated 32-bit write.
+
+	  Device Shareable forces each store to be a non-bufferable, strongly-
+	  ordered AXI transaction at full 64-bit bus width (AWSIZE=3) with
+	  WSTRB byte enables, which the FIU DRA accepts.
+
+	  Note: This is a workaround for FPGA validation. Whether silicon
+	  requires this mapping depends on the final FIU DRA AXI slave design.
