@@ -1,0 +1,63 @@
+# Nuvoton NPCM OTP driver options
+
+# Copyright (c) 2026 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+config OTP_NPCM
+	bool "Nuvoton NPCM OTP memory driver"
+	default y
+	depends on DT_HAS_NUVOTON_NPCM_OTP_ENABLED
+	depends on CLOCK_CONTROL
+	help
+	  Enable the driver for the Nuvoton NPCM one-time-programmable memory
+	  controller. It can read the fuse array, program it when
+	  CONFIG_OTP_PROGRAM is set, and apply region write or read/write
+	  protection.
+
+if OTP_NPCM
+
+config OTP_NPCM_READ_TIMEOUT_US
+	int "Nuvoton NPCM OTP read timeout (us)"
+	default 1000
+	help
+	  How long to wait for the controller to report read-done, and for it to
+	  power down after an operation.
+
+	  The datasheet specifies no read access time, so this is a generous
+	  bound rather than a measured one. Lower it once real timings are
+	  known.
+
+config OTP_NPCM_PROGRAM_TIMEOUT_MS
+	int "Nuvoton NPCM OTP program timeout (ms)"
+	default 50
+	depends on OTP_PROGRAM
+	help
+	  How long to wait for the controller to report program-done for a
+	  single bit.
+
+	  The datasheet specifies no program pulse time. Programming is
+	  charge-pump driven and this path already runs in thread context, so
+	  the default errs well on the generous side.
+
+	  The driver polls between sleeps, so the effective poll interval is at
+	  least one system tick. On a low SYS_CLOCK_TICKS_PER_SEC this budget
+	  buys proportionally fewer polls; raise it if the tick period
+	  approaches the timeout.
+
+config OTP_NPCM_UNLOCK_ON_INIT
+	bool "Clear OTP region locks during initialization"
+	help
+	  Make the first write to both OTP lock registers after a Core Domain
+	  reset zero, clearing all region locks.
+
+	  Enable only for bring-up or test firmware. This overrides the boot
+	  owner's lock policy and must not be enabled in production firmware.
+
+config OTP_NPCM_INIT_TIMEOUT_US
+	int "Nuvoton NPCM OTP init timeout (us)"
+	default 1000
+	help
+	  How long to wait at init for the controller to finish reading its
+	  initial security region. The datasheet specifies no bound for this.
+
+endif # OTP_NPCM
