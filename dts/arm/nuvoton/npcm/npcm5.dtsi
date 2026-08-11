@@ -179,6 +179,14 @@
 			};
 		};
 
+		otp: otp@400db000 {
+			compatible = "nuvoton,npcm-otp";
+			reg = <0x400db000 0x1000>;
+			clocks = <&pcc NPCM_CLOCK_OTP>;
+			size = <1024>;
+			status = "disabled";
+		};
+
 		/*
 		 * NPCM5 has no PWM_A module (PWDWN_CTL[2] bit 0 is repurposed by
 		 * JTAGM), so there is intentionally no pwm1/pwm@40080000 node.

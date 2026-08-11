@@ -1,0 +1,34 @@
+# Copyright (c) 2026 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Nuvoton NPCM One-Time-Programmable (OTP) memory controller.
+
+  The OTP array is a fuse array: bits only ever transition from 0 to 1, and a
+  programmed bit can never be cleared. Region write- and read-protection is
+  applied through the OTP_LOCK/OTP_LOCK2 registers, which are sticky until a
+  Core Domain reset rather than fused, so protection must be re-applied on
+  every boot.
+
+  The controller has no power-down control bit, so the clocks phandle exists
+  only so the driver can obtain the APB1 rate needed to program the OTP clock
+  divider (OTP_CLK must be approximately 1 MHz). clock_control_on() is never
+  called on it.
+
+compatible: "nuvoton,npcm-otp"
+
+include: [base.yaml]
+
+properties:
+  reg:
+    required: true
+
+  clocks:
+    required: true
+
+  size:
+    type: int
+    default: 1024
+    description: |
+      Number of OTP array bytes the driver may address. OTP_ADDR is ten bits
+      wide, so the build rejects a value above 1024.
