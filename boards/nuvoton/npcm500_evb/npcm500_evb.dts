@@ -822,3 +822,7 @@
 	alarms-count = <1>;
 	status = "okay";
 };
+
+&otp {
+	status = "okay";
+};
