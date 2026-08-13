@@ -31,14 +31,17 @@ set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/li
 # The layout file decides which slots the image ships; flags only supply paths.
 #
 # Options:
-#   -DFLASH_LAYOUT=<x>     image variant: a1 (default, SoC fw only) | a1-mcu
-#                          (adds MCU fw) | a2 (full Caliptra) | path to a
-#                          project-local layout JSON
-#   -DMCU_FW=<path>        MCU firmware (default: caliptra-mcu-sw bypass binary)
-#   -DCALIPTRA_FW=<path>   signed Caliptra FMC+RT bundle (a2 layout)
-#   -DSOC_MANIFEST=<path>  SoC manifest (a2 layout)
-#   -DFLASH_CONNECTION=<x> internal (default) | external-ab | external
-#   -DFLASH_IMAGE_SIZE=<n> pad to this flash size (default: sized to content)
+#   -DFLASH_LAYOUT=<x>      image variant: a1 (default, SoC fw only) | a1-mcu
+#                           (adds MCU fw) | a2 (full Caliptra) | path to a
+#                           project-local layout JSON
+#   -DMCU_FW=<path>         MCU firmware (default: bypass build, or the active
+#                           build when the layout wants Caliptra)
+#   -DCALIPTRA_FW=<path>    signed Caliptra FMC+RT bundle (a2 layout)
+#   -DSOC_MANIFEST=<path>   prebuilt SoC manifest; omit to generate and sign one
+#   -DMANIFEST_SVN=<n>      security version of the generated manifest
+#   -DMANIFEST_KEY_DIR=<d>  signing keys (default: caliptra development keys)
+#   -DFLASH_CONNECTION=<x>  internal (default) | external-ab | external
+#   -DFLASH_IMAGE_SIZE=<n>  pad to this flash size (default: sized to content)
 #
 # ponytail: -D cache vars, promote to Kconfig when a second board needs a
 # different flash geometry.
@@ -46,7 +49,10 @@ set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/li
 string(TOUPPER "${SOC_NAME}" soc_name_upper)
 set(FLASH_IMAGE_DIR  ${SOC_${soc_name_upper}_DIR}/common/caliptra_flash_image)
 set(FLASH_IMAGE_TOOL ${FLASH_IMAGE_DIR}/flash_image.py)
-set(MCU_FW_BYPASS    ${WEST_TOPDIR}/modules/caliptra/caliptra-mcu-sw/platforms/nuvoton/npcm500/images/mcu-fw/bypass/npcm-mcu-fw.bin)
+set(caliptra_images_dir ${WEST_TOPDIR}/modules/caliptra/caliptra-mcu-sw/platforms/nuvoton/npcm500/images)
+set(MCU_FW_BYPASS       ${caliptra_images_dir}/mcu-fw/bypass/npcm-mcu-fw.bin)
+set(MCU_FW_ACTIVE       ${caliptra_images_dir}/mcu-fw/active/npcm-mcu-fw.bin)
+set(CALIPTRA_FW_DEFAULT ${caliptra_images_dir}/caliptra/caliptra-fw.bin)
 
 # Layout selection: a name resolves under layouts/, a path is used as-is.
 if(NOT FLASH_LAYOUT)
@@ -61,6 +67,18 @@ if(NOT EXISTS ${flash_layout_json})
   message(FATAL_ERROR "FLASH_LAYOUT=${FLASH_LAYOUT}: ${flash_layout_json} does not exist")
 endif()
 
+# The layout already decides the variant, so let it pick the default sources
+# too. A layout with a caliptra-fw slot is a full-Caliptra (A2) image, which
+# needs the active MCU runtime: the bypass build has no load-soc-fw or
+# caliptra-soc-release support and would silently boot as A1.
+file(READ ${flash_layout_json} flash_layout_contents)
+string(FIND "${flash_layout_contents}" "\"caliptra-fw\"" caliptra_fw_slot)
+if(caliptra_fw_slot GREATER -1)
+  set(layout_is_caliptra TRUE)
+else()
+  set(layout_is_caliptra FALSE)
+endif()
+
 set(pack_args --layout ${flash_layout_json})
 
 # MCU_FW is only a path override; whether the image contains MCU firmware is the
@@ -73,6 +91,16 @@ if(MCU_FW)
   if(NOT EXISTS ${MCU_FW})
     message(FATAL_ERROR "MCU_FW=${MCU_FW} does not exist")
   endif()
+elseif(layout_is_caliptra)
+  set(MCU_FW ${MCU_FW_ACTIVE})
+  if(NOT EXISTS ${MCU_FW})
+    message(FATAL_ERROR
+      "FLASH_LAYOUT=${FLASH_LAYOUT} needs the active MCU runtime:\n"
+      "  ${MCU_FW}\n"
+      "Build it from caliptra-mcu-sw with --features "
+      "npcm500-compat,npcm500-fpga,caliptra-soc-release, or pass -DMCU_FW=<path>.\n"
+      "The bypass runtime cannot perform the Caliptra boot flow.")
+  endif()
 else()
   set(MCU_FW ${MCU_FW_BYPASS})  # default source; absent is fine unless the layout wants it
 endif()
@@ -80,12 +108,29 @@ if(EXISTS ${MCU_FW})
   list(APPEND pack_args --mcu-fw ${MCU_FW})
 endif()
 
+if(NOT CALIPTRA_FW AND layout_is_caliptra)
+  set(CALIPTRA_FW ${CALIPTRA_FW_DEFAULT})
+endif()
 if(CALIPTRA_FW)
+  if(NOT EXISTS ${CALIPTRA_FW})
+    message(FATAL_ERROR
+      "FLASH_LAYOUT=${FLASH_LAYOUT} needs the Caliptra FMC+RT bundle:\n"
+      "  ${CALIPTRA_FW}\n"
+      "Copy it from a caliptra-sw build, or pass -DCALIPTRA_FW=<path>.")
+  endif()
   list(APPEND pack_args --caliptra-fw ${CALIPTRA_FW})
 endif()
 
 if(SOC_MANIFEST)
   list(APPEND pack_args --soc-manifest ${SOC_MANIFEST})
+endif()
+
+if(MANIFEST_SVN)
+  list(APPEND pack_args --manifest-svn ${MANIFEST_SVN})
+endif()
+
+if(MANIFEST_KEY_DIR)
+  list(APPEND pack_args --key-dir ${MANIFEST_KEY_DIR})
 endif()
 
 if(FLASH_CONNECTION)
