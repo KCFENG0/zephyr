@@ -9,24 +9,25 @@ LAYOUTS = Path(__file__).parent / "layouts"
 
 def _slot(image: bytes, offset: int, identifier: int) -> bytes:
     """Return the payload bytes of one slot in a packed flash image."""
-    for ident, _ioff, size, _icsum, _ihcsum, data in fi.iter_images(image, offset):
+    for ident, _ioff, size, _fname, _icsum, _ihcsum, data in fi.iter_images(image, offset):
         if ident == identifier:
             assert len(data) == size
             return data
     raise AssertionError(f"slot {identifier:#010x} not present")
 
 
-def _build_a1(tmp_path, soc_fw: bytes) -> tuple[bytes, int]:
+def _build_a1(tmp_path, soc_fw: bytes, format: str = "v3") -> tuple[bytes, int]:
     """Build an a1 image from `soc_fw`; return (raw image, slot offset)."""
     soc = tmp_path / "soc.bin"
     soc.write_bytes(soc_fw)
     out = tmp_path / "flash.bin"
     fi.main(["--soc-fw", str(soc), "--layout", str(LAYOUTS / "a1.json"),
-             "--output", str(out)])
+             "--format", format, "--output", str(out)])
     return out.read_bytes(), fi.load_layout(LAYOUTS / "a1.json")["slot_base_offset"]
 
 
-def _build_a2(tmp_path, soc_fw: bytes, mcu_fw: bytes = b"\x5a" * 64) -> tuple[bytes, int]:
+def _build_a2(tmp_path, soc_fw: bytes, mcu_fw: bytes = b"\x5a" * 64,
+              format: str = "v3") -> tuple[bytes, int]:
     """Build an a2 image; return (raw image, slot offset)."""
     soc = tmp_path / "soc.bin"
     soc.write_bytes(soc_fw)
@@ -36,7 +37,7 @@ def _build_a2(tmp_path, soc_fw: bytes, mcu_fw: bytes = b"\x5a" * 64) -> tuple[by
     cal.write_bytes(b"\xc1" * 128)
     out = tmp_path / "flash.bin"
     fi.main(["--soc-fw", str(soc), "--mcu-fw", str(mcu), "--caliptra-fw", str(cal),
-             "--layout", str(LAYOUTS / "a2.json"), "--output", str(out)])
+             "--layout", str(LAYOUTS / "a2.json"), "--format", format, "--output", str(out)])
     return out.read_bytes(), fi.load_layout(LAYOUTS / "a2.json")["slot_base_offset"]
 
 
@@ -104,6 +105,42 @@ def test_aligned_soc_fw_is_stored_unchanged(tmp_path):
     """pad4() is idempotent: aligned input is byte-for-byte in the slot."""
     raw, off = _build_a1(tmp_path, b"\xa5" * 8)
     assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == b"\xa5" * 8
+
+
+def test_format_is_required(tmp_path):
+    """No safe default: 08ba397 in the upstream tool exists because a v1 image
+    silently passed as valid and booted an NPCM500 FPGA into a Caliptra
+    zero-length DMA. --format must be spelled out every time."""
+    soc = tmp_path / "soc.bin"
+    soc.write_bytes(b"\xa5" * 8)
+    try:
+        fi.main(["--soc-fw", str(soc), "--layout", str(LAYOUTS / "a1.json"),
+                 "--output", str(tmp_path / "flash.bin")])
+        raise AssertionError("expected SystemExit for a missing --format")
+    except SystemExit as exc:
+        assert exc.code != 0
+
+
+def test_v1_and_v3_round_trip(tmp_path):
+    """Both formats pack and parse back to the same slot contents."""
+    for fmt, magic in (("v1", b"FLSH"), ("v3", b"")):
+        raw, off = _build_a1(tmp_path, b"\xa5" * 8, format=fmt)
+        assert raw[off:off + len(magic)] == magic if magic else True
+        version, count, *_ = fi.parse_header(raw, off)
+        assert version == fi.FORMAT_VERSIONS[fmt]
+        assert count == 3  # soc_fw, npcm_header, flash_otp
+        assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == b"\xa5" * 8
+
+
+def test_v1_flsh_bytes_parse_as_v1_not_a_mangled_version_word(tmp_path):
+    """Regression for the 08ba397 incident: a real "FLSH"-magic v1 header must
+    not be mistaken for a v3 header whose version word happens to start with
+    the same bytes ("FL" as u16 LE == 0x4c46, which is not 1 or 3, but the
+    detector must key off the magic, not luck into the right branch)."""
+    raw, off = _build_a1(tmp_path, b"\xa5" * 8, format="v1")
+    assert raw[off:off + 4] == b"FLSH"
+    version, *_ = fi.parse_header(raw, off)
+    assert version == 1
 
 
 import subprocess

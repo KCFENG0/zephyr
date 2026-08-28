@@ -3,8 +3,8 @@
 """Build (and verify) an NPCM flash image from a layout table.
 
 The slot table lives in a layout JSON (layouts/, default a1.json): identifier
-and source per slot, plus the FLSH container offset and the partition-table
-state. The layout file alone decides which slots a variant ships:
+and source per slot, plus the flash-image container offset and the
+partition-table state. The layout file alone decides which slots a variant ships:
 
   a1      SoC firmware only; MCU ROM boots it directly
   a1-mcu  adds MCU firmware; MCU ROM loads and jumps to it first
@@ -12,12 +12,12 @@ state. The layout file alone decides which slots a variant ships:
           from --caliptra-fw and generates and signs the SoC manifest slot
           (--soc-manifest overrides it with a prebuilt one)
 
-The FLSH binary format is inlined from flash_image_tool.py (only the pieces this
+The container format is inlined from flash_image_tool.py (only the pieces this
 tool needs to pack and verify an image); source of truth for the format is
 common/flash-image/src/lib.rs, common/config/src/{flash,boot}.rs.
 
 Usage:
-  flash_image.py --soc-fw fw.bin --output flash.bin [--mcu-fw mcu.bin] ...
+  flash_image.py --soc-fw fw.bin --output flash.bin --format v3 [--mcu-fw mcu.bin] ...
   flash_image.py verify flash.bin [--offset 0x10000 | --layout a1.json]
 """
 
@@ -28,11 +28,32 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-# --- FLSH format (common/flash-image/src/lib.rs) ---
-MAGIC = b"FLSH"  # U32<BigEndian>, on-disk bytes are literal "FLSH"
-HEADER_VERSION = 1
-FLASH_HEADER_SIZE = 16
-IMAGE_HEADER_SIZE = 20
+# common/flash-image/src/lib.rs. Two on-disk layouts are in the field:
+# v1 (pre-963f7756): "FLSH" magic, no filename in the image header.
+# v3 (post-beb9a717): no magic, 64-byte filename in the image header.
+# Legacy-ROM boards need v1; the 2.1.2 ROM reads v3 only -- callers must say
+# which one they want (there is no safe default: an image this tool called
+# valid once booted an NPCM500 FPGA into a Caliptra zero-length DMA when the
+# ROM parsed a v1 image as "FL" == version 0x4c46 and walked garbage headers).
+#
+# flash header  = magic + version:u16 + image_count:u16 +
+#                 image_headers_offset:u32 + header_checksum:u32
+# image header  = identifier:u32 + offset:u32 + size:u32 + filename +
+#                 image_checksum:u32 + image_header_checksum:u32
+FORMATS = {
+    1: dict(magic=b"FLSH", filename_len=0),
+    3: dict(magic=b"", filename_len=64),
+}
+FORMAT_VERSIONS = {"v1": 1, "v3": 3}  # --format CLI token -> FORMATS key
+
+
+def _flash_header_size(fmt: dict) -> int:
+    return len(fmt["magic"]) + 8 + 4
+
+
+def _image_header_size(fmt: dict) -> int:
+    return 12 + fmt["filename_len"] + 8
+
 
 CALIPTRA_FMC_RT_IDENTIFIER = 0x00000000
 SOC_MANIFEST_IDENTIFIER = 0x00000001
@@ -209,25 +230,34 @@ def image_name(identifier: int) -> str:
     return f"image_0x{identifier:08x}"
 
 
-def build_flash_image(images: list[tuple[int, bytes]]) -> bytes:
-    """Serialize (identifier, raw_data) pairs into a flash image blob.
+def build_flash_image(images: list[tuple[int, bytes]], version: int) -> bytes:
+    """Serialize (identifier, raw_data) pairs into a flash image blob, in the
+    v1 or v3 on-disk layout selected by `version` (see FORMATS).
 
     Mirrors generate_image_info + FlashImage::to_bytes: header, then one
-    ImageHeader per image, then the (4-byte-padded) image payloads.
+    ImageHeader per image, then the (4-byte-padded) image payloads. v3's
+    filename field is left empty, as `cargo xtask flash-image create` does;
+    v1 has no filename field at all.
     """
+    if version not in FORMATS:
+        raise ValueError(f"unsupported format version {version} (want one of {sorted(FORMATS)})")
+    fmt = FORMATS[version]
     n = len(images)
     if n == 0:
         raise ValueError("no images to pack")
     padded = [(ident, pad4(data)) for ident, data in images]
 
-    offset = FLASH_HEADER_SIZE + IMAGE_HEADER_SIZE * n
+    hdr_size = _flash_header_size(fmt)
+    fname = b"\x00" * fmt["filename_len"]
+    offset = hdr_size + _image_header_size(fmt) * n
     infos = bytearray()
     for ident, data in padded:
-        body = struct.pack("<IIII", ident, offset, len(data), checksum(data))
+        body = struct.pack("<III", ident, offset, len(data)) + fname \
+            + struct.pack("<I", checksum(data))
         infos += body + struct.pack("<I", checksum(body))
         offset += len(data)
 
-    hdr_wo = MAGIC + struct.pack("<HHI", HEADER_VERSION, n, FLASH_HEADER_SIZE)
+    hdr_wo = fmt["magic"] + struct.pack("<HHI", version, n, hdr_size)
     out = bytearray(hdr_wo + struct.pack("<I", checksum(hdr_wo)))
     out += infos
     for _, data in padded:
@@ -270,36 +300,64 @@ def prep_output(path: Path, prealloc):
 # ------------------------------------------------------------------- parse side
 
 def parse_header(raw: bytes, off: int):
-    if len(raw) < off + FLASH_HEADER_SIZE:
+    """== FlashHeader::verify: version, non-zero count, sane headers offset,
+    checksum over the header bytes before header_checksum. Detects v1 (the
+    "FLSH" magic) vs v3 (no magic) by the first 4 bytes -- that's the only
+    structural difference before the version field itself."""
+    version = 1 if raw[off:off + 4] == b"FLSH" else 3
+    fmt = FORMATS[version]
+    hdr_size = _flash_header_size(fmt)
+    if len(raw) < off + hdr_size:
         raise ValueError("file too small for flash header")
-    magic = raw[off:off + 4]
-    version, count, hdr_off, hcsum = struct.unpack(
-        "<HHI", raw[off + 4:off + 12]
-    ) + struct.unpack("<I", raw[off + 12:off + 16])
-    if magic != MAGIC:
-        raise ValueError(f"bad magic {magic!r} at offset {off:#x} (want {MAGIC!r})")
-    if version != HEADER_VERSION:
-        raise ValueError(f"unsupported version {version}")
-    if checksum(raw[off:off + 12]) != hcsum:
+    vch = raw[off + len(fmt["magic"]):off + hdr_size - 4]
+    hcsum, = struct.unpack("<I", raw[off + hdr_size - 4:off + hdr_size])
+    got_version, count, hdr_off = struct.unpack("<HHI", vch)
+    if got_version != version:
+        raise ValueError(f"unsupported version {got_version} at offset {off:#x}")
+    if count == 0:
+        raise ValueError("image_count is 0")
+    if hdr_off < hdr_size:
+        raise ValueError(f"image_headers_offset {hdr_off} inside the header")
+    if checksum(raw[off:off + hdr_size - 4]) != hcsum:
         raise ValueError("header checksum mismatch")
-    return count, hdr_off, hcsum
+    return version, count, hdr_off, hcsum
 
 
 def find_flash_image(raw: bytes):
-    """Scan 4-byte-aligned offsets for a valid header (magic + version)."""
-    for o in range(0, max(0, len(raw) - FLASH_HEADER_SIZE) + 1, 4):
-        if raw[o:o + 4] == MAGIC and raw[o + 4:o + 6] == struct.pack("<H", HEADER_VERSION):
-            return o
+    """Scan 4-byte-aligned offsets for a header that passes parse_header:
+    either the v1 "FLSH" magic or the bare v3 version word (v3 has no
+    magic)."""
+    v3_word = struct.pack("<H", 3)
+    for o in range(0, max(0, len(raw) - _flash_header_size(FORMATS[3])) + 1, 4):
+        if raw[o:o + 4] != b"FLSH" and raw[o:o + 2] != v3_word:
+            continue
+        try:
+            parse_header(raw, o)
+        except ValueError:
+            continue
+        return o
     return None
 
 
 def iter_images(raw: bytes, off: int):
-    count, hdr_off, _ = parse_header(raw, off)
+    """Yield (identifier, offset, size, filename, image_checksum,
+    image_header_checksum, data) per ImageHeader. filename is the raw field
+    (empty for v1, which has none); use filename_str() to display it."""
+    version, count, hdr_off, _ = parse_header(raw, off)
+    fmt = FORMATS[version]
+    ihs = _image_header_size(fmt)
     for i in range(count):
-        p = off + hdr_off + IMAGE_HEADER_SIZE * i
-        ident, ioff, size, icsum, ihcsum = struct.unpack("<IIIII", raw[p:p + IMAGE_HEADER_SIZE])
+        p = off + hdr_off + ihs * i
+        if len(raw) < p + ihs:
+            raise ValueError(f"file too small for image header {i}")
+        ident, ioff, size, fname, icsum, ihcsum = struct.unpack(
+            f"<III{fmt['filename_len']}sII", raw[p:p + ihs])
         start = off + ioff
-        yield ident, ioff, size, icsum, ihcsum, raw[start:start + size]
+        yield ident, ioff, size, fname, icsum, ihcsum, raw[start:start + size]
+
+
+def filename_str(fname: bytes) -> str:
+    return fname.split(b"\x00", 1)[0].decode("ascii", "replace")
 
 
 def resolve_offset(raw: bytes, offset):
@@ -371,15 +429,18 @@ def cmd_build(argv):
                         help="pad the image to this flash size (default: size to content)")
     parser.add_argument("--layout", type=Path, default=DEFAULT_LAYOUT,
                         help="layout JSON describing the slot table (default: layouts/a1.json)")
+    parser.add_argument("--format", required=True, choices=tuple(FORMAT_VERSIONS),
+                        help="container version to write: v3 (2.1.2+ ROM) or v1 "
+                             "(legacy-ROM boards) -- no default, see FORMATS")
     parser.add_argument("--output", required=True)
     args = parser.parse_args(argv)
 
     layout = load_layout(args.layout)
-    # soc-fw and mcu-fw are padded here, not in build_flash_image, so the FLSH
-    # slot and the SoC-manifest digest cover byte-identical data. Caliptra
-    # DMA-reads `size` bytes (the padded length, from the FLSH ImageHeader) and
-    # compares SHA-384 against the manifest entry; hashing the unpadded file
-    # would pass every build-time check and then hold the M7 in reset on
+    # soc-fw and mcu-fw are padded here, not in build_flash_image, so the
+    # container slot and the SoC-manifest digest cover byte-identical data.
+    # Caliptra DMA-reads `size` bytes (the padded length, from the ImageHeader)
+    # and compares SHA-384 against the manifest entry; hashing the unpadded
+    # file would pass every build-time check and then hold the M7 in reset on
     # hardware.
     sources = {
         "soc-fw": pad4(Path(args.soc_fw).read_bytes()),
@@ -400,10 +461,11 @@ def cmd_build(argv):
     part = layout["partition"]
     output = Path(args.output)
     prep_output(output, args.flash_size)
-    write_at(output, layout["slot_base_offset"], build_flash_image(images))
+    write_at(output, layout["slot_base_offset"],
+            build_flash_image(images, FORMAT_VERSIONS[args.format]))
     write_at(output, 0, build_partition_table(
         part["active"], part["a"], part["b"], part["rollback"]))
-    print(f"Wrote {layout['version']} flash image ({len(images)} image(s), "
+    print(f"Wrote {layout['version']} {args.format} flash image ({len(images)} image(s), "
           f"{output.stat().st_size} bytes) -> {output}")
 
 
@@ -426,17 +488,19 @@ def cmd_verify(argv):
     if offset is None and args.layout:
         offset = load_layout(args.layout)["slot_base_offset"]
     off = resolve_offset(raw, offset)
-    count, _, _ = parse_header(raw, off)
-    print(f"Verify flash image @ {off:#x}: {count} image(s)")
+    version, count, _, _ = parse_header(raw, off)
+    print(f"Verify v{version} flash image @ {off:#x}: {count} image(s)")
     ok = True
     images_by_id = {}
-    for ident, ioff, size, icsum, _ihcsum, data in iter_images(raw, off):
+    for ident, ioff, size, fname, icsum, _ihcsum, data in iter_images(raw, off):
         good = len(data) == size and checksum(data) == icsum
         ok = ok and good
         images_by_id[ident] = data
         note = SOC_IMAGE_NOTE.get(ident, "")
+        shown = filename_str(fname)
         print(f"  {image_name(ident):<12} id={ident:#010x} off={ioff:#x} size={size} "
-              f"{'OK' if good else 'BAD'}" + (f"  ({note})" if note else ""))
+              f"{'OK' if good else 'BAD'}" + (f"  ({note})" if note else "")
+              + (f"  {shown}" if shown else ""))
 
     for label, good in verify_manifest_rows(images_by_id, args.key_dir):
         ok = ok and good

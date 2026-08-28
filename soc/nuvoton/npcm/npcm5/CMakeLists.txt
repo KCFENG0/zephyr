@@ -24,9 +24,10 @@ set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/li
 #
 # NPCM flash image (${CONFIG_KERNEL_BIN_NAME}_flash.bin).
 #
-# flash_image.py builds the flash layout only -- partition table, FLSH container,
-# no signing -- driven by a slot-table layout JSON. It synthesizes the NPCM boot
-# header itself, so it consumes the raw kernel binary, not the esiost-signed one.
+# flash_image.py builds the flash layout only -- partition table, flash-image
+# container, no signing -- driven by a slot-table layout JSON. It synthesizes
+# the NPCM boot header itself, so it consumes the raw kernel binary, not the
+# esiost-signed one.
 #
 # The layout file decides which slots the image ships; flags only supply paths.
 #
@@ -34,6 +35,8 @@ set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/li
 #   -DFLASH_LAYOUT=<x>      image variant: a1 (default, SoC fw only) | a1-mcu
 #                           (adds MCU fw) | a2 (full Caliptra) | path to a
 #                           project-local layout JSON
+#   -DFLASH_FORMAT=<x>      container version: v3 (default, 2.1.2+ ROM) | v1
+#                           (legacy-ROM boards -- see flash_image.py FORMATS)
 #   -DMCU_FW=<path>         MCU firmware (default: bypass build, or the active
 #                           build when the layout wants Caliptra)
 #   -DCALIPTRA_FW=<path>    signed Caliptra FMC+RT bundle (a2 layout)
@@ -67,6 +70,13 @@ if(NOT EXISTS ${flash_layout_json})
   message(FATAL_ERROR "FLASH_LAYOUT=${FLASH_LAYOUT}: ${flash_layout_json} does not exist")
 endif()
 
+if(NOT FLASH_FORMAT)
+  set(FLASH_FORMAT v3)
+endif()
+if(NOT FLASH_FORMAT STREQUAL "v1" AND NOT FLASH_FORMAT STREQUAL "v3")
+  message(FATAL_ERROR "FLASH_FORMAT=${FLASH_FORMAT}: must be v1 or v3")
+endif()
+
 # The layout already decides the variant, so let it pick the default sources
 # too. A layout with a caliptra-fw slot is a full-Caliptra (A2) image, which
 # needs the active MCU runtime: the bypass build has no load-soc-fw or
@@ -79,7 +89,7 @@ else()
   set(layout_is_caliptra FALSE)
 endif()
 
-set(pack_args --layout ${flash_layout_json})
+set(pack_args --layout ${flash_layout_json} --format ${FLASH_FORMAT})
 
 # MCU_FW is only a path override; whether the image contains MCU firmware is the
 # layout's call. The source is offered whenever its file exists and the packer
