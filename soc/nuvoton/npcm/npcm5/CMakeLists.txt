@@ -164,3 +164,11 @@ set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
   COMMAND ${PYTHON_EXECUTABLE} ${FLASH_IMAGE_TOOL} verify
           ${CONFIG_KERNEL_BIN_NAME}_flash.bin --layout ${flash_layout_json}
   )
+
+# Extract each embedded image to its own file for inspection, e.g.
+#   python3 flash_image_tool.py extract input/NPCM5_flash.bin
+set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
+  COMMAND ${PYTHON_EXECUTABLE} ${FLASH_IMAGE_TOOL} extract
+          ${CONFIG_KERNEL_BIN_NAME}_flash.bin --layout ${flash_layout_json}
+          --out-dir ${CONFIG_KERNEL_BIN_NAME}_flash_extract
+  )

@@ -19,6 +19,7 @@ common/flash-image/src/lib.rs, common/config/src/{flash,boot}.rs.
 Usage:
   flash_image.py --soc-fw fw.bin --output flash.bin --format v3 [--mcu-fw mcu.bin] ...
   flash_image.py verify flash.bin [--offset 0x10000 | --layout a1.json]
+  flash_image.py extract flash.bin [--offset 0x10000 | --layout a1.json] [--out-dir dir]
 """
 
 import argparse
@@ -510,10 +511,44 @@ def cmd_verify(argv):
     sys.exit(0 if ok else 1)
 
 
+def cmd_extract(argv):
+    parser = argparse.ArgumentParser(prog="flash_image.py extract",
+                                     description="extract embedded images to files")
+    parser.add_argument("file")
+    parser.add_argument("--offset", type=lambda x: int(x, 0), default=None,
+                        help="flash-image offset; omit to locate by header scan")
+    parser.add_argument("--layout", type=Path,
+                        help="layout JSON; its slot_base_offset is the expected offset")
+    parser.add_argument("--out-dir", default="./output/export")
+    args = parser.parse_args(argv)
+
+    raw = Path(args.file).read_bytes()
+    offset = args.offset
+    if offset is None and args.layout:
+        offset = load_layout(args.layout)["slot_base_offset"]
+    off = resolve_offset(raw, offset)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for ident, _ioff, size, _fname, icsum, _ihcsum, data in iter_images(raw, off):
+        if len(data) != size:
+            sys.exit(f"error: image {ident:#010x} truncated ({len(data)} < {size})")
+        if checksum(data) != icsum:
+            print(f"warning: image {ident:#010x} checksum mismatch", file=sys.stderr)
+        p = out_dir / f"{image_name(ident)}.bin"
+        p.write_bytes(data)
+        print(f"Extracted {image_name(ident):<12} id={ident:#010x} {size:>8} bytes -> {p}")
+        n += 1
+    if n == 0:
+        sys.exit("error: no images found")
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv and argv[0] == "verify":
         cmd_verify(argv[1:])
+    elif argv and argv[0] == "extract":
+        cmd_extract(argv[1:])
     else:
         cmd_build(argv)
 
