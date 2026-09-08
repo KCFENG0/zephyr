@@ -18,7 +18,11 @@ jobs:
     concurrency:
       group: backport-issue-check-${{ github.ref }}
       cancel-in-progress: true
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: ['3.11']
+        os: [ubuntu-latest-l]
     if: github.repository == 'nuvoton-CS00/zephyr'
 
     steps:
