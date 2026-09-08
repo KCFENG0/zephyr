@@ -10,6 +10,7 @@ on:
     - main
     - v*-branch
     - ntil-npcm5-main
+    - ntil-npcm5-v3.7.1
     paths:
     - 'scripts/dts/**'
     - '.github/workflows/devicetree_checks.yml'
@@ -18,6 +19,7 @@ on:
     - main
     - v*-branch
     - ntil-npcm5-main
+    - ntil-npcm5-v3.7.1
     paths:
     - 'scripts/dts/**'
     - '.github/workflows/devicetree_checks.yml'

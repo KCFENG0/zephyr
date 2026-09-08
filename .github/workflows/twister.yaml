@@ -12,6 +12,7 @@ on:
       - v*-branch
       - collab-*
       - ntil-npcm5-main
+      - ntil-npcm5-v3.7.1
   schedule:
     # Run at 03:00 UTC on every Sunday
     - cron: '0 3 * * 0'

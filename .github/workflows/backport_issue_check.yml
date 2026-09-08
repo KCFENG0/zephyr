@@ -10,6 +10,7 @@ on:
     branches:
       - v*-branch
       - ntil-npcm5-main
+      - ntil-npcm5-v3.7.1
 
 jobs:
   backport:
