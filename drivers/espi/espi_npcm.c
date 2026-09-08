@@ -532,7 +532,7 @@ static void espi_bus_flashrx_update_isr(const struct device *dev)
 		k_sem_give(&data->flash_rx_lock);
 	} else { /* Target Attached Flash Access */
 		/* NOTE: evt_type is ESPI_BUS_EVENT_FLASH_RECEIVED in 2.6 */
-		struct espi_event evt = { .evt_type = ESPI_BUS_SAF_NOTIFICATION,
+		struct espi_event evt = { .evt_type = ESPI_BUS_TAF_NOTIFICATION,
 					  .evt_details = 0,
 					  .evt_data = 0 };
 		espi_send_callbacks(&data->callbacks, dev, evt);
