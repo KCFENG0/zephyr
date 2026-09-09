@@ -12,6 +12,7 @@ config FLASH_NPCM_NOR
 	select FLASH_HAS_PAGE_LAYOUT
 	select FLASH_JESD216
 	select FLASH_HAS_EX_OP
+	select FLASH_HAS_EXPLICIT_ERASE
 	help
 	  This option enables the SPI-NOR Flash driver for NPCM family of
 	  processors.
