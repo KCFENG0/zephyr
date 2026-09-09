@@ -550,6 +550,13 @@ static int qspi_npcm_fiu_set_read_mode(const struct device *dev, uint8_t rd_mode
         host_inst->RESP_CFG &= ~BIT(NPCM_RESP_CFG_QUAD_EN);
     }
 
+    /* Update current configuration if available */
+    if (data->cur_cfg != NULL) {
+        struct npcm_qspi_cfg *cfg = (struct npcm_qspi_cfg *)data->cur_cfg;
+
+        cfg->rd_mode = rd_mode;
+    }
+
     k_sem_give(&data->lock_sem);
 
 exit:

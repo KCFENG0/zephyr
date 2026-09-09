@@ -24,9 +24,9 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(flash_npcm_nor, CONFIG_FLASH_LOG_LEVEL);
 
-#define BLOCK_64K_SIZE KB(64)
-#define BLOCK_4K_SIZE  KB(4)
-#define MAPPED_ADDR_NOT_SUPPORT	0xffffffff
+#define BLOCK_64K_SIZE          KB(64)
+#define BLOCK_4K_SIZE           KB(4)
+#define MAPPED_ADDR_NOT_SUPPORT 0xffffffff
 
 /* Device config */
 struct flash_npcm_nor_config {
@@ -52,22 +52,20 @@ struct flash_npcm_nor_data {
 	struct flash_parameters flash_nor_parameter;
 };
 
-#define DT_INST_QUAD_EN_PROP_OR(inst)						\
-	COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, quad_enable_requirements),	\
-		    (_CONCAT(JESD216_DW15_QER_VAL_,				\
-		     DT_INST_STRING_TOKEN(inst, quad_enable_requirements))),	\
+#define DT_INST_QUAD_EN_PROP_OR(inst)                                                              \
+	COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, quad_enable_requirements),                         \
+		    (_CONCAT(JESD216_DW15_QER_VAL_,                                                \
+			     DT_INST_STRING_TOKEN(inst, quad_enable_requirements))),               \
 		    ((JESD216_DW15_QER_VAL_NONE)))
 
-static inline bool is_within_region(off_t addr, size_t size, off_t region_start,
-				    size_t region_size)
+static inline bool is_within_region(off_t addr, size_t size, off_t region_start, size_t region_size)
 {
-	return (addr >= region_start &&
-		(addr < (region_start + region_size)) &&
+	return (addr >= region_start && (addr < (region_start + region_size)) &&
 		((addr + size) <= (region_start + region_size)));
 }
 
 static int flash_npcm_transceive(const struct device *dev, struct npcm_transceive_cfg *cfg,
-				     uint32_t flags)
+				 uint32_t flags)
 {
 	const struct flash_npcm_nor_config *config = dev->config;
 	struct flash_npcm_nor_data *data = dev->data;
@@ -75,8 +73,7 @@ static int flash_npcm_transceive(const struct device *dev, struct npcm_transceiv
 	int ret;
 
 	/* Lock SPI bus and configure it if needed */
-	qspi_data->qspi_ops->lock_configure(config->qspi_bus, &config->qspi_cfg,
-				       data->operation);
+	qspi_data->qspi_ops->lock_configure(config->qspi_bus, &config->qspi_cfg, data->operation);
 
 	/* Execute transaction */
 	ret = qspi_data->qspi_ops->transceive(config->qspi_bus, cfg, flags);
@@ -90,7 +87,7 @@ static int flash_npcm_transceive(const struct device *dev, struct npcm_transceiv
 /* NPCM functions for SPI NOR flash */
 static int flash_npcm_transceive_cmd_only(const struct device *dev, uint8_t opcode)
 {
-	struct npcm_transceive_cfg cfg = { .opcode = opcode, .addr_count = 0};
+	struct npcm_transceive_cfg cfg = {.opcode = opcode, .addr_count = 0};
 
 	return flash_npcm_transceive(dev, &cfg, 0); /* opcode only */
 }
@@ -98,7 +95,9 @@ static int flash_npcm_transceive_cmd_only(const struct device *dev, uint8_t opco
 static int flash_npcm_transceive_cmd_by_addr(const struct device *dev, uint8_t opcode,
 					     uint32_t addr)
 {
-	struct npcm_transceive_cfg cfg = { .opcode = opcode, .addr_count = 3};
+	const struct flash_npcm_nor_config *config = dev->config;
+	size_t addr_count = (config->qspi_cfg.enter_4ba != 0) ? 4 : 3;
+	struct npcm_transceive_cfg cfg = {.opcode = opcode, .addr_count = addr_count};
 
 	cfg.addr.u32 = sys_cpu_to_be32(addr);
 	return flash_npcm_transceive(dev, &cfg, NPCM_TRANSCEIVE_ACCESS_ADDR);
@@ -107,34 +106,30 @@ static int flash_npcm_transceive_cmd_by_addr(const struct device *dev, uint8_t o
 static int flash_npcm_transceive_read_by_addr(const struct device *dev, uint8_t opcode,
 					      uint8_t *dst, const size_t size, uint32_t addr)
 {
-	struct npcm_transceive_cfg cfg = { .opcode = opcode,
-					  .rx_buf = dst,
-                      .rx_count = size,
-                      .addr_count = 3};
+	const struct flash_npcm_nor_config *config = dev->config;
+	size_t addr_count = (config->qspi_cfg.enter_4ba != 0) ? 4 : 3;
+	struct npcm_transceive_cfg cfg = {
+		.opcode = opcode, .rx_buf = dst, .rx_count = size, .addr_count = addr_count};
 
 	cfg.addr.u32 = sys_cpu_to_be32(addr);
-	return flash_npcm_transceive(dev, &cfg, NPCM_TRANSCEIVE_ACCESS_READ |
-					NPCM_TRANSCEIVE_ACCESS_ADDR);
+	return flash_npcm_transceive(dev, &cfg,
+				     NPCM_TRANSCEIVE_ACCESS_READ | NPCM_TRANSCEIVE_ACCESS_ADDR);
 }
 
-static int flash_npcm_transceive_read(const struct device *dev, uint8_t opcode,
-			       uint8_t *dst, const size_t size)
+static int flash_npcm_transceive_read(const struct device *dev, uint8_t opcode, uint8_t *dst,
+				      const size_t size)
 {
-	struct npcm_transceive_cfg cfg = { .opcode = opcode,
-					  .rx_buf = dst,
-                      .rx_count = size,
-                      .addr_count = 0};
+	struct npcm_transceive_cfg cfg = {
+		.opcode = opcode, .rx_buf = dst, .rx_count = size, .addr_count = 0};
 
 	return flash_npcm_transceive(dev, &cfg, NPCM_TRANSCEIVE_ACCESS_READ);
 }
 
-static int flash_npcm_transceive_write(const struct device *dev, uint8_t opcode,
-				       uint8_t *src, const size_t size)
+static int flash_npcm_transceive_write(const struct device *dev, uint8_t opcode, uint8_t *src,
+				       const size_t size)
 {
-	struct npcm_transceive_cfg cfg = { .opcode = opcode,
-				    .tx_buf = src,
-                    .tx_count = size,
-                    .addr_count = 0};
+	struct npcm_transceive_cfg cfg = {
+		.opcode = opcode, .tx_buf = src, .tx_count = size, .addr_count = 0};
 
 	return flash_npcm_transceive(dev, &cfg, NPCM_TRANSCEIVE_ACCESS_WRITE);
 }
@@ -142,14 +137,14 @@ static int flash_npcm_transceive_write(const struct device *dev, uint8_t opcode,
 static int flash_npcm_transceive_write_by_addr(const struct device *dev, uint8_t opcode,
 					       uint8_t *src, const size_t size, uint32_t addr)
 {
-	struct npcm_transceive_cfg cfg = { .opcode = opcode,
-					.tx_buf = src,
-                    .tx_count = size,
-                    .addr_count = 3};
+	const struct flash_npcm_nor_config *config = dev->config;
+	size_t addr_count = (config->qspi_cfg.enter_4ba != 0) ? 4 : 3;
+	struct npcm_transceive_cfg cfg = {
+		.opcode = opcode, .tx_buf = src, .tx_count = size, .addr_count = addr_count};
 
 	cfg.addr.u32 = sys_cpu_to_be32(addr);
-	return flash_npcm_transceive(dev, &cfg, NPCM_TRANSCEIVE_ACCESS_WRITE |
-					 NPCM_TRANSCEIVE_ACCESS_ADDR);
+	return flash_npcm_transceive(dev, &cfg,
+				     NPCM_TRANSCEIVE_ACCESS_WRITE | NPCM_TRANSCEIVE_ACCESS_ADDR);
 }
 
 /* Local SPI NOR flash functions */
@@ -211,16 +206,15 @@ static int flash_npcm_nor_read_jedec_id(const struct device *dev, uint8_t *id)
 	return flash_npcm_transceive_read(dev, SPI_NOR_CMD_RDID, id, SPI_NOR_MAX_ID_LEN);
 }
 
-static int flash_npcm_nor_read_sfdp(const struct device *dev, off_t addr,
-				    void *data, size_t size)
+static int flash_npcm_nor_read_sfdp(const struct device *dev, off_t addr, void *data, size_t size)
 {
 	uint8_t sfdp_addr[4];
-	struct npcm_transceive_cfg cfg = { .opcode = JESD216_CMD_READ_SFDP,
-					.tx_buf = sfdp_addr,
-					.tx_count = 4,
-					.rx_buf = data,
-                    .rx_count = size,
-                    .addr_count = 0};
+	struct npcm_transceive_cfg cfg = {.opcode = JESD216_CMD_READ_SFDP,
+					  .tx_buf = sfdp_addr,
+					  .tx_count = 4,
+					  .rx_buf = data,
+					  .rx_count = size,
+					  .addr_count = 0};
 
 	if (data == NULL) {
 		return -EINVAL;
@@ -230,8 +224,8 @@ static int flash_npcm_nor_read_sfdp(const struct device *dev, off_t addr,
 	sfdp_addr[0] = (addr >> 16) & 0xff;
 	sfdp_addr[1] = (addr >> 8) & 0xff;
 	sfdp_addr[2] = addr & 0xff;
-	return flash_npcm_transceive(dev, &cfg, NPCM_TRANSCEIVE_ACCESS_WRITE |
-					 NPCM_TRANSCEIVE_ACCESS_READ);
+	return flash_npcm_transceive(dev, &cfg,
+				     NPCM_TRANSCEIVE_ACCESS_WRITE | NPCM_TRANSCEIVE_ACCESS_READ);
 }
 #endif /* CONFIG_FLASH_JESD216_API */
 
@@ -247,8 +241,7 @@ static void flash_npcm_nor_pages_layout(const struct device *dev,
 }
 #endif /* CONFIG_FLASH_PAGE_LAYOUT */
 
-static int flash_npcm_nor_read(const struct device *dev, off_t addr,
-				 void *data, size_t size)
+static int flash_npcm_nor_read(const struct device *dev, off_t addr, void *data, size_t size)
 {
 	const struct flash_npcm_nor_config *config = dev->config;
 	struct flash_npcm_nor_data *dev_data = dev->data;
@@ -261,13 +254,12 @@ static int flash_npcm_nor_read(const struct device *dev, off_t addr,
 
 	/* handle by transceive, use genernal Read I/O */
 	if (config->mapped_addr == MAPPED_ADDR_NOT_SUPPORT) {
-		return flash_npcm_transceive_read_by_addr(dev,
-				SPI_NOR_CMD_READ, data, size, addr);
+		return flash_npcm_transceive_read_by_addr(dev, SPI_NOR_CMD_READ, data, size, addr);
 	}
 
 	/* Lock/Unlock SPI bus also for DRA mode */
 	qspi_data->qspi_ops->lock_configure(config->qspi_bus, &config->qspi_cfg,
-				       dev_data->operation);
+					    dev_data->operation);
 
 	/* Invalidate the D-cache range over the DRA window before memcpy */
 	sys_cache_data_invd_range((void *)(config->mapped_addr + addr), size);
@@ -305,13 +297,20 @@ static int flash_npcm_nor_erase(const struct device *dev, off_t addr, size_t siz
 
 	/* Select erase opcode by size */
 	if (size == config->flash_size) {
-		flash_npcm_transceive_cmd_only(dev, SPI_NOR_CMD_WREN);
+		ret = flash_npcm_transceive_cmd_only(dev, SPI_NOR_CMD_WREN);
+		if (ret != 0) {
+			LOG_ERR("WREN failed before chip erase: %d", ret);
+			return ret;
+		}
 		/* Send chip erase command */
-		flash_npcm_transceive_cmd_only(dev, SPI_NOR_CMD_CE);
+		ret = flash_npcm_transceive_cmd_only(dev, SPI_NOR_CMD_CE);
+		if (ret != 0) {
+			LOG_ERR("Chip erase command failed: %d", ret);
+			return ret;
+		}
 		ret = flash_npcm_nor_wait_until_ready(dev);
 		if (ret == 0 && config->mapped_addr != MAPPED_ADDR_NOT_SUPPORT) {
-			sys_cache_data_invd_range((void *)config->mapped_addr,
-						  config->flash_size);
+			sys_cache_data_invd_range((void *)config->mapped_addr, config->flash_size);
 		}
 		return ret;
 	}
@@ -319,22 +318,29 @@ static int flash_npcm_nor_erase(const struct device *dev, off_t addr, size_t siz
 	while (size > 0) {
 		size_t blk_sz;
 
-		flash_npcm_transceive_cmd_only(dev, SPI_NOR_CMD_WREN);
+		ret = flash_npcm_transceive_cmd_only(dev, SPI_NOR_CMD_WREN);
+		if (ret != 0) {
+			LOG_ERR("WREN failed before erase: %d", ret);
+			break;
+		}
 		/* Send page/block erase command with addr */
 		if ((size >= BLOCK_64K_SIZE) && SPI_NOR_IS_64K_ALIGNED(addr)) {
-			flash_npcm_transceive_cmd_by_addr(dev, SPI_NOR_CMD_BE, addr);
+			ret = flash_npcm_transceive_cmd_by_addr(dev, SPI_NOR_CMD_BE, addr);
 			blk_sz = BLOCK_64K_SIZE;
 		} else {
-			flash_npcm_transceive_cmd_by_addr(dev, SPI_NOR_CMD_SE, addr);
+			ret = flash_npcm_transceive_cmd_by_addr(dev, SPI_NOR_CMD_SE, addr);
 			blk_sz = BLOCK_4K_SIZE;
+		}
+		if (ret != 0) {
+			LOG_ERR("Erase command failed: %d", ret);
+			break;
 		}
 		ret = flash_npcm_nor_wait_until_ready(dev);
 		if (ret != 0) {
 			break;
 		}
 		if (config->mapped_addr != MAPPED_ADDR_NOT_SUPPORT) {
-			sys_cache_data_invd_range(
-				(void *)(config->mapped_addr + addr), blk_sz);
+			sys_cache_data_invd_range((void *)(config->mapped_addr + addr), blk_sz);
 		}
 		addr += blk_sz;
 		size -= blk_sz;
@@ -343,8 +349,7 @@ static int flash_npcm_nor_erase(const struct device *dev, off_t addr, size_t siz
 	return ret;
 }
 
-static int flash_npcm_nor_write(const struct device *dev, off_t addr,
-				  const void *data, size_t size)
+static int flash_npcm_nor_write(const struct device *dev, off_t addr, const void *data, size_t size)
 {
 	const struct flash_npcm_nor_config *config = dev->config;
 	uint8_t *tx_buf = (uint8_t *)data;
@@ -373,9 +378,13 @@ static int flash_npcm_nor_write(const struct device *dev, off_t addr,
 
 	while (size > 0) {
 		/* Start to write */
-		flash_npcm_transceive_cmd_only(dev, SPI_NOR_CMD_WREN);
-		ret = flash_npcm_transceive_write_by_addr(dev, SPI_NOR_CMD_PP, tx_buf,
-						   sz_write, addr);
+		ret = flash_npcm_transceive_cmd_only(dev, SPI_NOR_CMD_WREN);
+		if (ret != 0) {
+			LOG_ERR("WREN failed before program: %d", ret);
+			break;
+		}
+		ret = flash_npcm_transceive_write_by_addr(dev, SPI_NOR_CMD_PP, tx_buf, sz_write,
+							  addr);
 		if (ret != 0) {
 			break;
 		}
@@ -387,8 +396,7 @@ static int flash_npcm_nor_write(const struct device *dev, off_t addr,
 		}
 
 		if (config->mapped_addr != MAPPED_ADDR_NOT_SUPPORT) {
-			sys_cache_data_invd_range(
-				(void *)(config->mapped_addr + addr), sz_write);
+			sys_cache_data_invd_range((void *)(config->mapped_addr + addr), sz_write);
 		}
 
 		size -= sz_write;
@@ -405,8 +413,7 @@ static int flash_npcm_nor_write(const struct device *dev, off_t addr,
 	return ret;
 }
 
-static const struct flash_parameters *
-flash_npcm_nor_get_parameters(const struct device *dev)
+static const struct flash_parameters *flash_npcm_nor_get_parameters(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
@@ -417,16 +424,14 @@ flash_npcm_nor_get_parameters(const struct device *dev)
 #ifdef CONFIG_FLASH_EX_OP_ENABLED
 static int flash_npcm_nor_set_4b_mode(const struct device *dev, bool enable)
 {
-    const struct flash_npcm_nor_config *config = dev->config;
+	const struct flash_npcm_nor_config *config = dev->config;
+	const struct device *fiu_dev = config->qspi_bus;
 
-    /* Get the FIU device from qspi_bus */
-    const struct device *fiu_dev = config->qspi_bus;
-    if (!fiu_dev) {
-        return -ENODEV;
-    }
+	if (!fiu_dev) {
+		return -ENODEV;
+	}
 
-    /* Call the FIU function to set 4-byte mode directly */
-    return flash_npcm_fiu_set_4b_mode(fiu_dev, enable);
+	return flash_npcm_fiu_set_4b_mode(fiu_dev, enable);
 }
 
 /*
@@ -434,9 +439,8 @@ static int flash_npcm_nor_set_4b_mode(const struct device *dev, bool enable)
  * range of the DRA window so a subsequent DRA read sees fresh contents.
  * Non-mutating opcodes (reads, status-reg, JEDEC ID, ...) are no-ops.
  */
-static void flash_npcm_nor_ex_invd_after_op(
-	const struct flash_npcm_nor_config *config,
-	const struct npcm_ex_ops_transceive_in *op_in)
+static void flash_npcm_nor_ex_invd_after_op(const struct flash_npcm_nor_config *config,
+					    const struct npcm_ex_ops_transceive_in *op_in)
 {
 	size_t len;
 
@@ -462,25 +466,23 @@ static void flash_npcm_nor_ex_invd_after_op(
 		len = BLOCK_64K_SIZE;
 		break;
 	case SPI_NOR_CMD_CE:
-		sys_cache_data_invd_range((void *)config->mapped_addr,
-					  config->flash_size);
+		sys_cache_data_invd_range((void *)config->mapped_addr, config->flash_size);
 		return;
 	default:
 		return;
 	}
 
-	sys_cache_data_invd_range(
-		(void *)(config->mapped_addr + op_in->addr), len);
+	sys_cache_data_invd_range((void *)(config->mapped_addr + op_in->addr), len);
 }
 
 static int flash_npcm_nor_ex_exec_transceive(const struct device *dev,
-				      const struct npcm_ex_ops_transceive_in *op_in,
-				      const struct npcm_ex_ops_transceive_out *op_out)
+					     const struct npcm_ex_ops_transceive_in *op_in,
+					     const struct npcm_ex_ops_transceive_out *op_out)
 {
 	const struct flash_npcm_nor_config *config = dev->config;
 	int flag = 0;
 	struct npcm_transceive_cfg cfg;
-    int ret;
+	int ret;
 
 	if (op_in == NULL) {
 		return -EINVAL;
@@ -506,11 +508,11 @@ static int flash_npcm_nor_ex_exec_transceive(const struct device *dev,
 		flag |= NPCM_TRANSCEIVE_ACCESS_READ;
 	}
 
-    ret = flash_npcm_transceive(dev, &cfg, flag);
-    if (ret == 0) {
-        flash_npcm_nor_ex_invd_after_op(config, op_in);
-    }
-    return ret;
+	ret = flash_npcm_transceive(dev, &cfg, flag);
+	if (ret == 0) {
+		flash_npcm_nor_ex_invd_after_op(config, op_in);
+	}
+	return ret;
 }
 
 static int flash_npcm_nor_ex_set_spi_spec(const struct device *dev,
@@ -536,13 +538,7 @@ static int flash_npcm_nor_ex_get_spi_spec(const struct device *dev,
 	return 0;
 }
 
-/*
- * CRC/Checksum Helper Functions
- *
- * These functions provide the interface layer between the NOR flash driver
- * and the FIU hardware CRC engine. They validate parameters and delegate
- * actual operations to the QSPI operations structure.
- */
+/* CRC/Checksum helper functions: delegate to the QSPI CRC engine ops */
 static int flash_npcm_nor_crc_init(const struct device *dev,
 				   const struct npcm_ex_ops_crc_init_in *crc_init)
 {
@@ -553,10 +549,8 @@ static int flash_npcm_nor_crc_init(const struct device *dev,
 		return -EINVAL;
 	}
 
-	return qspi_data->qspi_ops->crc_init(config->qspi_bus,
-					      crc_init->mode,
-					      crc_init->source,
-					      crc_init->initial_value);
+	return qspi_data->qspi_ops->crc_init(config->qspi_bus, crc_init->mode, crc_init->source,
+					     crc_init->initial_value);
 }
 
 static int flash_npcm_nor_crc_add_data(const struct device *dev,
@@ -570,9 +564,8 @@ static int flash_npcm_nor_crc_add_data(const struct device *dev,
 		return -EINVAL;
 	}
 
-	return qspi_data->qspi_ops->crc_add_data(config->qspi_bus,
-						  add_data->data,
-						  add_data->length);
+	return qspi_data->qspi_ops->crc_add_data(config->qspi_bus, add_data->data,
+						 add_data->length);
 }
 
 static int flash_npcm_nor_crc_get_result(const struct device *dev,
@@ -585,12 +578,11 @@ static int flash_npcm_nor_crc_get_result(const struct device *dev,
 		return -EINVAL;
 	}
 
-	return qspi_data->qspi_ops->crc_get_result(config->qspi_bus,
-						    &result->result);
+	return qspi_data->qspi_ops->crc_get_result(config->qspi_bus, &result->result);
 }
 
-static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code,
-				const uintptr_t in, void *out)
+static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code, const uintptr_t in,
+				void *out)
 {
 #ifdef CONFIG_USERSPACE
 	bool syscall_trap = z_syscall_trap();
@@ -598,10 +590,8 @@ static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code,
 	int ret;
 
 	switch (code) {
-	case FLASH_NPCM_EX_OP_EXEC_TRANSCEIVE:
-	{
-		struct npcm_ex_ops_transceive_in *op_in =
-			(struct npcm_ex_ops_transceive_in *)in;
+	case FLASH_NPCM_EX_OP_EXEC_TRANSCEIVE: {
+		struct npcm_ex_ops_transceive_in *op_in = (struct npcm_ex_ops_transceive_in *)in;
 		struct npcm_ex_ops_transceive_out *op_out =
 			(struct npcm_ex_ops_transceive_out *)out;
 #ifdef CONFIG_USERSPACE
@@ -623,8 +613,7 @@ static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code,
 #endif
 		break;
 	}
-	case FLASH_NPCM_EX_OP_SET_QSPI_OPER:
-	{
+	case FLASH_NPCM_EX_OP_SET_QSPI_OPER: {
 		struct npcm_ex_ops_qspi_oper_in *op_in = (struct npcm_ex_ops_qspi_oper_in *)in;
 #ifdef CONFIG_USERSPACE
 		struct npcm_ex_ops_qspi_oper_in in_copy;
@@ -637,10 +626,8 @@ static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code,
 		ret = flash_npcm_nor_ex_set_spi_spec(dev, op_in);
 		break;
 	}
-	case FLASH_NPCM_EX_OP_GET_QSPI_OPER:
-	{
-		struct npcm_ex_ops_qspi_oper_out *op_out =
-		(struct npcm_ex_ops_qspi_oper_out *)out;
+	case FLASH_NPCM_EX_OP_GET_QSPI_OPER: {
+		struct npcm_ex_ops_qspi_oper_out *op_out = (struct npcm_ex_ops_qspi_oper_out *)out;
 #ifdef CONFIG_USERSPACE
 		struct npcm_ex_ops_qspi_oper_out out_copy;
 
@@ -656,8 +643,7 @@ static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code,
 #endif
 		break;
 	}
-	case FLASH_NPCM_EX_OP_SET_4B_MODE:
-	{
+	case FLASH_NPCM_EX_OP_SET_4B_MODE: {
 		const struct npcm_ex_ops_set_4b_mode_in *set_4b_in =
 			(const struct npcm_ex_ops_set_4b_mode_in *)in;
 
@@ -665,11 +651,9 @@ static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code,
 			return -EINVAL;
 		}
 
-		// Call the FIU driver function to set 4-byte mode
 		return flash_npcm_nor_set_4b_mode(dev, set_4b_in->enable);
 	}
-	case FLASH_NPCM_EX_OP_CRC_INIT:
-	{
+	case FLASH_NPCM_EX_OP_CRC_INIT: {
 		const struct npcm_ex_ops_crc_init_in *crc_init =
 			(const struct npcm_ex_ops_crc_init_in *)in;
 
@@ -679,8 +663,7 @@ static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code,
 
 		return flash_npcm_nor_crc_init(dev, crc_init);
 	}
-	case FLASH_NPCM_EX_OP_CRC_ADD_DATA:
-	{
+	case FLASH_NPCM_EX_OP_CRC_ADD_DATA: {
 		const struct npcm_ex_ops_crc_add_data_in *add_data =
 			(const struct npcm_ex_ops_crc_add_data_in *)in;
 
@@ -690,8 +673,7 @@ static int flash_npcm_nor_ex_op(const struct device *dev, uint16_t code,
 
 		return flash_npcm_nor_crc_add_data(dev, add_data);
 	}
-	case FLASH_NPCM_EX_OP_CRC_GET_RESULT:
-	{
+	case FLASH_NPCM_EX_OP_CRC_GET_RESULT: {
 		struct npcm_ex_ops_crc_result_out *crc_result =
 			(struct npcm_ex_ops_crc_result_out *)out;
 
@@ -791,39 +773,41 @@ static int flash_npcm_nor_init(const struct device *dev)
 	return 0;
 }
 
-#define NPCM_FLASH_NOR_INIT(n)							\
-BUILD_ASSERT(DT_INST_QUAD_EN_PROP_OR(n) == JESD216_DW15_QER_NONE ||		\
-	     DT_INST_STRING_TOKEN(n, rd_mode) == NPCM_RD_MODE_FAST_DUAL,	\
-	     "Fast Dual IO read must be selected in Quad mode");		\
-PINCTRL_DT_INST_DEFINE(n);							\
-static const struct flash_npcm_nor_config flash_npcm_nor_config_##n = {		\
-	.qspi_bus = DEVICE_DT_GET(DT_PARENT(DT_DRV_INST(n))),			\
-	.mapped_addr = DT_INST_PROP_OR(n, mapped_addr, MAPPED_ADDR_NOT_SUPPORT),\
-	.flash_size = DT_INST_PROP(n, size) / 8,				\
-	.max_timeout = DT_INST_PROP(n, max_timeout),				\
-	.qspi_cfg = {								\
-		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),			\
-		.flags = DT_INST_PROP(n, qspi_flags),				\
-		.enter_4ba = DT_INST_PROP_OR(n, enter_4byte_addr, 0),		\
-		.qer_type = DT_INST_QUAD_EN_PROP_OR(n),				\
-		.rd_mode = DT_INST_STRING_TOKEN(n, rd_mode),			\
-	},									\
-	IF_ENABLED(CONFIG_FLASH_PAGE_LAYOUT, (					\
-		.layout = {							\
-			.pages_count = DT_INST_PROP(n, size) /			\
-				      (8 * SPI_NOR_PAGE_SIZE),			\
-			.pages_size  = SPI_NOR_PAGE_SIZE,			\
-		},))								\
-};										\
-static struct flash_npcm_nor_data flash_npcm_nor_data_##n = {			\
-		.flash_nor_parameter = {	\
-			.write_block_size = DT_INST_PROP_OR(n, write_block_size, 0x1000),	\
-			.erase_value = 0xff,					\
-		},								\
-};										\
-DEVICE_DT_INST_DEFINE(n, flash_npcm_nor_init, NULL,				\
-		      &flash_npcm_nor_data_##n, &flash_npcm_nor_config_##n,	\
-		      POST_KERNEL, CONFIG_FLASH_INIT_PRIORITY,			\
-		      &flash_npcm_nor_driver_api);
+/* clang-format off */
+#define NPCM_FLASH_NOR_INIT(n)                                                                     \
+	BUILD_ASSERT(DT_INST_QUAD_EN_PROP_OR(n) == JESD216_DW15_QER_NONE ||                        \
+			     DT_INST_STRING_TOKEN(n, rd_mode) == NPCM_RD_MODE_FAST_DUAL,           \
+		     "Fast Dual IO read must be selected in Quad mode");                           \
+	PINCTRL_DT_INST_DEFINE(n);                                                                 \
+	static const struct flash_npcm_nor_config flash_npcm_nor_config_##n = {                    \
+		.qspi_bus = DEVICE_DT_GET(DT_PARENT(DT_DRV_INST(n))),                              \
+		.mapped_addr = DT_INST_PROP_OR(n, mapped_addr, MAPPED_ADDR_NOT_SUPPORT),           \
+		.flash_size = DT_INST_PROP(n, size) / 8,                                           \
+		.max_timeout = DT_INST_PROP(n, max_timeout),                                       \
+		.qspi_cfg =                                                                        \
+			{                                                                          \
+				.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                         \
+				.flags = DT_INST_PROP(n, qspi_flags),                              \
+				.enter_4ba = DT_INST_PROP_OR(n, enter_4byte_addr, 0),              \
+				.qer_type = DT_INST_QUAD_EN_PROP_OR(n),                            \
+				.rd_mode = DT_INST_STRING_TOKEN(n, rd_mode),                       \
+			},                                                                         \
+		IF_ENABLED(                                                                        \
+			CONFIG_FLASH_PAGE_LAYOUT,                                                  \
+			(.layout = {                                                               \
+				 .pages_count = DT_INST_PROP(n, size) / (8 * SPI_NOR_PAGE_SIZE),   \
+				 .pages_size = SPI_NOR_PAGE_SIZE,                                  \
+			},))};                                                                     \
+	static struct flash_npcm_nor_data flash_npcm_nor_data_##n = {                              \
+		.flash_nor_parameter =                                                             \
+			{                                                                          \
+				.write_block_size = DT_INST_PROP_OR(n, write_block_size, 0x1000),  \
+				.erase_value = 0xff,                                               \
+			},                                                                         \
+	};                                                                                         \
+	DEVICE_DT_INST_DEFINE(n, flash_npcm_nor_init, NULL, &flash_npcm_nor_data_##n,              \
+			      &flash_npcm_nor_config_##n, POST_KERNEL, CONFIG_FLASH_INIT_PRIORITY, \
+			      &flash_npcm_nor_driver_api);
+/* clang-format on */
 
 DT_INST_FOREACH_STATUS_OKAY(NPCM_FLASH_NOR_INIT)
