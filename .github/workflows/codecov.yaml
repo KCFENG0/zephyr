@@ -28,7 +28,7 @@ jobs:
     if: github.repository_owner == 'nuvoton-CS00'
     runs-on: ubuntu-latest-l
     container:
-      image: ghcr.io/nuvoton-cs00/ci-repo-cache:v0.26.11.20240324
+      image: ghcr.io/nuvoton-cs00/ci-repo-cache:v0.26.18.20241022
       credentials:
         username: ${{ github.repository_owner }}
         password: ${{ secrets.ZB_GITHUB_TOKEN }}
