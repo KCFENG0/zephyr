@@ -276,29 +276,20 @@ jobs:
 
       - name: Merge testplan files
         run: |
-          # Merge all testplan files into a single ${{ runner.os }}-testplan.json using jq
-          echo "Looking for testplan files..."
-          find . -name "*testplan.json" -type f | head -20
+          # Merge all testplan files into a single ${{ runner.os }}-testplan.json using jq.
+          # Seed it unconditionally: the report step opens it whatever happened
+          # upstream, so a run that collected no testplan must still leave valid JSON.
+          echo "{}" > ${{ runner.os }}-testplan.json
 
-          if find . -name "*testplan.json" -type f -print -quit | grep -q .; then
-            echo "Merging testplan files..."
-            echo "{}" > ${{ runner.os }}-testplan.json
+          while IFS= read -r -d '' file; do
+            if [ "$(basename "$file")" != "${{ runner.os }}-testplan.json" ]; then
+              echo "Processing $file"
+              jq -s '.[0] * .[1]' ${{ runner.os }}-testplan.json "$file" > temp.json && mv temp.json ${{ runner.os }}-testplan.json
+            fi
+          done < <(find . -name "*testplan.json" -type f -print0)
 
-            while IFS= read -r -d '' file; do
-              if [ "$(basename "$file")" != "${{ runner.os }}-testplan.json" ]; then
-                echo "Processing $file"
-                jq -s '.[0] * .[1]' ${{ runner.os }}-testplan.json "$file" > temp.json && mv temp.json ${{ runner.os }}-testplan.json
-              fi
-            done < <(find . -name "*testplan.json" -type f -print0)
-
-            echo "Merged testplan files into ${{ runner.os }}-testplan.json"
-            echo "Final merged file size:"
-            wc -l ${{ runner.os }}-testplan.json
-            echo "Number of test entries:"
-            jq 'length' ${{ runner.os }}-testplan.json
-          else
-            echo "No testplan files found"
-          fi
+          echo "Number of test entries:"
+          jq 'length' ${{ runner.os }}-testplan.json
 
       - name: Generate list of coverage files
         id: get-coverage-files
