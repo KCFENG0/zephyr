@@ -1,7 +1,8 @@
-/*----------------------------------------------------------------------------*/
-/* Copyright (c) 2019 by Nuvoton Electronics Corporation                      */
-/* All rights reserved.							      */
-/*----------------------------------------------------------------------------*/
+/*
+ * Copyright (c) 2026 Nuvoton Technology Corporation.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include <stddef.h>
 #include <stdint.h>
