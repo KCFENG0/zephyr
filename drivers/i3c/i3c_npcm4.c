@@ -264,6 +264,13 @@ struct i3c_npcm4_obj {
 	isr_cb_t isr_cb[NUM_CALLBACKS];
 };
 
+struct i3c_context {
+	uint32_t config;
+	uint32_t idext;
+	uint32_t partno;
+	uint32_t maxlimits;
+};
+
 struct i3c_cmd {
 	uint8_t type;
 	uint8_t addr;
@@ -501,6 +508,53 @@ static void i3c_npcm4_register_isr_cb(const struct device *dev, int irq, isr_cb_
 		/* Disable interrupt */
 		writel(BIT(irq), config->regs + I3C_INTCLR);
 	}
+}
+
+static void i3c_npcm4_slave_reset(const struct device *dev, struct i3c_context *ctx)
+{
+	const struct i3c_npcm4_config *config = DEV_CFG(dev);
+	struct i3c_npcm4_obj *obj = DEV_DATA(dev);
+	uint32_t val;
+
+	if (ctx) {
+		/* Store the context */
+		ctx->idext = readl(config->regs + I3C_IDEXT);
+		ctx->partno = readl(config->regs + I3C_PARTNO);
+		ctx->maxlimits = readl(config->regs + I3C_MAXLIMITS);
+		ctx->config = readl(config->regs + I3C_CONFIG);
+	}
+
+	if (obj->tx_desc) {
+		i3c_npcm4_stop_dma_tx(dev);
+	}
+	if (obj->rx_desc) {
+		i3c_npcm4_stop_dma_rx(dev);
+	}
+
+	/* I3C software reset */
+	val = sys_read8(config->pmc_base + PMC_SW_RST1);
+	sys_write8(val | BIT(config->inst_id), config->pmc_base + PMC_SW_RST1);
+	readl_poll_timeout(config->regs + I3C_PARTNO, val, !val, 0, 10);
+	sys_write8(val, config->pmc_base + PMC_SW_RST1);
+
+	obj->state = 0;
+	/* Clear ISR callbacks */
+	for (int i = 0; i < NUM_CALLBACKS; i++)
+		obj->isr_cb[i] = NULL;
+
+}
+
+static void i3c_npcm4_slave_restore(const struct device *dev, struct i3c_context *ctx)
+{
+	const struct i3c_npcm4_config *config = DEV_CFG(dev);
+
+	if (!ctx)
+		return;
+
+	writel(ctx->idext, config->regs + I3C_IDEXT);
+	writel(ctx->partno, config->regs + I3C_PARTNO);
+	writel(ctx->maxlimits, config->regs + I3C_MAXLIMITS);
+	writel(ctx->config, config->regs + I3C_CONFIG);
 }
 
 static int i3c_npcm4_slave_write_fifo(uintptr_t regs, uint8_t *buf, int len)
@@ -1031,7 +1085,8 @@ int i3c_npcm4_slave_hj_req(const struct device *dev)
 {
 	const struct i3c_npcm4_config *config = DEV_CFG(dev);
 	struct i3c_npcm4_obj *obj = DEV_DATA(dev);
-	uint32_t val, timeout_ms;
+	struct i3c_context ctx;
+	uint32_t timeout_ms;
 	uint8_t addr;
 	int ret = 0;
 
@@ -1050,18 +1105,15 @@ int i3c_npcm4_slave_hj_req(const struct device *dev)
 		return -EINVAL;
 	}
 
-	/* Wait for bus STOP */
-	if (readl_poll_timeout(config->regs + I3C_STATUS, val,
-			       !(val & I3C_STATUS_STNOTSTOP), 0, 10000) != 0) {
-		LOG_ERR("%s: Bus is busy", __func__);
-		return -EBUSY;
-	}
-
 	k_sem_init(&obj->complete, 0, 1);
-	i3c_npcm4_register_isr_cb(dev, IRQ_EVENT, i3c_npcm4_isr_hj_event);
+	i3c_npcm4_slave_reset(dev, &ctx);
 
-	/* Generate a HJ event */
-	writel(readl(config->regs + I3C_CTRL) | 0x3, config->regs + I3C_CTRL);
+	/* Set HJ event */
+	i3c_npcm4_register_isr_cb(dev, IRQ_EVENT, i3c_npcm4_isr_hj_event);
+	writel(0x3, config->regs + I3C_CTRL);
+
+	/* Enable slave */
+	i3c_npcm4_slave_restore(dev, &ctx);
 
 	/* Wait for complete */
 	timeout_ms = config->hj_timeout_ms > 0 ? config->hj_timeout_ms : 100;
@@ -1072,6 +1124,7 @@ int i3c_npcm4_slave_hj_req(const struct device *dev)
 	} else {
 		LOG_INF("HJ event sent");
 	}
+	i3c_npcm4_register_isr_cb(dev, IRQ_DACHG, i3c_npcm4_isr_da_changed);
 
 	return ret;
 }
