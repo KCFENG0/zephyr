@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2024 Nuvoton Technology Corporation.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 #define DT_DRV_COMPAT nuvoton_npcm_shm
 
 #define LOG_MODULE_NAME shm_npcm
