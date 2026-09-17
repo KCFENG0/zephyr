@@ -1,0 +1,13 @@
+/*
+ * EVB-only override for the npcm_nor ztest: disable int_flash (the
+ * internal SPIM w25q16@80000 used for littlefs, 2MB, 3-byte-addr
+ * only) so DT_COMPAT_GET_ANY_STATUS_OKAY(nuvoton_npcm_nor) in main.c
+ * picks ext_flash_shd (FIU0 SW_CS1, w25q256jv@1, 32MB, 4-byte addr
+ * capable) instead. Without this, test_erase_write_verify_4byte_addr_boundary
+ * always SKIPs because int_flash is too small to exercise the >=16MB
+ * 4-byte addressing range.
+ */
+
+&int_flash {
+	status = "disabled";
+};

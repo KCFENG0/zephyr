@@ -1,0 +1,11 @@
+/*
+ * FPGA-only override for the npcm_nor ztest: only ext_flash_back
+ * (FIU0 SW_CS2 / "backup") has a physical W25Q16JV chip wired on this
+ * FPGA board. ext_flash_shd (SW_CS1) is floating, so disable it here
+ * so DT_COMPAT_GET_ANY_STATUS_OKAY(nuvoton_npcm_nor) in main.c picks
+ * ext_flash_back instead.
+ */
+
+&ext_flash_shd {
+	status = "disabled";
+};

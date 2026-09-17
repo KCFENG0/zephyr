@@ -1,0 +1,10 @@
+common:
+  tags:
+    - drivers
+    - flash
+  harness: ztest
+tests:
+  drivers.flash.npcm_nor:
+    platform_allow:
+      - npcm400_evb
+      - npcm500_evb
