@@ -115,7 +115,7 @@ static inline void qspi_npcm_uma_cs_level(const struct device *dev, uint8_t sw_c
 	}
 }
 
-static inline void qspi_npcm_uma_write_byte(const struct device *dev, uint8_t data)
+static inline int qspi_npcm_uma_write_byte(const struct device *dev, uint8_t data)
 {
 	struct fiu_reg *const inst = HAL_INSTANCE(dev);
 	struct npcm_qspi_data *const qspi_data = dev->data;
@@ -137,12 +137,16 @@ static inline void qspi_npcm_uma_write_byte(const struct device *dev, uint8_t da
 	inst->UMA_CTS = cts;
 
 	/* EXEC_DONE will be zero automatically if a UMA transaction is completed. */
-	while (NPCM_IS_BIT_SET(inst->UMA_CTS, NPCM_UMA_CTS_EXEC_DONE)) {
-		continue;
+	if (WAIT_FOR(!NPCM_IS_BIT_SET(inst->UMA_CTS, NPCM_UMA_CTS_EXEC_DONE),
+		     NPCM_FIU_CHK_TIMEOUT_US, NULL) == false) {
+		LOG_ERR("UMA write byte timeout");
+		return -ETIMEDOUT;
 	}
+
+	return 0;
 }
 
-static inline void qspi_npcm_uma_read_byte(const struct device *dev, uint8_t *data)
+static inline int qspi_npcm_uma_read_byte(const struct device *dev, uint8_t *data)
 {
 	struct fiu_reg *const inst = HAL_INSTANCE(dev);
 	struct npcm_qspi_data *const qspi_data = dev->data;
@@ -161,11 +165,14 @@ static inline void qspi_npcm_uma_read_byte(const struct device *dev, uint8_t *da
 	/* Trigger UMA and Get data from DB0 later */
 	inst->UMA_CTS = cts;
 
-	while (NPCM_IS_BIT_SET(inst->UMA_CTS, NPCM_UMA_CTS_EXEC_DONE)) {
-		continue;
+	if (WAIT_FOR(!NPCM_IS_BIT_SET(inst->UMA_CTS, NPCM_UMA_CTS_EXEC_DONE),
+		     NPCM_FIU_CHK_TIMEOUT_US, NULL) == false) {
+		LOG_ERR("UMA read byte timeout");
+		return -ETIMEDOUT;
 	}
 
 	*data = inst->UMA_DB0;
+	return 0;
 }
 
 /* NPCM SPI Direct Read Access (DRA)/User Mode Access (UMA) configuration functions */
@@ -223,84 +230,16 @@ static inline int qspi_npcm_fiu_uma_lock(const struct device *dev)
 	return 0;
 }
 
-/* Enhanced function to read flash ADS of Status Register 3 according to W25Q256JV datasheet */
-static inline bool qspi_npcm_read_flash_4b_en_status(const struct device *dev,
-                                                     const struct npcm_qspi_cfg *qspi_cfg)
-{
-    struct npcm_qspi_data *const qspi_data = dev->data;
-    const struct npcm_qspi_cfg *saved_cfg = qspi_data->cur_cfg;
-    uint8_t status_reg3 = 0;
-    bool flash_4b_en = false;
-    int ret;
-
-    /* Temporarily set configuration for status read */
-    qspi_data->cur_cfg = qspi_cfg;
-    qspi_data->sw_cs = find_lsb_set(qspi_cfg->flags & NPCM_QSPI_SW_CS_MASK) - 1;
-
-    /* Configure UMA mode for status register read */
-    qspi_npcm_config_uma_mode(dev, qspi_cfg);
-
-    /* Lock UMA for status read */
-    ret = qspi_npcm_fiu_uma_lock(dev);
-    if (ret != 0) {
-        goto cleanup;
-    }
-
-    /* Assert chip select */
-    qspi_npcm_uma_cs_level(dev, qspi_data->sw_cs, false);
-
-    /* Send Read Status Register 3 command (0x15) */
-    qspi_npcm_uma_write_byte(dev, 0x15);
-
-    /* Read status register 3 */
-    qspi_npcm_uma_read_byte(dev, &status_reg3);
-
-    /* De-assert chip select */
-    qspi_npcm_uma_cs_level(dev, qspi_data->sw_cs, true);
-
-    /* Release UMA */
-    qspi_npcm_fiu_uma_release(dev);
-
-    /* Check ADS bit (bit 0 in Status Register 3) - Current Address Mode */
-    flash_4b_en = (status_reg3 & BIT(0)) != 0;
-
-cleanup:
-    /* Restore previous configuration */
-    qspi_data->cur_cfg = saved_cfg;
-    if (saved_cfg) {
-        qspi_data->sw_cs = find_lsb_set(saved_cfg->flags & NPCM_QSPI_SW_CS_MASK) - 1;
-    }
-
-    return flash_4b_en;
-}
-
+/* Enable/Disable 4-byte address mode for Direct Read Access (DRA) */
 static inline void qspi_npcm_config_dra_4byte_mode(const struct device *dev,
 						   const struct npcm_qspi_cfg *qspi_cfg)
 {
 #if defined(CONFIG_FLASH_NPCM_FIU_SUPP_DRA_4B_ADDR)
 	struct fiu_reg *const core_inst = HAL_INSTANCE(dev);
 	struct fiu_reg *const host_inst = HAL_HOST_INSTANCE(dev);
-	uint8_t addr_4b_en;
-	bool flash_4b_en_status;
+	uint8_t addr_4b_en = (qspi_cfg->flags & NPCM_QSPI_SW_CS_MASK) << 4;
 
-	/*
-	 * NPCM500 4B_EN register bit mapping (offset 0x3D):
-	 *   Bit 4: PVT_4B  - PVT role  (SW_CS0, MCP flash on FIU2)
-	 *   Bit 5: SHD_4B  - SHD role  (SW_CS1, SHD/HyperRAM)
-	 *   Bit 6: BACK_4B - BACK role (SW_CS2, PVT flash on FIU0)
-	 *
-	 * The SW_CS_MASK << 4 shift only produces the correct bit mapping when
-	 * SW_CS0->bit4, SW_CS1->bit5, SW_CS2->bit6, which matches the NPCM500
-	 * register layout exactly (SW_CS flags are BIT(0), BIT(1), BIT(2)).
-	 * This is preserved and documented here for clarity.
-	 */
-	addr_4b_en = (qspi_cfg->flags & NPCM_QSPI_SW_CS_MASK) << 4;
-
-	/* Read actual flash chip ADS (current address mode) status */
-	flash_4b_en_status = qspi_npcm_read_flash_4b_en_status(dev, qspi_cfg);
-
-	/* Configure hardware ADDR_4B_EN based on actual flash chip state */
-	if (flash_4b_en_status) {
+	if (qspi_cfg->enter_4ba != 0) {
 		core_inst->ADDR_4B_EN |= addr_4b_en;
 		host_inst->ADDR_4B_EN |= addr_4b_en;
 	} else {
@@ -462,7 +401,10 @@ static int qspi_npcm_fiu_uma_transceive(const struct device *dev, struct npcm_tr
 	qspi_npcm_uma_cs_level(dev, data->sw_cs, false);
 
 	/* Transmit op-code first */
-	qspi_npcm_uma_write_byte(dev, cfg->opcode);
+	ret = qspi_npcm_uma_write_byte(dev, cfg->opcode);
+	if (ret != 0) {
+		goto release_and_exit;
+	}
 
 	if ((flags & NPCM_TRANSCEIVE_ACCESS_ADDR) != 0) {
         size_t addr_bytes;
@@ -481,7 +423,10 @@ static int qspi_npcm_fiu_uma_transceive(const struct device *dev, struct npcm_tr
 
 		for (size_t i = addr_start; i < 4; i++) {
 			LOG_DBG("addr %d, %02x", i, cfg->addr.u8[i]);
-			qspi_npcm_uma_write_byte(dev, cfg->addr.u8[i]);
+			ret = qspi_npcm_uma_write_byte(dev, cfg->addr.u8[i]);
+			if (ret != 0) {
+				goto release_and_exit;
+			}
 		}
 	}
 
@@ -491,7 +436,10 @@ static int qspi_npcm_fiu_uma_transceive(const struct device *dev, struct npcm_tr
             goto release_and_exit;
 		}
 		for (size_t i = 0; i < cfg->tx_count; i++) {
-			qspi_npcm_uma_write_byte(dev, cfg->tx_buf[i]);
+			ret = qspi_npcm_uma_write_byte(dev, cfg->tx_buf[i]);
+			if (ret != 0) {
+				goto release_and_exit;
+			}
 		}
 	}
 
@@ -501,7 +449,10 @@ static int qspi_npcm_fiu_uma_transceive(const struct device *dev, struct npcm_tr
 			goto release_and_exit;
 		}
 		for (size_t i = 0; i < cfg->rx_count; i++) {
-			qspi_npcm_uma_read_byte(dev, cfg->rx_buf + i);
+			ret = qspi_npcm_uma_read_byte(dev, cfg->rx_buf + i);
+			if (ret != 0) {
+				goto release_and_exit;
+			}
 		}
 	}
 
@@ -597,12 +548,6 @@ static int qspi_npcm_fiu_set_read_mode(const struct device *dev, uint8_t rd_mode
     } else {
         core_inst->RESP_CFG &= ~BIT(NPCM_RESP_CFG_QUAD_EN);
         host_inst->RESP_CFG &= ~BIT(NPCM_RESP_CFG_QUAD_EN);
-    }
-
-    /* Update current configuration if available */
-    if (data->cur_cfg != NULL) {
-        struct npcm_qspi_cfg *cfg = (struct npcm_qspi_cfg *)data->cur_cfg;
-        cfg->rd_mode = rd_mode;
     }
 
     k_sem_give(&data->lock_sem);
