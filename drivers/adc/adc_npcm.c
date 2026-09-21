@@ -16,6 +16,14 @@
 #include <soc.h>
 
 #define ADC_CONTEXT_USES_KERNEL_TIMER
+
+/*
+ * adc_context defaults this wait to K_FOREVER, so a DSADC that never raises
+ * its conversion-done interrupt hangs the caller forever. One second is far
+ * more than a sequence needs, so expiry means the hardware isn't answering.
+ */
+#define ADC_CONTEXT_WAIT_FOR_COMPLETION_TIMEOUT K_MSEC(1000)
+
 #include "adc_context.h"
 
 #include <zephyr/logging/log.h>
