@@ -8,6 +8,13 @@
 #include <zephyr/cache.h>
 #include "gdma.h"
 
+/*
+ * A destination's first and last cache lines can be shared with a neighbour
+ * in .bss, so a bare invalidate would drop the neighbour's unflushed writes.
+ * Clean before invalidating to write those lines back first. IRQs stay
+ * locked throughout, so nothing re-dirties the range in between.
+ */
+
 /*-------------------------------------------------------------------------------------------*/
 
 /*--------------------------------------------------------------------------------------------*/
@@ -21,7 +28,7 @@ void gdma_memset_u8(uint8_t *dat, uint8_t set_val, uint32_t setlen)
 
 	int key = irq_lock();
 	sys_cache_data_flush_range(&val, sizeof(val));
-	sys_cache_data_invd_range(dat, setlen);
+	sys_cache_data_flush_and_invd_range(dat, setlen);
 
 	GDMA_SRCB0 = (uint32_t)&val;
 	GDMA_DSTB0 = (uint32_t)dat;
@@ -47,7 +54,7 @@ void gdma_memcpy_u8(uint8_t *dst, uint8_t *src, uint32_t cpylen)
 
 	int key = irq_lock();
 	sys_cache_data_flush_range(src, cpylen);
-	sys_cache_data_invd_range(dst, cpylen);
+	sys_cache_data_flush_and_invd_range(dst, cpylen);
 
 	GDMA_SRCB0 = (uint32_t)src;
 	GDMA_DSTB0 = (uint32_t)dst;
@@ -73,7 +80,7 @@ void gdma_memcpy_u32(uint8_t *dst, uint8_t *src, uint32_t cpylen)
 
 	int key = irq_lock();
 	sys_cache_data_flush_range(src, cpylen);
-	sys_cache_data_invd_range(dst, cpylen);
+	sys_cache_data_flush_and_invd_range(dst, cpylen);
 
 	GDMA_SRCB0 = (uint32_t)src;
 	GDMA_DSTB0 = (uint32_t)dst;
@@ -112,7 +119,7 @@ void gdma_memcpy_burst_u32(uint8_t *dst, uint8_t *src, uint32_t cpylen)
 	rlen = cpylen & 0xFFFFFFC0;
 	if (rlen) {
 		sys_cache_data_flush_range(src, rlen);
-		sys_cache_data_invd_range(dst, rlen);
+		sys_cache_data_flush_and_invd_range(dst, rlen);
 		FIU0_BURST_CFG = 0x0B;
 
 		GDMA_SRCB0 = (uint32_t)src;
@@ -151,7 +158,7 @@ void gdma_memcpy_u32_dstfix(uint8_t *dst, uint8_t *src, uint32_t cpylen)
 
 	int key = irq_lock();
 	sys_cache_data_flush_range(src, cpylen);
-	sys_cache_data_invd_range(dst, sizeof(uint32_t));
+	sys_cache_data_flush_and_invd_range(dst, sizeof(uint32_t));
 
 	GDMA_SRCB0 = (uint32_t)src;
 	GDMA_DSTB0 = (uint32_t)dst;
@@ -178,7 +185,7 @@ void gdma_memcpy_u32_srcfix(uint8_t *dst, uint8_t *src, uint32_t cpylen)
 
 	int key = irq_lock();
 	sys_cache_data_flush_range(src, sizeof(uint32_t));
-	sys_cache_data_invd_range(dst, cpylen);
+	sys_cache_data_flush_and_invd_range(dst, cpylen);
 
 	GDMA_SRCB0 = (uint32_t)src;
 	GDMA_DSTB0 = (uint32_t)dst;
