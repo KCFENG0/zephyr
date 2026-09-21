@@ -1,0 +1,24 @@
+# NPCM eSPI Virtual Wire GPIO driver configuration options
+
+# Copyright (c) 2023 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+config GPIO_NPCM_VW
+	bool "Nuvoton NPCM eSPI Virtual Wire GPIO driver"
+	default y
+	depends on SOC_FAMILY_NPCM
+	depends on ESPI
+	depends on DT_HAS_NUVOTON_NPCM_VW_GPIO_ENABLED
+	help
+	  This option enables the eSPI Virtual Wire GPIO driver for the
+	  NPCM family of processors. Virtual Wire GPIOs are mapped through
+	  the eSPI virtual wire channel (VWGPSM/VWGPMS registers).
+	  Say y if you wish to use Virtual Wire GPIO on an NPCM MCU.
+
+config GPIO_NPCM_VW_INIT_PRIORITY
+	int "NPCM Virtual Wire GPIO init priority"
+	depends on GPIO_NPCM_VW
+	default 61
+	help
+	  Device driver initialization priority for Virtual Wire GPIO.
+	  Must be initialized after the eSPI controller.

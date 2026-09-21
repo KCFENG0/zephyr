@@ -43,6 +43,7 @@ struct uart_npcm_data {
 #ifdef CONFIG_PM_DEVICE
 	uint32_t pm_state;
 #endif
+	uint8_t ext_loopback;
 };
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
@@ -612,6 +613,10 @@ static int uart_npcm_init(const struct device *dev)
 	config->irq_config_func(dev);
 #endif
 
+	if (data->ext_loopback) {
+		inst->UFCTRL |= BIT(NPCM_UFCTRL_EXTLOOPBACK);
+	}
+
 	/* Configure pin-mux for uart device */
 	ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
 	if (ret < 0) {
@@ -719,6 +724,7 @@ static int uart_npcm_pm_action(const struct device *dev, enum pm_device_action a
                                                                                                    \
 	static struct uart_npcm_data uart_npcm_data_##inst = {                                     \
 		.baud_rate = DT_INST_PROP(inst, current_speed),                                    \
+		.ext_loopback = DT_INST_PROP(inst, ext_loopback),                                  \
 	};                                                                                         \
                                                                                                    \
 	DEVICE_DT_INST_DEFINE(                                                                     \

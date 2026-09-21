@@ -13,6 +13,8 @@ source "subsys/usb/device/class/Kconfig.test"
 
 source "subsys/usb/device/class/Kconfig.mctp"
 
+source "subsys/usb/device/class/Kconfig.obmf"
+
 source "subsys/usb/device/class/netusb/Kconfig"
 
 source "subsys/usb/device/class/hid/Kconfig"

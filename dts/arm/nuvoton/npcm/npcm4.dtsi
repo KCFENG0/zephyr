@@ -13,6 +13,8 @@
 #include "npcm.dtsi"
 #include "npcm4/npcm4-pincfg-default.dtsi"
 #include "npcm4/npcm4-pinctrl.dtsi"
+/* eSPI Virtual Wire GPIO controller (disabled by default) */
+#include "npcm-vw-gpio.dtsi"
 #include <freq.h>
 
 / {

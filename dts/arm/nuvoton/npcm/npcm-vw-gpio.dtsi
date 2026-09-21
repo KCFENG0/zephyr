@@ -1,0 +1,302 @@
+/*
+ * Copyright (c) 2023 Nuvoton Technology Corporation.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * NPCM eSPI Virtual Wire GPIO controller.
+ *
+ * Parent covers the full VW GPIO register range (VWGPSM0~15 + VWGPMS0~15).
+ * Each child node represents one 32-bit bank register (4 wires):
+ *   VWGPSM0~15 : bank-index 0~15,  output (BIC->Host), 0x4000A180 + idx*4
+ *   VWGPMS0~15 : bank-index 16~31, input  (Host->BIC), 0x4000A180 + idx*4
+ *                (== 0x4000A1C0 + (idx-16)*4)
+ *
+ * The controller is disabled by default; boards/applications enable the parent
+ * and the required child banks in their overlay.
+ */
+
+/ {
+	soc {
+		vwgpio: vwgpio@4000a180 {
+			compatible = "nuvoton,npcm-vw-gpio";
+			reg = <0x4000a180 0x80>;
+			status = "disabled";
+
+			vwgpsm0: vwgpsm0 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <0>;
+				label = "VWGPSM0";
+				status = "disabled";
+			};
+			vwgpsm1: vwgpsm1 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <1>;
+				label = "VWGPSM1";
+				status = "disabled";
+			};
+			vwgpsm2: vwgpsm2 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <2>;
+				label = "VWGPSM2";
+				status = "disabled";
+			};
+			vwgpsm3: vwgpsm3 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <3>;
+				label = "VWGPSM3";
+				status = "disabled";
+			};
+			vwgpsm4: vwgpsm4 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <4>;
+				label = "VWGPSM4";
+				status = "disabled";
+			};
+			vwgpsm5: vwgpsm5 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <5>;
+				label = "VWGPSM5";
+				status = "disabled";
+			};
+			vwgpsm6: vwgpsm6 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <6>;
+				label = "VWGPSM6";
+				status = "disabled";
+			};
+			vwgpsm7: vwgpsm7 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <7>;
+				label = "VWGPSM7";
+				status = "disabled";
+			};
+			vwgpsm8: vwgpsm8 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <8>;
+				label = "VWGPSM8";
+				status = "disabled";
+			};
+			vwgpsm9: vwgpsm9 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <9>;
+				label = "VWGPSM9";
+				status = "disabled";
+			};
+			vwgpsm10: vwgpsm10 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <10>;
+				label = "VWGPSM10";
+				status = "disabled";
+			};
+			vwgpsm11: vwgpsm11 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <11>;
+				label = "VWGPSM11";
+				status = "disabled";
+			};
+			vwgpsm12: vwgpsm12 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <12>;
+				label = "VWGPSM12";
+				status = "disabled";
+			};
+			vwgpsm13: vwgpsm13 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <13>;
+				label = "VWGPSM13";
+				status = "disabled";
+			};
+			vwgpsm14: vwgpsm14 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <14>;
+				label = "VWGPSM14";
+				status = "disabled";
+			};
+			vwgpsm15: vwgpsm15 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-is-output;
+				nuvoton,vw-bank-index = <15>;
+				label = "VWGPSM15";
+				status = "disabled";
+			};
+
+			vwgpms0: vwgpms0 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <16>;
+				label = "VWGPMS0";
+				status = "disabled";
+			};
+			vwgpms1: vwgpms1 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <17>;
+				label = "VWGPMS1";
+				status = "disabled";
+			};
+			vwgpms2: vwgpms2 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <18>;
+				label = "VWGPMS2";
+				status = "disabled";
+			};
+			vwgpms3: vwgpms3 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <19>;
+				label = "VWGPMS3";
+				status = "disabled";
+			};
+			vwgpms4: vwgpms4 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <20>;
+				label = "VWGPMS4";
+				status = "disabled";
+			};
+			vwgpms5: vwgpms5 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <21>;
+				label = "VWGPMS5";
+				status = "disabled";
+			};
+			vwgpms6: vwgpms6 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <22>;
+				label = "VWGPMS6";
+				status = "disabled";
+			};
+			vwgpms7: vwgpms7 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <23>;
+				label = "VWGPMS7";
+				status = "disabled";
+			};
+			vwgpms8: vwgpms8 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <24>;
+				label = "VWGPMS8";
+				status = "disabled";
+			};
+			vwgpms9: vwgpms9 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <25>;
+				label = "VWGPMS9";
+				status = "disabled";
+			};
+			vwgpms10: vwgpms10 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <26>;
+				label = "VWGPMS10";
+				status = "disabled";
+			};
+			vwgpms11: vwgpms11 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <27>;
+				label = "VWGPMS11";
+				status = "disabled";
+			};
+			vwgpms12: vwgpms12 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <28>;
+				label = "VWGPMS12";
+				status = "disabled";
+			};
+			vwgpms13: vwgpms13 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <29>;
+				label = "VWGPMS13";
+				status = "disabled";
+			};
+			vwgpms14: vwgpms14 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <30>;
+				label = "VWGPMS14";
+				status = "disabled";
+			};
+			vwgpms15: vwgpms15 {
+				gpio-controller;
+				#gpio-cells = <2>;
+				ngpios = <4>;
+				nuvoton,vw-bank-index = <31>;
+				label = "VWGPMS15";
+				status = "disabled";
+			};
+		};
+	};
+};

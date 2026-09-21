@@ -1,0 +1,55 @@
+# Copyright (c) 2023 Nuvoton Technology Corporation.
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Nuvoton NPCM eSPI Virtual Wire GPIO controller.
+
+  This node is the parent controller covering the full VW GPIO register range.
+  Child nodes (no compatible needed) each represent one 32-bit bank register
+  controlling 4 wires:
+    Bits [3:0]  = Wire 3-0 data
+    Bits [7:4]  = Wire 3-0 Valid (set when writing to VWGPSM)
+
+  Register address is computed by the driver as:
+    parent_base + bank_idx * 4
+
+  VWGPSM (Slave-to-Master, output, BIC->Host): set nuvoton,vw-is-output
+  VWGPMS (Master-to-Slave, input,  Host->BIC): omit nuvoton,vw-is-output
+
+compatible: "nuvoton,npcm-vw-gpio"
+
+include: [base.yaml]
+
+properties:
+  reg:
+    type: array
+    required: true
+    description: Base address and total size covering all SM and MS bank registers.
+
+child-binding:
+  description: |
+    One VW GPIO bank register (4 wires). Child nodes of nuvoton,npcm-vw-gpio
+    do not need a compatible property; their binding is inherited from here.
+
+  include: [gpio-controller.yaml]
+
+  properties:
+    label:
+      type: string
+      description: |
+        Device name used by device_get_binding(), e.g. "VWGPSM0" / "VWGPMS15".
+
+    nuvoton,vw-is-output:
+      type: boolean
+      description: |
+        Present when this bank is a VWGPSM (Slave-to-Master, output) register.
+        Absent for VWGPMS (Master-to-Slave, input) registers.
+
+    nuvoton,vw-bank-index:
+      type: int
+      required: true
+      description: |
+        Global bank index 0~31.
+        0~15  = VWGPSM0~15 (Slave-to-Master, output, BIC->Host).
+        16~31 = VWGPMS0~15 (Master-to-Slave, input,  Host->BIC).
+        Register address = parent_base + bank_idx * 4.

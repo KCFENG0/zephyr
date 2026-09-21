@@ -16,3 +16,8 @@ properties:
         required: true
     pinctrl-names:
         required: true
+    ext-loopback:
+        type: boolean
+        description: |
+          Route the UART through the internal external-loopback path (UFCTRL
+          EXTLOOPBACK), used to bridge an eSPI host UART to a core UART.

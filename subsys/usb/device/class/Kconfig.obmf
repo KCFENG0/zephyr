@@ -1,0 +1,63 @@
+# Copyright (c) 2025 Google LLC
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig USB_DEVICE_OBMF
+	bool "USB OCP OBMF Class support"
+	help
+	  USB OCP OBMF device class support.
+
+if USB_DEVICE_OBMF
+
+config USB_OBMF_DEVICE_NAME
+	string "USB OBMF device name template"
+	default "OBMF"
+	help
+	  Device name template for the OBMF Devices. First device would have
+	  name $(USB_OBMF_DEVICE_NAME)_0, etc.
+
+module = USB_OBMF
+default-count = 1
+source "subsys/usb/device/class/Kconfig.template.composite_device_number"
+
+config OBMF_BULK_EP_MPS
+	int "OBMF bulk endpoint size"
+	default 512 if USB_DC_HAS_HS_SUPPORT
+	default 64
+	help
+	  OBMF class bulk endpoints size.
+
+config OBMF_INTERRUPT_IN_EP_SUPPORT
+	bool "Enable OBMF Interrupt IN endpoint"
+	default y
+	help
+	  Enable support for the optional Interrupt IN endpoint
+	  (Device -> Host notification/event).
+
+config OBMF_INTERRUPT_IN_EP_MPS
+	int "OBMF Interrupt IN endpoint size"
+	default 16
+	depends on OBMF_INTERRUPT_IN_EP_SUPPORT
+	help
+	  OBMF class Interrupt IN endpoint max packet size.
+	  Recommended <= 64 bytes.
+
+config OBMF_INTERRUPT_OUT_EP_SUPPORT
+	bool "Enable OBMF Interrupt OUT endpoint"
+	default n
+	help
+	  Enable support for the optional Interrupt OUT endpoint
+	  (Host -> Device notification/event).
+
+config OBMF_INTERRUPT_OUT_EP_MPS
+	int "OBMF Interrupt OUT endpoint size"
+	default 16
+	depends on OBMF_INTERRUPT_OUT_EP_SUPPORT
+	help
+	  OBMF class Interrupt OUT endpoint max packet size.
+	  Recommended <= 64 bytes.
+
+module = USB_OBMF
+module-str = usb obmf
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # USB_DEVICE_OBMF
