@@ -55,7 +55,7 @@ def test_a2_manifest_digest_matches_padded_soc_fw(tmp_path):
     manifest = _slot(raw, off, fi.SOC_MANIFEST_IDENTIFIER)
     packed_soc = _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER)
 
-    assert packed_soc == b"\xa5" * 5 + b"\x00" * 3
+    assert packed_soc == fi.pad_to_page(b"\xa5" * 5)
     entries = {e["fw_id"]: e for e in sm.parse_manifest(manifest)["entries"]}
     assert entries[fi.SOC_FW_FW_ID]["digest"] == hashlib.sha384(packed_soc).digest()
 
@@ -67,9 +67,11 @@ def test_a2_manifest_binds_mcu_runtime_and_signs(tmp_path):
     raw, off = _build_a2(tmp_path, b"\xa5" * 16, mcu_fw=b"\x5a" * 64)
     manifest = _slot(raw, off, fi.SOC_MANIFEST_IDENTIFIER)
 
-    assert len(manifest) == sm.MANIFEST_SIZE
+    # the slot is page-padded, so the manifest is a prefix of it, not all of it
+    assert len(manifest) == len(fi.pad_to_page(bytes(sm.MANIFEST_SIZE)))
     entries = {e["fw_id"]: e for e in sm.parse_manifest(manifest)["entries"]}
-    assert entries[fi.MCU_RT_FW_ID]["digest"] == hashlib.sha384(b"\x5a" * 64).digest()
+    assert entries[fi.MCU_RT_FW_ID]["digest"] == \
+        hashlib.sha384(fi.pad_to_page(b"\x5a" * 64)).digest()
     assert entries[fi.MCU_RT_FW_ID]["staging"] == fi.MCU_RT_STAGING
     assert entries[fi.SOC_FW_FW_ID]["load"] == fi.SOC_FW_LOAD
     assert all(sm.verify_manifest(manifest).values())
@@ -79,9 +81,9 @@ def test_a2_manifest_digest_matches_padded_mcu_fw(tmp_path):
     """The fw_id=2 digest covers the padded slot bytes, not the raw file.
 
     mcu-fw is read raw at generation time unless it is padded before hashing.
-    With a 9-byte runtime (not a multiple of 4), hashing the raw file would
-    sign a digest the packed 12-byte slot never matches, so a freshly-built
-    image would fail its own verify.
+    With a 9-byte runtime (not a multiple of a page), hashing the raw file
+    would sign a digest the packed 256-byte slot never matches, so a
+    freshly-built image would fail its own verify.
     """
     import soc_manifest as sm
 
@@ -89,7 +91,7 @@ def test_a2_manifest_digest_matches_padded_mcu_fw(tmp_path):
     manifest = _slot(raw, off, fi.SOC_MANIFEST_IDENTIFIER)
     packed_mcu = _slot(raw, off, fi.MCU_RT_IDENTIFIER)
 
-    assert packed_mcu == b"\x5a" * 9 + b"\x00" * 3
+    assert packed_mcu == fi.pad_to_page(b"\x5a" * 9)
     entries = {e["fw_id"]: e for e in sm.parse_manifest(manifest)["entries"]}
     assert entries[fi.MCU_RT_FW_ID]["digest"] == hashlib.sha384(packed_mcu).digest()
 
@@ -102,9 +104,20 @@ def test_a1_build_does_not_generate_a_manifest(tmp_path):
 
 
 def test_aligned_soc_fw_is_stored_unchanged(tmp_path):
-    """pad4() is idempotent: aligned input is byte-for-byte in the slot."""
-    raw, off = _build_a1(tmp_path, b"\xa5" * 8)
-    assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == b"\xa5" * 8
+    """pad_to_page() is idempotent: aligned input is byte-for-byte in the slot."""
+    aligned = b"\xa5" * fi.FLASH_PAGE_SIZE
+    raw, off = _build_a1(tmp_path, aligned)
+    assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == aligned
+
+
+def test_every_image_starts_on_a_page_boundary(tmp_path):
+    """The flash DMA only fires on a full page, so an image that starts
+    mid-page is read with the wrong bytes at its front."""
+    raw, off = _build_a2(tmp_path, b"\xa5" * 5, mcu_fw=b"\x5a" * 9)
+    assert off % fi.FLASH_PAGE_SIZE == 0
+    for ident, ioff, size, *_ in fi.iter_images(raw, off):
+        assert ioff % fi.FLASH_PAGE_SIZE == 0, f"{ident:#010x} off={ioff:#x}"
+        assert size % fi.FLASH_PAGE_SIZE == 0, f"{ident:#010x} size={size}"
 
 
 def test_format_is_required(tmp_path):
@@ -129,7 +142,7 @@ def test_v1_and_v3_round_trip(tmp_path):
         version, count, *_ = fi.parse_header(raw, off)
         assert version == fi.FORMAT_VERSIONS[fmt]
         assert count == 3  # soc_fw, npcm_header, flash_otp
-        assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == b"\xa5" * 8
+        assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == fi.pad_to_page(b"\xa5" * 8)
 
 
 def test_v1_flsh_bytes_parse_as_v1_not_a_mangled_version_word(tmp_path):

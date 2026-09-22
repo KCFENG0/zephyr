@@ -47,6 +47,11 @@ FORMATS = {
 }
 FORMAT_VERSIONS = {"v1": 1, "v3": 3}  # --format CLI token -> FORMATS key
 
+# The flash controller's DMA only starts once a full page is in the FIFO, so
+# every image starts on a page boundary and is padded out to a whole number of
+# pages. == builder::flash_image::FLASH_PAGE_SIZE.
+FLASH_PAGE_SIZE = 256
+
 
 def _flash_header_size(fmt: dict) -> int:
     return len(fmt["magic"]) + 8 + 4
@@ -214,9 +219,11 @@ def checksum(data: bytes) -> int:
     return (-sum(data)) & 0xFFFFFFFF
 
 
-def pad4(data: bytes) -> bytes:
-    """Pad to a multiple of 4 with zeros, like builder::flash_image::load_file."""
-    return data + b"\x00" * ((-len(data)) % 4)
+def pad_to_page(data: bytes) -> bytes:
+    """Pad out to a whole number of flash pages with zeros, like
+    builder::flash_image::pad_to_page, so a page-granular DMA read of `size`
+    bytes never runs past the data the header describes."""
+    return data + b"\x00" * ((-len(data)) % FLASH_PAGE_SIZE)
 
 
 def image_name(identifier: int) -> str:
@@ -236,9 +243,9 @@ def build_flash_image(images: list[tuple[int, bytes]], version: int) -> bytes:
     v1 or v3 on-disk layout selected by `version` (see FORMATS).
 
     Mirrors generate_image_info + FlashImage::to_bytes: header, then one
-    ImageHeader per image, then the (4-byte-padded) image payloads. v3's
-    filename field is left empty, as `cargo xtask flash-image create` does;
-    v1 has no filename field at all.
+    ImageHeader per image, then the page-padded image payloads, each starting
+    on a page boundary. v3's filename field is left empty, as `cargo xtask
+    flash-image create` does; v1 has no filename field at all.
     """
     if version not in FORMATS:
         raise ValueError(f"unsupported format version {version} (want one of {sorted(FORMATS)})")
@@ -246,13 +253,15 @@ def build_flash_image(images: list[tuple[int, bytes]], version: int) -> bytes:
     n = len(images)
     if n == 0:
         raise ValueError("no images to pack")
-    padded = [(ident, pad4(data)) for ident, data in images]
+    padded = [(ident, pad_to_page(data)) for ident, data in images]
 
     hdr_size = _flash_header_size(fmt)
     fname = b"\x00" * fmt["filename_len"]
     offset = hdr_size + _image_header_size(fmt) * n
-    infos = bytearray()
+    infos, offsets = bytearray(), []
     for ident, data in padded:
+        offset += (-offset) % FLASH_PAGE_SIZE
+        offsets.append(offset)
         body = struct.pack("<III", ident, offset, len(data)) + fname \
             + struct.pack("<I", checksum(data))
         infos += body + struct.pack("<I", checksum(body))
@@ -261,7 +270,8 @@ def build_flash_image(images: list[tuple[int, bytes]], version: int) -> bytes:
     hdr_wo = fmt["magic"] + struct.pack("<HHI", version, n, hdr_size)
     out = bytearray(hdr_wo + struct.pack("<I", checksum(hdr_wo)))
     out += infos
-    for _, data in padded:
+    for ioff, (_, data) in zip(offsets, padded):
+        out += b"\x00" * (ioff - len(out))  # write the payload where its header says
         out += data
     return bytes(out)
 
@@ -444,8 +454,8 @@ def cmd_build(argv):
     # file would pass every build-time check and then hold the M7 in reset on
     # hardware.
     sources = {
-        "soc-fw": pad4(Path(args.soc_fw).read_bytes()),
-        "mcu-fw": pad4(Path(args.mcu_fw).read_bytes()) if args.mcu_fw else None,
+        "soc-fw": pad_to_page(Path(args.soc_fw).read_bytes()),
+        "mcu-fw": pad_to_page(Path(args.mcu_fw).read_bytes()) if args.mcu_fw else None,
         "caliptra-fw": Path(args.caliptra_fw).read_bytes() if args.caliptra_fw else None,
         "soc-manifest": Path(args.soc_manifest).read_bytes() if args.soc_manifest else None,
         "soc-header": Path(args.soc_header).read_bytes() if args.soc_header
