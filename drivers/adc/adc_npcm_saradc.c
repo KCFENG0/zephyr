@@ -333,10 +333,12 @@ static void adc_npcm_set_repetitive(const struct device *dev, int chnsel,
                                     uint8_t enable)
 {
     struct adc_reg *const inst = HAL_INSTANCE(dev);
+#ifdef CONFIG_PM
+    struct adc_npcm_saradc_data *const data = dev->data;
+#endif
 
     if (enable) {
 #ifdef CONFIG_PM
-        struct adc_npcm_saradc_data *const data = dev->data;
         adc_npcm_saradc_pm_policy_state_lock_get(data);
 #endif
 
@@ -384,25 +386,35 @@ static void adc_npcm_saradc_isr(const struct device *dev)
     uint16_t result;
     uint8_t channel;
 
+    /*
+     * Acknowledge every pending flag on entry. Per datasheet section 4.15.7
+     * the interrupt request stays asserted while a flag and its mask bit are
+     * both set, so an unhandled flag would keep re-entering this handler.
+     */
+    inst->ADCSTS = status;
+
     LOG_DBG("ADC ISR: status=0x%x", status);
 
-    /* Handle threshold detection interrupts.
-     * THRCTS: THR1_STS=bit0, THR2_STS=bit1, THR3_STS=bit2 (NPCX_THRCTS_THR1_STS=0)
+    /* THRCTS: THRm_STS bits[2:0] are W1C and share the word with THRm_IEN
+     * bits[10:8], so mask the status bits out of any read-modify-write.
      */
     if (data->threshold_data != NULL) {
         uint16_t thr_status = inst->THRCTS;
 
         for (uint8_t i = 0; i < config->threshold_count; i++) {
-            if (thr_status & BIT(NPCX_THRCTS_THR1_STS + i)) {
-                LOG_DBG("Threshold %d triggered", i + 1);
+            if (!(thr_status & BIT(NPCX_THRCTS_THR1_STS + i)) ||
+                !(thr_status & BIT(NPCX_THRCTS_THR1_IEN + i))) {
+                continue;
+            }
 
-                /* Notify work queue if configured */
-                if (data->threshold_data->control[i].work != NULL) {
-                    k_work_submit_to_queue(work_q, data->threshold_data->control[i].work);
-                }
+            LOG_DBG("Threshold %d triggered", i + 1);
 
-                /* Clear threshold status (W1C) */
-                inst->THRCTS = BIT(NPCX_THRCTS_THR1_STS + i);
+            inst->THRCTS = (thr_status & ~GENMASK(config->threshold_count - 1, 0)) |
+                           BIT(NPCX_THRCTS_THR1_STS + i);
+
+            if (data->threshold_data->control[i].work != NULL) {
+                k_work_submit_to_queue(work_q ? work_q : &k_sys_work_q,
+                                       data->threshold_data->control[i].work);
             }
         }
     }
@@ -410,9 +422,6 @@ static void adc_npcm_saradc_isr(const struct device *dev)
     /* Handle overflow interrupt */
     if ((status & BIT(NPCX_ADCSTS_OVFEV)) && (inst->ADCCNF & BIT(NPCX_ADCCNF_INTOVFEN))) {
         LOG_WRN("ADC overflow detected");
-
-        /* Clear overflow flag */
-        inst->ADCSTS = BIT(NPCX_ADCSTS_OVFEV);
     }
 
     /* Handle timer-triggered conversion interrupt */
@@ -422,17 +431,11 @@ static void adc_npcm_saradc_isr(const struct device *dev)
 
         LOG_DBG("Timer-triggered conversion complete on channel %u: %u", 
                 (unsigned int)channel, (unsigned int)(result & 0x3FF));
-
-        /* Clear status */
-        inst->ADCSTS = BIT(NPCX_ADCSTS_EOTCEV);
     }
 
     /* Handle single conversion interrupt */
     if ((status & BIT(NPCX_ADCSTS_EOCEV)) && (inst->ADCCNF & BIT(NPCX_ADCCNF_INTECEN))) {
         LOG_DBG("Single conversion complete");
-
-        /* Clear status */
-        inst->ADCSTS = BIT(NPCX_ADCSTS_EOCEV);
     }
 
     /* Handle scan conversion cycle complete interrupt */
@@ -452,13 +455,23 @@ static void adc_npcm_saradc_isr(const struct device *dev)
             }
         }
 
-#ifdef CONFIG_PM
-        adc_npcm_saradc_pm_policy_state_lock_put(data);
-#endif
-        adc_context_on_sampling_done(&data->ctx, dev);
+        /* Disable so a later START cannot re-enter this branch with a stale
+         * data->buffer / data->channels.
+         */
+        inst->ADCCNF &= ~BIT(NPCX_ADCCNF_INTECCEN);
 
-        /* Clear status */
-        inst->ADCSTS = BIT(NPCX_ADCSTS_EOCCEV);
+        if (data->threshold_data != NULL && data->threshold_data->active_thresholds) {
+            adc_npcm_saradc_config_channels(dev, data->threshold_data->repetitive_channels);
+            inst->ADCCNF |= BIT(NPCX_ADCCNF_START);
+        } else {
+            adc_npcm_saradc_config_channels(dev, 0);
+            inst->ADCCNF &= ~BIT(NPCX_ADCCNF_ADCEN);
+#ifdef CONFIG_PM
+            adc_npcm_saradc_pm_policy_state_lock_put(data);
+#endif
+        }
+
+        adc_context_on_sampling_done(&data->ctx, dev);
     }
 
 #ifdef CONFIG_ADC_V2T_NPCX
@@ -488,9 +501,6 @@ static void adc_npcm_saradc_isr(const struct device *dev)
         adc_npcm_saradc_pm_policy_state_lock_put(data);
 #endif
         adc_context_on_sampling_done(&data->ctx, dev);
-
-        /* Clear temperature status */
-        inst->ADCSTS = BIT(NPCX_ADCSTS_TEOCCEV);
     }
 #endif /* CONFIG_ADC_V2T_NPCX */
 }
@@ -632,7 +642,8 @@ int adc_npcm_threshold_ctrl_set_param(const struct device *dev,
         return -ENOTSUP;
     }
 
-    if (param->val_mv > (config->threshold_count * 1000)) {  /* Simplified check */
+    if (param->chnsel >= config->channel_count ||
+        param->thrval == 0 || param->thrval >= ADC_NPCM_THRVAL_MAX) {
         return -EINVAL;
     }
 
@@ -714,6 +725,7 @@ int adc_npcm_threshold_ctrl_enable(const struct device *dev, uint8_t th_sel,
     const struct adc_npcm_saradc_config *config = dev->config;
     struct adc_npcm_saradc_data *data = dev->data;
     struct adc_reg *const inst = HAL_INSTANCE(dev);
+    uint16_t thrcts;
     int ret;
 
     if (th_sel >= config->threshold_count) {
@@ -730,8 +742,11 @@ int adc_npcm_threshold_ctrl_enable(const struct device *dev, uint8_t th_sel,
         /* Enable threshold detection */
         adc_npcm_enable_threshold_detect(dev, th_sel, true);
 
-        /* Enable threshold interrupt */
-        inst->THRCTS |= BIT(NPCX_THRCTS_THR1_IEN + th_sel);
+        /* Enable threshold interrupt. THRCTS[2:0] are W1C, mask them out of
+         * the read-modify-write.
+         */
+        thrcts = inst->THRCTS & ~GENMASK(config->threshold_count - 1, 0);
+        inst->THRCTS = thrcts | BIT(NPCX_THRCTS_THR1_IEN + th_sel);
 
         /* Enable repetitive mode for the threshold channel */
         if (data->threshold_data != NULL) {
@@ -741,8 +756,9 @@ int adc_npcm_threshold_ctrl_enable(const struct device *dev, uint8_t th_sel,
             adc_npcm_set_repetitive(dev, chnsel, true);
         }
     } else {
-        /* Disable threshold interrupt */
-        inst->THRCTS &= ~BIT(NPCX_THRCTS_THR1_IEN + th_sel);
+        /* Keep the W1C status bits untouched */
+        thrcts = inst->THRCTS & ~GENMASK(config->threshold_count - 1, 0);
+        inst->THRCTS = thrcts & ~BIT(NPCX_THRCTS_THR1_IEN + th_sel);
 
         /* Disable threshold detection */
         adc_npcm_enable_threshold_detect(dev, th_sel, false);
