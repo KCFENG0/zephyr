@@ -392,10 +392,10 @@ static void espi_bus_reset_isr(const struct device *dev)
 #if !defined(CONFIG_ESPI_NPCM_FLASH_SAFS_HW_MODE)
 	inst->FLASHCTL &= ~BIT(NPCM_FLASHCTL_SAF_AUTO_READ);
 #else
-#if defined(CONFIG_NPCM500_FPGA)
-	inst->FLASHBASE = 0xC0000000;
-#else
+#if defined(CONFIG_SOC_NPCM400)
 	inst->FLASHBASE = 0x70000000;
+#else
+	inst->FLASHBASE = 0xC0000000;
 #endif
 #endif
 #endif
@@ -465,10 +465,10 @@ static void espi_bus_cfg_update_isr(const struct device *dev)
 			LOG_INF("FLASHCTL 0x%x", inst->FLASHCTL);
 		}
 #else
-#if defined(CONFIG_NPCM500_FPGA)
-		inst->FLASHBASE = 0xC0000000;
-#else
+#if defined(CONFIG_SOC_NPCM400)
 		inst->FLASHBASE = 0x70000000;
+#else
+		inst->FLASHBASE = 0xC0000000;
 #endif
 #endif
 		if (0 == k_sem_count_get(&data->tafs_tx_lock))
@@ -886,10 +886,10 @@ static int espi_npcm_configure(const struct device *dev, struct espi_cfg *cfg)
 #if !defined(CONFIG_ESPI_NPCM_FLASH_SAFS_HW_MODE)
 		inst->FLASHCTL &= ~BIT(NPCM_FLASHCTL_SAF_AUTO_READ);
 #else
-#if defined(CONFIG_NPCM500_FPGA)
-		inst->FLASHBASE = 0xC0000000;
-#else
+#if defined(CONFIG_SOC_NPCM400)
 		inst->FLASHBASE = 0x70000000;
+#else
+		inst->FLASHBASE = 0xC0000000;
 #endif
 #endif
 #endif
