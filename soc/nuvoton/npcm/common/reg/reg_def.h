@@ -95,8 +95,10 @@ struct pmc_reg {
 #define NPCM_PMCSR_OHFC                       6
 #define NPCM_PMCSR_OLFC                       7
 #define NPCM_DISIDL_CTL_RAM_DID               5
+#define NPCM_ENIDL_CTL_ADC_LFSL               7
 #define NPCM_ENIDL_CTL_LP_WK_CTL              6
 #define NPCM_ENIDL_CTL_PECI_ENI               2
+#define NPCM_ENIDL_CTL_ADC_ACC_DIS            1
 
 /* Macro functions for Development and Debugger Interface (DDI) registers */
 #define NPCM_DBGCTRL(base)   (*(volatile uint8_t *)(base + 0x022))

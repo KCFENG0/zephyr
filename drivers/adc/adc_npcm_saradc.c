@@ -41,6 +41,8 @@ LOG_MODULE_REGISTER(adc_npcm_saradc, CONFIG_ADC_LOG_LEVEL);
 #define HAL_INSTANCE(dev)                                                                          \
 	((struct adc_reg *)(((const struct adc_npcm_saradc_config *)dev->config)->base))
 
+#define NPCM_PCC_NODE DT_NODELABEL(pcc)
+
 /* Forward declarations */
 struct adc_npcm_saradc_data;
 struct adc_npcm_saradc_config;
@@ -85,6 +87,15 @@ struct adc_npcm_saradc_data {
 	struct adc_npcm_threshold_data *threshold_data;
 	uint8_t timer_triggered_channel;
 	bool timer_triggered_enabled;
+#ifdef CONFIG_ADC_V2T_NPCM
+	/*
+	 * V2T runs outside the adc_context sequence (adc_npcm_v2t_start() takes
+	 * no buffer), so its results cannot go into ctx's buffer - that memory
+	 * belongs to whatever adc_read() call was last made. Latch them here and
+	 * let the caller fetch them with adc_npcm_v2t_get_result().
+	 */
+	int16_t v2t_result[NPCM_SARADC_MAX_CHANNEL_COUNT];
+#endif
 #ifdef CONFIG_PM
 	atomic_t current_pm_lock;
 #endif
@@ -92,9 +103,11 @@ struct adc_npcm_saradc_data {
 
 /*
  * Pointer of internal work queue thread to be notified when threshold assertion
- * occurs if CONFIG_ADC_CMP_NPCM_WORKQUEUE is enabled.
+ * occurs if CONFIG_ADC_CMP_NPCM_WORKQUEUE is enabled. Static so that a build
+ * containing both this driver and adc_npcx.c does not merge the two tentative
+ * definitions of the same name.
  */
-struct k_work_q *work_q;
+static struct k_work_q *work_q;
 
 /* Power management helpers */
 #ifdef CONFIG_PM
@@ -214,7 +227,7 @@ static void adc_npcm_v2t_ch_apply(const struct device *dev, uint16_t enabled_ch)
 	inst->ADCCNF |= BIT(NPCM_ADCCNF_ADCRPTC);
 
 	/* Step 5: Set scan conversion mode (ADCMD field [2:1] = 01) */
-	inst->ADCCNF = (inst->ADCCNF & ~0x06U) | (NPCM_SARADC_SCAN_CONVERSION_MODE << 1);
+	SET_FIELD(inst->ADCCNF, NPCM_ADCCNF_ADCMD_FIELD, NPCM_SARADC_SCAN_CONVERSION_MODE);
 
 	/* Step 6: Enable ADC temperature channel (TEMP_CH at offset 0x102) */
 	adc_npcm_v2t_config_channel(dev, enabled_ch);
@@ -239,6 +252,24 @@ int adc_npcm_v2t_start(const struct device *dev)
 	struct adc_npcm_saradc_data *const data = dev->data;
 
 	adc_npcm_v2t_ch_apply(dev, (uint16_t)data->v2t_channels_msk);
+	return 0;
+}
+
+int adc_npcm_v2t_get_result(const struct device *dev, uint8_t channel, int16_t *temp)
+{
+	const struct adc_npcm_saradc_config *config = dev->config;
+	struct adc_npcm_saradc_data *const data = dev->data;
+
+	if (channel >= config->channel_count) {
+		return -EINVAL;
+	}
+
+	if (!(data->v2t_channels_msk & BIT(channel))) {
+		return -ENOTSUP;
+	}
+
+	*temp = data->v2t_result[channel];
+
 	return 0;
 }
 #endif /* CONFIG_ADC_V2T_NPCM */
@@ -327,51 +358,56 @@ static void adc_npcm_timer_trigger_disable(const struct device *dev)
 	LOG_DBG("Timer-triggered mode disabled");
 }
 
-/* Repetitive mode control - API function for external use */
-__maybe_unused static void adc_npcm_set_repetitive(const struct device *dev, int chnsel,
-						   uint8_t enable)
+/*
+ * Start or stop the repetitive conversion that feeds the threshold detectors.
+ * All active detectors share one scan, so the channel selection is rebuilt
+ * from threshold_data->repetitive_channels rather than from chnsel alone -
+ * selecting only chnsel would drop the channels the other detectors watch.
+ */
+static void adc_npcm_set_repetitive(const struct device *dev, int chnsel, uint8_t enable)
 {
 	struct adc_reg *const inst = HAL_INSTANCE(dev);
-#ifdef CONFIG_PM
 	struct adc_npcm_saradc_data *const data = dev->data;
-#endif
+	struct adc_npcm_threshold_data *const t_data = data->threshold_data;
+
+	/* Stop before touching the channel selection */
+	inst->ADCCNF |= BIT(NPCM_ADCCNF_STOP);
 
 	if (enable) {
 #ifdef CONFIG_PM
 		adc_npcm_saradc_pm_policy_state_lock_get(data);
 #endif
 
-		/* Enable ADC */
 		inst->ADCCNF |= BIT(NPCM_ADCCNF_ADCEN);
 
-		/* Stop any ongoing conversion */
-		inst->ADCCNF |= BIT(NPCM_ADCCNF_STOP);
+		inst->ADCSTS = BIT(NPCM_ADCSTS_EOCEV) | BIT(NPCM_ADCSTS_EOCCEV) |
+			       BIT(NPCM_ADCSTS_EOTCEV) | BIT(NPCM_ADCSTS_OVFEV);
 
-		/* Clear status */
-		inst->ADCSTS = 0xFF;
+		SET_FIELD(inst->ADCCNF, NPCM_ADCCNF_ADCMD_FIELD, NPCM_SARADC_SCAN_CONVERSION_MODE);
 
-		/* Set channel */
-		adc_npcm_saradc_config_channels(dev, BIT(chnsel));
+		t_data->repetitive_channels |= BIT(chnsel);
+		adc_npcm_saradc_config_channels(dev, t_data->repetitive_channels);
 
-		/* Enable repetitive mode */
 		inst->ADCCNF |= BIT(NPCM_ADCCNF_ADCRPTC);
-
-		/* Start conversion */
 		inst->ADCCNF |= BIT(NPCM_ADCCNF_START);
 
 		LOG_DBG("Repetitive mode enabled on channel %d", chnsel);
 	} else {
-		/* Stop conversion */
-		inst->ADCCNF |= BIT(NPCM_ADCCNF_STOP);
+		t_data->repetitive_channels &= ~BIT(chnsel);
+		adc_npcm_saradc_config_channels(dev, t_data->repetitive_channels);
 
-		/* Disable repetitive mode */
-		inst->ADCCNF &= ~BIT(NPCM_ADCCNF_ADCRPTC);
-
+		if (t_data->repetitive_channels) {
+			/* Other detectors still need the scan running */
+			inst->ADCCNF |= BIT(NPCM_ADCCNF_START);
+		} else {
+			inst->ADCCNF &= ~BIT(NPCM_ADCCNF_ADCRPTC);
+			inst->ADCCNF &= ~BIT(NPCM_ADCCNF_ADCEN);
 #ifdef CONFIG_PM
-		adc_npcm_saradc_pm_policy_state_lock_put(data);
+			adc_npcm_saradc_pm_policy_state_lock_put(data);
 #endif
+		}
 
-		LOG_DBG("Repetitive mode disabled");
+		LOG_DBG("Repetitive mode disabled on channel %d", chnsel);
 	}
 }
 
@@ -399,6 +435,9 @@ static void adc_npcm_saradc_isr(const struct device *dev)
 	 */
 	if (data->threshold_data != NULL) {
 		uint16_t thr_status = inst->THRCTS;
+		/* Preserve the interrupt enables, drop the W1C status bits */
+		uint16_t thrcts = thr_status & ~GENMASK(config->threshold_count - 1, 0);
+		bool thr_handled = false;
 
 		for (uint8_t i = 0; i < config->threshold_count; i++) {
 			if (!(thr_status & BIT(NPCM_THRCTS_THR1_STS + i)) ||
@@ -408,13 +447,28 @@ static void adc_npcm_saradc_isr(const struct device *dev)
 
 			LOG_DBG("Threshold %d triggered", i + 1);
 
-			inst->THRCTS = (thr_status & ~GENMASK(config->threshold_count - 1, 0)) |
-				       BIT(NPCM_THRCTS_THR1_STS + i);
+			/*
+			 * Per datasheet section 4.15.9 THRm_STS is re-evaluated after
+			 * every conversion of the selected channel, not on the crossing.
+			 * The detectors are fed by a repetitive scan, so an input that
+			 * simply stays past the threshold re-asserts the flag as fast as
+			 * the ADC converts and the CPU never leaves this handler. Mask
+			 * the detector here and let the consumer re-arm it with
+			 * adc_npcm_threshold_ctrl_enable() once it has acted on the
+			 * event.
+			 */
+			thrcts &= ~BIT(NPCM_THRCTS_THR1_IEN + i);
+			thrcts |= BIT(NPCM_THRCTS_THR1_STS + i);
+			thr_handled = true;
 
 			if (data->threshold_data->control[i].work != NULL) {
 				k_work_submit_to_queue(work_q ? work_q : &k_sys_work_q,
 						       data->threshold_data->control[i].work);
 			}
+		}
+
+		if (thr_handled) {
+			inst->THRCTS = thrcts;
 		}
 	}
 
@@ -445,7 +499,8 @@ static void adc_npcm_saradc_isr(const struct device *dev)
 		/* Read all selected channels */
 		for (channel = 0; channel < config->channel_count; channel++) {
 			if (data->channels & BIT(channel)) {
-				result = CHNDAT(config->base, channel) & 0x3FF; /* 10-bit data */
+				result = GET_FIELD(CHNDAT(config->base, channel),
+						   NPCM_CHNDAT_CHDAT_FIELD);
 
 				if (data->buffer < data->buf_end) {
 					*data->buffer++ = result;
@@ -489,22 +544,16 @@ static void adc_npcm_saradc_isr(const struct device *dev)
 		 */
 		for (channel = 0; channel < config->channel_count; channel++) {
 			if (data->v2t_channels_msk & BIT(channel)) {
-				result = TCHNDAT(config->base,
-						 channel); /* Temperature data register */
-
-				if (data->buffer < data->buf_end) {
-					*data->buffer++ =
-						result; /* 11-bit signed temperature data */
-					LOG_DBG("Temperature channel %d: %d", channel,
-						(int16_t)result);
-				}
+				/* 11-bit signed temperature data */
+				data->v2t_result[channel] = (int16_t)TCHNDAT(config->base, channel);
+				LOG_DBG("Temperature channel %d: %d", channel,
+					data->v2t_result[channel]);
 			}
 		}
 
 #ifdef CONFIG_PM
 		adc_npcm_saradc_pm_policy_state_lock_put(data);
 #endif
-		adc_context_on_sampling_done(&data->ctx, dev);
 	}
 #endif /* CONFIG_ADC_V2T_NPCM */
 }
@@ -563,10 +612,7 @@ static void adc_npcm_saradc_start_scan(const struct device *dev)
 	adc_npcm_saradc_config_channels(dev, data->channels);
 
 	/* Set scan mode */
-	uint16_t adccnf = inst->ADCCNF;
-
-	adccnf = (adccnf & ~0x06) | (NPCM_SARADC_SCAN_CONVERSION_MODE << 1); /* ADCMD field [2:1] */
-	inst->ADCCNF = adccnf;
+	SET_FIELD(inst->ADCCNF, NPCM_ADCCNF_ADCMD_FIELD, NPCM_SARADC_SCAN_CONVERSION_MODE);
 
 	/* Enable interrupt on conversion complete */
 	inst->ADCCNF |= BIT(NPCM_ADCCNF_INTECCEN);
@@ -647,12 +693,23 @@ int adc_npcm_threshold_ctrl_set_param(const struct device *dev, const uint8_t th
 		return -EINVAL;
 	}
 
-	/* Save threshold parameters */
+	adc_context_lock(&data->ctx, false, NULL);
+
+	/* Reprogramming a detector that is already armed would leave the hardware
+	 * watching the old channel until it is disabled and enabled again.
+	 */
+	if (data->threshold_data->active_thresholds & BIT(th_sel)) {
+		adc_context_release(&data->ctx, 0);
+		return -EBUSY;
+	}
+
 	data->threshold_data->control[th_sel].chnsel = param->chnsel;
 	data->threshold_data->control[th_sel].l_h = param->l_h;
 	data->threshold_data->control[th_sel].thrval = param->thrval;
 	data->threshold_data->control[th_sel].work = param->work;
 	data->threshold_data->control[th_sel].dual_mode = false;
+
+	adc_context_release(&data->ctx, 0);
 
 	return 0;
 }
@@ -671,10 +728,23 @@ int adc_npcm_threshold_ctrl_set_dual_param(const struct device *dev, const uint8
 		return -ENOTSUP;
 	}
 
+	if (thr_dval >= ADC_NPCM_THRVAL_MAX) {
+		return -EINVAL;
+	}
+
+	adc_context_lock(&data->ctx, false, NULL);
+
+	if (data->threshold_data->active_thresholds & BIT(th_sel)) {
+		adc_context_release(&data->ctx, 0);
+		return -EBUSY;
+	}
+
 	/* Save deassertion threshold */
 	data->threshold_data->control[th_sel].thr_dval = thr_dval;
 	data->threshold_data->control[th_sel].l_h = l_h;
 	data->threshold_data->control[th_sel].dual_mode = true;
+
+	adc_context_release(&data->ctx, 0);
 
 	return 0;
 }
@@ -722,81 +792,105 @@ int adc_npcm_threshold_ctrl_enable(const struct device *dev, uint8_t th_sel, con
 	const struct adc_npcm_saradc_config *config = dev->config;
 	struct adc_npcm_saradc_data *data = dev->data;
 	struct adc_reg *const inst = HAL_INSTANCE(dev);
+	struct adc_npcm_threshold_data *t_data = data->threshold_data;
 	uint16_t thrcts;
 	int ret;
+
+	if (!IS_ENABLED(CONFIG_ADC_CMP_NPCM) || t_data == NULL) {
+		return -ENOTSUP;
+	}
 
 	if (th_sel >= config->threshold_count) {
 		return -EINVAL;
 	}
 
+	adc_context_lock(&data->ctx, false, NULL);
+
 	if (enable) {
-		/* Setup threshold before enabling */
+		/*
+		 * The ISR masks a detector once it fires, so calling this again on an
+		 * already-active detector is the documented way for the consumer to
+		 * re-arm it. Only the interrupt enable has to come back; the
+		 * comparator and the repetitive scan were never torn down.
+		 */
+		if (t_data->active_thresholds & BIT(th_sel)) {
+			/* THRCTS[2:0] are W1C, mask them out of the read-modify-write */
+			thrcts = inst->THRCTS & ~GENMASK(config->threshold_count - 1, 0);
+			inst->THRCTS = thrcts | BIT(NPCM_THRCTS_THR1_IEN + th_sel);
+			adc_context_release(&data->ctx, 0);
+			return 0;
+		}
+
 		ret = adc_npcm_threshold_ctrl_setup(dev, th_sel);
 		if (ret < 0) {
+			adc_context_release(&data->ctx, 0);
 			return ret;
 		}
 
-		/* Enable threshold detection */
 		adc_npcm_enable_threshold_detect(dev, th_sel, true);
 
-		/* Enable threshold interrupt. THRCTS[2:0] are W1C, mask them out of
-		 * the read-modify-write.
-		 */
+		/* THRCTS[2:0] are W1C, mask them out of the read-modify-write */
 		thrcts = inst->THRCTS & ~GENMASK(config->threshold_count - 1, 0);
 		inst->THRCTS = thrcts | BIT(NPCM_THRCTS_THR1_IEN + th_sel);
 
-		/* Enable repetitive mode for the threshold channel */
-		if (data->threshold_data != NULL) {
-			data->threshold_data->active_thresholds |= BIT(th_sel);
-			uint8_t chnsel = data->threshold_data->control[th_sel].chnsel;
-
-			data->threshold_data->repetitive_channels |= BIT(chnsel);
-			adc_npcm_set_repetitive(dev, chnsel, true);
-		}
+		t_data->active_thresholds |= BIT(th_sel);
+		adc_npcm_set_repetitive(dev, t_data->control[th_sel].chnsel, true);
 	} else {
-		/* Keep the W1C status bits untouched */
+		if (!(t_data->active_thresholds & BIT(th_sel))) {
+			adc_context_release(&data->ctx, 0);
+			return 0;
+		}
+
 		thrcts = inst->THRCTS & ~GENMASK(config->threshold_count - 1, 0);
 		inst->THRCTS = thrcts & ~BIT(NPCM_THRCTS_THR1_IEN + th_sel);
 
-		/* Disable threshold detection */
 		adc_npcm_enable_threshold_detect(dev, th_sel, false);
 
-		/* Disable repetitive mode for the threshold channel */
-		if (data->threshold_data != NULL) {
-			data->threshold_data->active_thresholds &= ~BIT(th_sel);
-			uint8_t chnsel = data->threshold_data->control[th_sel].chnsel;
+		t_data->active_thresholds &= ~BIT(th_sel);
 
-			data->threshold_data->repetitive_channels &= ~BIT(chnsel);
-			/* Only disable repetitive if no other threshold uses this channel */
-			bool channel_used = false;
+		/*
+		 * Two detectors may watch the same channel, so the channel can only
+		 * leave the repetitive scan once no other active detector uses it.
+		 */
+		uint8_t chnsel = t_data->control[th_sel].chnsel;
+		bool channel_used = false;
 
-			for (uint8_t i = 0; i < config->threshold_count; i++) {
-				if (i != th_sel &&
-				    (data->threshold_data->active_thresholds & BIT(i)) &&
-				    data->threshold_data->control[i].chnsel == chnsel) {
-					channel_used = true;
-					break;
-				}
-			}
-			if (!channel_used) {
-				adc_npcm_set_repetitive(dev, chnsel, false);
+		for (uint8_t i = 0; i < config->threshold_count; i++) {
+			if ((t_data->active_thresholds & BIT(i)) &&
+			    t_data->control[i].chnsel == chnsel) {
+				channel_used = true;
+				break;
 			}
 		}
+
+		if (!channel_used) {
+			adc_npcm_set_repetitive(dev, chnsel, false);
+		}
 	}
+
+	adc_context_release(&data->ctx, 0);
 
 	return 0;
 }
 
 int adc_npcm_threshold_mv_to_thrval(const struct device *dev, uint32_t val_mv, uint32_t *thrval)
 {
-	uint32_t vref_mv = 3300; /* 3.3V reference */
+	const struct adc_driver_api *api = dev->api;
 
-	if (val_mv > vref_mv) {
+	if (!IS_ENABLED(CONFIG_ADC_CMP_NPCM)) {
+		return -ENOTSUP;
+	}
+
+	/*
+	 * CHDAT counts full scale in 1024 steps (Vi = CHDAT * VFS / 1024), so
+	 * val_mv == VFS has no representable code and is rejected. VFS comes
+	 * from the vref-mv devicetree property, not a fixed 3.3V.
+	 */
+	if (val_mv >= api->ref_internal) {
 		return -EINVAL;
 	}
 
-	/* Convert mV to 10-bit ADC value */
-	*thrval = (val_mv * ADC_NPCM_THRVAL_MAX) / vref_mv;
+	*thrval = (val_mv << ADC_NPCM_THRVAL_RESOLUTION) / api->ref_internal;
 
 	return 0;
 }
@@ -900,7 +994,8 @@ static int adc_npcm_saradc_init(const struct device *dev)
 	const struct adc_npcm_saradc_config *const config = dev->config;
 	struct adc_npcm_saradc_data *const data = dev->data;
 	struct adc_reg *const inst = HAL_INSTANCE(dev);
-	const struct device *const clk_dev = DEVICE_DT_GET(DT_NODELABEL(pcc));
+	const struct device *const clk_dev = DEVICE_DT_GET(NPCM_PCC_NODE);
+	struct pmc_reg *const pmc = (struct pmc_reg *)DT_REG_ADDR_BY_NAME(NPCM_PCC_NODE, pmc);
 	int prescaler = 0;
 	int ret;
 	volatile uint16_t *speed1_reg, *speed2_reg, *speed3_reg;
@@ -920,6 +1015,18 @@ static int adc_npcm_saradc_init(const struct device *dev)
 	if (ret < 0) {
 		LOG_ERR("Failed to enable ADC clock: %d", ret);
 		return ret;
+	}
+
+	/*
+	 * Source the ADC basic clock from APB1_CLK. ADC_LFSL selects FRCLK
+	 * instead, and while that is set the Core cannot access any ADC register -
+	 * every write below would be dropped. This is the reset default, but a
+	 * bootloader or a resume path that did not restore it would otherwise make
+	 * this driver silently init nothing.
+	 */
+	pmc->ENIDL_CTL &= ~BIT(NPCM_ENIDL_CTL_ADC_LFSL);
+	while (NPCM_IS_BIT_SET(pmc->ENIDL_CTL, NPCM_ENIDL_CTL_ADC_ACC_DIS)) {
+		/* Wait for the clock switch to complete (datasheet section 4.15.5) */
 	}
 
 	/* Get actual APB1 clock rate from clock controller (datasheet section 4.15.7: ADC Clock) */
@@ -967,7 +1074,7 @@ static int adc_npcm_saradc_init(const struct device *dev)
 
 	/* Step 6: ADC Operation Mode - ADCMD field in ADCCNF register */
 	/* Default to scan mode, will be set per operation */
-	inst->ADCCNF = (NPCM_SARADC_SCAN_CONVERSION_MODE << 1); /* ADCMD field [2:1] */
+	SET_FIELD(inst->ADCCNF, NPCM_ADCCNF_ADCMD_FIELD, NPCM_SARADC_SCAN_CONVERSION_MODE);
 
 	/* Step 7: ADC Repetitive Mode - ADCRPTC bit in ADCCNF register */
 	/* Will be set per operation as needed */

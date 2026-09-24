@@ -80,12 +80,20 @@ int adc_npcm_threshold_ctrl_set_dual_param(const struct device *dev, const uint8
  * Enables or disables a specific threshold comparator. When enabled, the
  * threshold will trigger interrupts when the configured condition is met.
  *
+ * THRm_STS is re-evaluated after every conversion of the selected channel
+ * rather than on the crossing, so the driver masks a detector's interrupt as
+ * soon as it fires - otherwise a steady out-of-range input would re-trigger
+ * it for every conversion and starve the CPU. Call this again with
+ * @p enable set to true to re-arm an already-enabled detector; that path only
+ * restores the interrupt enable and does not disturb the comparator.
+ *
  * @param dev Pointer to the ADC device
  * @param th_sel Threshold selector (0-2)
- * @param enable true to enable, false to disable
+ * @param enable true to enable or re-arm, false to disable
  *
  * @retval 0 on success
  * @retval -EINVAL if threshold selector is invalid
+ * @retval -ENOTSUP if threshold detection is not enabled in the build
  * @retval negative error code on failure
  */
 int adc_npcm_threshold_ctrl_enable(const struct device *dev, uint8_t th_sel, const bool enable);
@@ -146,6 +154,24 @@ uint32_t adc_npcm_v2t_get_channels(const struct device *dev);
  * @retval negative error code on failure
  */
 int adc_npcm_v2t_start(const struct device *dev);
+
+/**
+ * @brief Read the latest V2T temperature result for a channel
+ *
+ * V2T conversions are started with adc_npcm_v2t_start() and run outside an
+ * adc_sequence, so their results are latched by the driver instead of being
+ * written into a caller-supplied buffer. This returns the value captured by
+ * the most recent temperature conversion cycle.
+ *
+ * @param dev Pointer to the ADC device
+ * @param channel ADC channel to read
+ * @param temp Pointer to store the 11-bit signed temperature value
+ *
+ * @retval 0 on success
+ * @retval -EINVAL if the channel is out of range
+ * @retval -ENOTSUP if the channel is not enabled for V2T
+ */
+int adc_npcm_v2t_get_result(const struct device *dev, uint8_t channel, int16_t *temp);
 
 #endif /* CONFIG_ADC_V2T_NPCM */
 
