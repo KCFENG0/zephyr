@@ -12,8 +12,11 @@ import pytest
 pytest_plugins = ["pytester"]
 
 ZEPHYR_BASE = os.getenv("ZEPHYR_BASE")
-sys.path.insert(0, os.path.join(ZEPHYR_BASE, "scripts/pylib/twister"))
-sys.path.insert(0, os.path.join(ZEPHYR_BASE, "scripts"))
+# Keep these absolute: since Python 3.11, importlib.invalidate_caches() drops
+# sys.path_importer_cache entries with relative names, so a relative entry can
+# stop resolving once a test changes the working directory.
+sys.path.insert(0, os.path.abspath(os.path.join(ZEPHYR_BASE, "scripts/pylib/twister")))
+sys.path.insert(0, os.path.abspath(os.path.join(ZEPHYR_BASE, "scripts")))
 from twisterlib.testplan import TestPlan
 from twisterlib.testinstance import TestInstance
 from twisterlib.environment import TwisterEnv, add_parse_arguments, parse_arguments
