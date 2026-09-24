@@ -112,7 +112,7 @@ int adc_npcm_threshold_mv_to_thrval(const struct device *dev,
                                     uint32_t val_mv,
                                     uint32_t *thrval);
 
-#ifdef CONFIG_ADC_V2T_NPCX
+#ifdef CONFIG_ADC_V2T_NPCM
 
 /**
  * @brief Set V2T (Voltage-to-Temperature) channels
@@ -154,7 +154,7 @@ uint32_t adc_npcm_v2t_get_channels(const struct device *dev);
  */
 int adc_npcm_v2t_start(const struct device *dev);
 
-#endif /* CONFIG_ADC_V2T_NPCX */
+#endif /* CONFIG_ADC_V2T_NPCM */
 
 /**
  * @brief Setup timer-triggered ADC conversion

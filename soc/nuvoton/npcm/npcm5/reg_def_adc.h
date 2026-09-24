@@ -87,76 +87,76 @@ struct adc_reg {
 };
 
 /* ADC internal inline functions for multi-registers */
-static inline uint32_t npcx_chndat_offset(uint32_t ch)
+static inline uint32_t npcm_chndat_offset(uint32_t ch)
 {
 	return (0x40 + (ch * 2));
 }
 
-static inline uint32_t npcx_thrctl_offset(uint32_t ctrl)
+static inline uint32_t npcm_thrctl_offset(uint32_t ctrl)
 {
 	/* Datasheet: THRCTL1=0x14h, THRCTL2=0x16h, THRCTL3=0x18h */
 	return (0x14 + (ctrl * 2));
 }
 
-#define NPCX_CHNDAT_OFFSET(ch) npcx_chndat_offset(ch)
-#define NPCX_THRCTL_OFFSET(ctrl) npcx_thrctl_offset(ctrl)
+#define NPCM_CHNDAT_OFFSET(ch) npcm_chndat_offset(ch)
+#define NPCM_THRCTL_OFFSET(ctrl) npcm_thrctl_offset(ctrl)
 
 #define CHNDAT(base, ch) \
-	(*(volatile uint16_t *)((base) + NPCX_CHNDAT_OFFSET(ch)))
+	(*(volatile uint16_t *)((base) + NPCM_CHNDAT_OFFSET(ch)))
 #define THRCTL(base, ctrl) \
-	(*(volatile uint16_t *)((base) + NPCX_THRCTL_OFFSET(ctrl)))
+	(*(volatile uint16_t *)((base) + NPCM_THRCTL_OFFSET(ctrl)))
 
 /* Threshold Deassertion Control offset function */
-static inline uint32_t npcx_thr_dctl_offset(uint32_t ctrl)
+static inline uint32_t npcm_thr_dctl_offset(uint32_t ctrl)
 {
 	/* Datasheet register map: THR_DCTL1=0x3Ah, THR_DCTL2=0x3Ch, THR_DCTL3=0x3Eh */
 	return (0x3A + (ctrl * 2));
 }
 
-#define NPCX_THR_DCTL_OFFSET(ctrl) npcx_thr_dctl_offset(ctrl)
+#define NPCM_THR_DCTL_OFFSET(ctrl) npcm_thr_dctl_offset(ctrl)
 #define THR_DCTL(base, ctrl) \
-	(*(volatile uint16_t *)((base) + NPCX_THR_DCTL_OFFSET(ctrl)))
+	(*(volatile uint16_t *)((base) + NPCM_THR_DCTL_OFFSET(ctrl)))
 
 /* ADC register fields */
-#define NPCX_ATCTL_SCLKDIV_FIELD              FIELD(0, 6)   /* Clock div factor [5:0], max 64 */
-#define NPCX_ATCTL_DLY_FIELD                  FIELD(8, 3)   /* Channel delay [10:8], set to 010 */
-#define NPCX_ASCADD_SADDR_FIELD               FIELD(0, 5)   /* Software-Triggered Address [4:0] */
-#define NPCX_ASCADD_TTADDR_FIELD              FIELD(8, 5)   /* Timer-Triggered Address [12:8] */
+#define NPCM_ATCTL_SCLKDIV_FIELD              FIELD(0, 6)   /* Clock div factor [5:0], max 64 */
+#define NPCM_ATCTL_DLY_FIELD                  FIELD(8, 3)   /* Channel delay [10:8], set to 010 */
+#define NPCM_ASCADD_SADDR_FIELD               FIELD(0, 5)   /* Software-Triggered Address [4:0] */
+#define NPCM_ASCADD_TTADDR_FIELD              FIELD(8, 5)   /* Timer-Triggered Address [12:8] */
 /* ADCSTS event flag bits (R/W1C) - datasheet section 4.15.9 offset 0x00:
  *   Voltage events (bits[3:0]):
  *     0: EOCEV   - End Of Conversion Event (Software/START-triggered, Channel or Scan mode)
  *     1: EOCCEV  - End Of Conversion Cycle Event (Scan mode cycle complete)
  *     2: EOTCEV  - End Of Timer-Triggered Conversion Event (MFT16-1 pulse)
  *     3: OVFEV   - Data Overflow Event (CHNnDAT overwritten before read)
- *   Temperature / V2T events (bits[7:4], valid when CONFIG_ADC_V2T_NPCX):
+ *   Temperature / V2T events (bits[7:4], valid when CONFIG_ADC_V2T_NPCM):
  *     4: TEOCEV  - Temperature End Of Conversion Event (single temp channel)
  *     5: TEOCCEV - Temperature End Of Conversion Cycle Event (temp scan complete)
  *     6: TEOTCEV - Temperature End Of Timer-Triggered Conversion Event
  *     7: TOVFEV  - Temperature Data Overflow Event (TCHNnDAT overwritten before read)
  *   Bits[15:8]: Reserved
  */
-#define NPCX_ADCSTS_EOCEV                     0
-#define NPCX_ADCSTS_EOCCEV                    1
-#define NPCX_ADCSTS_EOTCEV                    2
-#define NPCX_ADCSTS_OVFEV                     3
-#define NPCX_ADCSTS_TEOCEV                    4  /* V2T: Temperature End Of Conversion Event */
-#define NPCX_ADCSTS_TEOCCEV                   5  /* V2T: Temperature End Of Conversion Cycle Event */
-#define NPCX_ADCSTS_TEOTCEV                   6  /* V2T: Temperature End Of Timer-Triggered Conv Event */
-#define NPCX_ADCSTS_TOVFEV                    7  /* V2T: Temperature Data Overflow Event */
+#define NPCM_ADCSTS_EOCEV                     0
+#define NPCM_ADCSTS_EOCCEV                    1
+#define NPCM_ADCSTS_EOTCEV                    2
+#define NPCM_ADCSTS_OVFEV                     3
+#define NPCM_ADCSTS_TEOCEV                    4  /* V2T: Temperature End Of Conversion Event */
+#define NPCM_ADCSTS_TEOCCEV                   5  /* V2T: Temperature End Of Conversion Cycle Event */
+#define NPCM_ADCSTS_TEOTCEV                   6  /* V2T: Temperature End Of Timer-Triggered Conv Event */
+#define NPCM_ADCSTS_TOVFEV                    7  /* V2T: Temperature Data Overflow Event */
 /* ADCCNF bits */
-#define NPCX_ADCCNF_ADCEN                     0  /* ADC module enable */
-#define NPCX_ADCCNF_ADCMD_FIELD               FIELD(1, 2)  /* Conversion mode: 00=channel,01=scan */
-#define NPCX_ADCCNF_ADCRPTC                   3  /* Repetitive conversion mode */
-#define NPCX_ADCCNF_START                     4  /* Start conversion (cleared after start) */
-#define NPCX_ADCCNF_ADCTTE                    5  /* Timer-triggered enable (MFT16-1 TA2) */
-#define NPCX_ADCCNF_INTECEN                   6  /* Interrupt enable for EOCEV */
-#define NPCX_ADCCNF_INTECCEN                  7  /* Interrupt enable for EOCCEV */
-#define NPCX_ADCCNF_INTETCEN                  8  /* Interrupt enable for EOTCEV (spec: INTTECEN) */
-#define NPCX_ADCCNF_INTOVFEN                  9  /* Interrupt enable for OVFEV */
-#define NPCX_ADCCNF_STOP                      11 /* Stop conversion immediately (W1) */
+#define NPCM_ADCCNF_ADCEN                     0  /* ADC module enable */
+#define NPCM_ADCCNF_ADCMD_FIELD               FIELD(1, 2)  /* Conversion mode: 00=channel,01=scan */
+#define NPCM_ADCCNF_ADCRPTC                   3  /* Repetitive conversion mode */
+#define NPCM_ADCCNF_START                     4  /* Start conversion (cleared after start) */
+#define NPCM_ADCCNF_ADCTTE                    5  /* Timer-triggered enable (MFT16-1 TA2) */
+#define NPCM_ADCCNF_INTECEN                   6  /* Interrupt enable for EOCEV */
+#define NPCM_ADCCNF_INTECCEN                  7  /* Interrupt enable for EOCCEV */
+#define NPCM_ADCCNF_INTETCEN                  8  /* Interrupt enable for EOTCEV (spec: INTTECEN) */
+#define NPCM_ADCCNF_INTOVFEN                  9  /* Interrupt enable for OVFEV */
+#define NPCM_ADCCNF_STOP                      11 /* Stop conversion immediately (W1) */
 /* CHNxDAT bits */
-#define NPCX_CHNDAT_CHDAT_FIELD               FIELD(0, 10) /* 10-bit result: Vi=CHDAT*VFS/1024 */
-#define NPCX_CHNDAT_NEW                       15 /* New data available (must clear for V2T) */
+#define NPCM_CHNDAT_CHDAT_FIELD               FIELD(0, 10) /* 10-bit result: Vi=CHDAT*VFS/1024 */
+#define NPCM_CHNDAT_NEW                       15 /* New data available (must clear for V2T) */
 /* THRCTS bits - datasheet section 4.15.9 offset 0x1A:
  *   Bits[15:11]: Reserved
  *   Bit 10: THR3_IEN - Threshold 3 Interrupt Enable (R/W)
@@ -168,16 +168,16 @@ static inline uint32_t npcx_thr_dctl_offset(uint32_t ctrl)
  *   Bit  1: THR2_STS - Threshold 2 event status (R/W1C)
  *   Bit  0: THR1_STS - Threshold 1 event status (R/W1C)
  */
-#define NPCX_THRCTS_THR3_IEN                  10
-#define NPCX_THRCTS_THR2_IEN                  9
-#define NPCX_THRCTS_THR1_IEN                  8
-#define NPCX_THRCTS_ADC_EVENT                 7  /* RO: set when any ADCSTS status bit is 1 */
-#define NPCX_THRCTS_THR3_STS                  2
-#define NPCX_THRCTS_THR2_STS                  1
-#define NPCX_THRCTS_THR1_STS                  0
+#define NPCM_THRCTS_THR3_IEN                  10
+#define NPCM_THRCTS_THR2_IEN                  9
+#define NPCM_THRCTS_THR1_IEN                  8
+#define NPCM_THRCTS_ADC_EVENT                 7  /* RO: set when any ADCSTS status bit is 1 */
+#define NPCM_THRCTS_THR3_STS                  2
+#define NPCM_THRCTS_THR2_STS                  1
+#define NPCM_THRCTS_THR1_STS                  0
 /* THR_DCTL bits */
-#define NPCX_THR_DCTL_THRD_EN                 15 /* Dual threshold mode enable */
-#define NPCX_THR_DCTL_THR_DVAL                FIELD(0, 10) /* Deassertion threshold value */
+#define NPCM_THR_DCTL_THRD_EN                 15 /* Dual threshold mode enable */
+#define NPCM_THR_DCTL_THR_DVAL                FIELD(0, 10) /* Deassertion threshold value */
 
 /*
  * THRCTLm register field definitions (datasheet section 4.15.9):
@@ -187,10 +187,10 @@ static inline uint32_t npcx_thr_dctl_offset(uint32_t ctrl)
  *   [13:10] CHNSEL - Channel select (0-13, matches SADDR/ADCCS numbering)
  *   [9:0]   THRVAL - Assertion threshold value (10-bit ADC value)
  */
-#define NPCX_THRCTL_THEN                      15             /* Threshold enable */
-#define NPCX_THRCTL_L_H                       14             /* 0=above, 1=at-or-below */
-#define NPCX_THRCTL_CHNSEL_FIELD              FIELD(10, 4)   /* Channel select [13:10] */
-#define NPCX_THRCTL_THRVAL_FIELD              FIELD(0, 10)   /* Assertion threshold value [9:0] */
+#define NPCM_THRCTL_THEN                      15             /* Threshold enable */
+#define NPCM_THRCTL_L_H                       14             /* 0=above, 1=at-or-below */
+#define NPCM_THRCTL_CHNSEL_FIELD              FIELD(10, 4)   /* Channel select [13:10] */
+#define NPCM_THRCTL_THRVAL_FIELD              FIELD(0, 10)   /* Assertion threshold value [9:0] */
 
 /*
  * ADC Channel-to-DEVALT pin select mapping (SCFG registers, set via pinctrl in Zephyr).
@@ -230,15 +230,15 @@ static inline uint32_t npcx_thr_dctl_offset(uint32_t ctrl)
 #define NPCM_ADC_DEVALT2_GPIOE0E1_SL    BIT(3)  /* Non-ADC: 0=I3C0 pins, 1=GPIOE0/E1 (default=0) */
 
 /* Speed register default values (datasheet section 4.15.7 Initializing the ADC, steps 3-5) */
-#define NPCX_ADCCNF2_DEFAULT_VAL              0x8901  /* Speed 1 Register: Word at offset 0x20 */
-#define NPCX_GENDLY_DEFAULT_VAL               0x0100  /* Speed 2 Register: Word at offset 0x22 */
-#define NPCX_MEAST_DEFAULT_VAL                0x0405  /* Speed 3 Register: Word at offset 0x26 */
+#define NPCM_ADCCNF2_DEFAULT_VAL              0x8901  /* Speed 1 Register: Word at offset 0x20 */
+#define NPCM_GENDLY_DEFAULT_VAL               0x0100  /* Speed 2 Register: Word at offset 0x22 */
+#define NPCM_MEAST_DEFAULT_VAL                0x0405  /* Speed 3 Register: Word at offset 0x26 */
 
 /* V2T (Voltage to Temperature) related definitions */
-#ifdef CONFIG_ADC_V2T_NPCX
+#ifdef CONFIG_ADC_V2T_NPCM
 /* V2T Control register - Datasheet register map offset: 0x100 */
-#define NPCX_V2T_CTRL_OFFSET                  0x100
-#define V2T_CTRL(base) (*(volatile uint16_t *)((base) + NPCX_V2T_CTRL_OFFSET))
+#define NPCM_V2T_CTRL_OFFSET                  0x100
+#define V2T_CTRL(base) (*(volatile uint16_t *)((base) + NPCM_V2T_CTRL_OFFSET))
 
 /* V2T_CTRL register bit fields (datasheet offset 0x100):
  *   Bits[15:7]: Reserved
@@ -250,13 +250,13 @@ static inline uint32_t npcx_thr_dctl_offset(uint32_t ctrl)
  *   Bit 1: OVT_EN    - OVT function enable
  *   Bit 0: TEMP_EN   - Enable ADC voltage-to-temperature function
  */
-#define NPCX_V2T_CTRL_TEMP_EN                 0  /* Enable ADC voltage-to-temperature function */
-#define NPCX_V2T_CTRL_OVT_EN                  1  /* OVT function enable */
-#define NPCX_V2T_CTRL_TINTC_EN                2  /* Temp interrupt from TEOCEV (spec: TINTC_EN) */
-#define NPCX_V2T_CTRL_TINTCC_EN               3  /* Temp interrupt from TEOCCEV */
-#define NPCX_V2T_CTRL_TINTT_EN                4  /* Temp interrupt from TEOTCEV */
-#define NPCX_V2T_CTRL_TINTO_EN                5  /* Temp interrupt from TOVFEV (data overflow) */
-#define NPCX_V2T_CTRL_OVT_MODE                6  /* 0=comparator mode (default), 1=interrupt mode */
+#define NPCM_V2T_CTRL_TEMP_EN                 0  /* Enable ADC voltage-to-temperature function */
+#define NPCM_V2T_CTRL_OVT_EN                  1  /* OVT function enable */
+#define NPCM_V2T_CTRL_TINTC_EN                2  /* Temp interrupt from TEOCEV (spec: TINTC_EN) */
+#define NPCM_V2T_CTRL_TINTCC_EN               3  /* Temp interrupt from TEOCCEV */
+#define NPCM_V2T_CTRL_TINTT_EN                4  /* Temp interrupt from TEOTCEV */
+#define NPCM_V2T_CTRL_TINTO_EN                5  /* Temp interrupt from TOVFEV (data overflow) */
+#define NPCM_V2T_CTRL_OVT_MODE                6  /* 0=comparator mode (default), 1=interrupt mode */
 
 /* ADC Temperature Channel Enable Register (TEMP_CH) - Datasheet offset: 0x102
  * Bits[15:8]: Reserved
@@ -267,12 +267,12 @@ static inline uint32_t npcx_thr_dctl_offset(uint32_t ctrl)
  *   TCH6_EN=bit6 → Voltage CH6 (VIN15), TCH7_EN=bit7 → Voltage CH7 (VIN16)
  * Note: Internal power channels (CC8-CC13) do NOT support V2T temperature measurement.
  */
-#define NPCX_TEMP_CH_OFFSET                   0x102
-#define TEMP_CH(base) (*(volatile uint16_t *)((base) + NPCX_TEMP_CH_OFFSET))
+#define NPCM_TEMP_CH_OFFSET                   0x102
+#define TEMP_CH(base) (*(volatile uint16_t *)((base) + NPCM_TEMP_CH_OFFSET))
 
 /* ADC OVT Status Register (OVT_STS) - Datasheet offset: 0x106 (W1C) */
-#define NPCX_OVT_STS_OFFSET                   0x106
-#define OVT_STS(base) (*(volatile uint16_t *)((base) + NPCX_OVT_STS_OFFSET))
+#define NPCM_OVT_STS_OFFSET                   0x106
+#define OVT_STS(base) (*(volatile uint16_t *)((base) + NPCM_OVT_STS_OFFSET))
 
 /* ADC Temperature Channel n Data Buffer Registers (TCHNnDAT) - Datasheet offset 0x10Eh
  * Register map shows 14 entries: TCHN0DAT=0x10Eh..TCHN13DAT=0x128h (+2 each)
@@ -288,7 +288,7 @@ static inline uint32_t npcx_thr_dctl_offset(uint32_t ctrl)
  * NOTE (per datasheet section 4.15.7): The voltage CHNDAT.NEW bit must be cleared
  * (by reading CHNDAT) before V2T can generate new temperature data for the next cycle.
  */
-static inline uint32_t npcx_tchndat_offset(uint32_t ch)
+static inline uint32_t npcm_tchndat_offset(uint32_t ch)
 {
 	/* Register map: TCHN0DAT=0x10E ... TCHN13DAT=0x128 (14 entries, +2 each)
 	 * Only ch=0..7 are usable (TEMP_CH has 8 enable bits). Formula is valid for 0..13.
@@ -296,13 +296,13 @@ static inline uint32_t npcx_tchndat_offset(uint32_t ch)
 	return (0x10E + (ch * 2));
 }
 
-#define NPCX_TCHNDAT_OFFSET(ch) npcx_tchndat_offset(ch)
+#define NPCM_TCHNDAT_OFFSET(ch) npcm_tchndat_offset(ch)
 #define TCHNDAT(base, ch) \
-	(*(volatile uint16_t *)((base) + NPCX_TCHNDAT_OFFSET(ch)))
+	(*(volatile uint16_t *)((base) + NPCM_TCHNDAT_OFFSET(ch)))
 /* TCHNnDAT field macros */
-#define NPCX_TCHNDAT_NEW                      15           /* New temperature data flag (RO) */
-#define NPCX_TCHNDAT_TCHDAT_FIELD             FIELD(3, 8)  /* Integer temperature data [10:3] */
-#define NPCX_TCHNDAT_FRACTION_FIELD           FIELD(0, 3)  /* Fraction data [2:0], 1 LSB=0.125°C */
+#define NPCM_TCHNDAT_NEW                      15           /* New temperature data flag (RO) */
+#define NPCM_TCHNDAT_TCHDAT_FIELD             FIELD(3, 8)  /* Integer temperature data [10:3] */
+#define NPCM_TCHNDAT_FRACTION_FIELD           FIELD(0, 3)  /* Fraction data [2:0], 1 LSB=0.125°C */
 
 /* Thermistor Offset table registers (THR_Offset0 to THR_Offset16)
  * Datasheet: THR_Offset0=0x12Eh, THR_Offset1=0x130h, ..., THR_Offset16=0x150h (17 entries)
@@ -310,12 +310,12 @@ static inline uint32_t npcx_tchndat_offset(uint32_t ch)
  *   Bits[15:14]: Reserved
  *   Bits[13:0]:  THR_OFFSET - Thermistor table offset item
  */
-static inline uint32_t npcx_thr_offset_reg(uint32_t n)
+static inline uint32_t npcm_thr_offset_reg(uint32_t n)
 {
 	return (0x12E + (n * 2));
 }
-#define THR_O(base, n)         (*(volatile uint16_t *)((base) + npcx_thr_offset_reg(n)))
-#define NPCX_THR_OFFSET_FIELD  FIELD(0, 14)  /* Thermistor offset value [13:0] */
+#define THR_O(base, n)         (*(volatile uint16_t *)((base) + npcm_thr_offset_reg(n)))
+#define NPCM_THR_OFFSET_FIELD  FIELD(0, 14)  /* Thermistor offset value [13:0] */
 
 /* Thermistor Slope table registers (THR_Slope0 to THR_Slope16)
  * Datasheet: THR_Slope0=0x152h, THR_Slope1=0x154h, ..., THR_Slope16=0x172h (17 entries)
@@ -323,12 +323,12 @@ static inline uint32_t npcx_thr_offset_reg(uint32_t n)
  *   Bits[15:10]: Reserved
  *   Bits[9:0]:   THR_SLOPE - Thermistor table slope item
  */
-static inline uint32_t npcx_thr_slope_reg(uint32_t n)
+static inline uint32_t npcm_thr_slope_reg(uint32_t n)
 {
 	return (0x152 + (n * 2));
 }
-#define THR_S(base, n)         (*(volatile uint16_t *)((base) + npcx_thr_slope_reg(n)))
-#define NPCX_THR_SLOPE_FIELD   FIELD(0, 10)  /* Thermistor slope value [9:0] */
+#define THR_S(base, n)         (*(volatile uint16_t *)((base) + npcm_thr_slope_reg(n)))
+#define NPCM_THR_SLOPE_FIELD   FIELD(0, 10)  /* Thermistor slope value [9:0] */
 
 /* Temperature Channel Threshold Control registers (TEMP_THR_CTL0 to TEMP_THR_CTL11)
  * Datasheet: TEMP_THR_CTL0=0x180h, TEMP_THR_CTL1=0x182h, ..., TEMP_THR_CTL11=0x196h (12 entries)
@@ -338,15 +338,15 @@ static inline uint32_t npcx_thr_slope_reg(uint32_t n)
  *   Bits 10-3:  TEMP_THRVAL[10:3]   - Threshold value integer part
  *   Bits  2-0:  TEMP_THRVAL_Fraction - Threshold fraction (1 LSB = 0.125°C)
  */
-static inline uint32_t npcx_temp_thrctl_offset(uint32_t ch)
+static inline uint32_t npcm_temp_thrctl_offset(uint32_t ch)
 {
 	/* ch=0..11, TEMP_THR_CTL0=0x180, ..., TEMP_THR_CTL11=0x196 */
 	return (0x180 + (ch * 2));
 }
-#define TEMP_THRCTL(base, ch)              (*(volatile uint16_t *)((base) + npcx_temp_thrctl_offset(ch)))
-#define NPCX_TEMP_THRCTL_THEN             15            /* Temperature threshold enable */
-#define NPCX_TEMP_THRCTL_THRVAL_FIELD     FIELD(3, 8)   /* Integer threshold value [10:3] */
-#define NPCX_TEMP_THRCTL_FRACTION_FIELD   FIELD(0, 3)   /* Fraction threshold value [2:0] */
+#define TEMP_THRCTL(base, ch)              (*(volatile uint16_t *)((base) + npcm_temp_thrctl_offset(ch)))
+#define NPCM_TEMP_THRCTL_THEN             15            /* Temperature threshold enable */
+#define NPCM_TEMP_THRCTL_THRVAL_FIELD     FIELD(3, 8)   /* Integer threshold value [10:3] */
+#define NPCM_TEMP_THRCTL_FRACTION_FIELD   FIELD(0, 3)   /* Fraction threshold value [2:0] */
 
 /* Temperature Channel Deassertion Threshold registers (TEMP_THR_DCTL0 to TEMP_THR_DCTL11)
  * Datasheet: TEMP_THR_DCTL0=0x1A0h, ..., TEMP_THR_DCTL11=0x1B6h (12 entries)
@@ -356,15 +356,15 @@ static inline uint32_t npcx_temp_thrctl_offset(uint32_t ch)
  *   Bits 10-3:  TEMP_THR_DVAL[10:3]   - Deassertion threshold value integer part
  *   Bits  2-0:  TEMP_THR_DVAL_Fraction - Deassertion threshold fraction (1 LSB = 0.125°C)
  */
-static inline uint32_t npcx_temp_thr_dctl_offset(uint32_t ch)
+static inline uint32_t npcm_temp_thr_dctl_offset(uint32_t ch)
 {
 	/* ch=0..11, TEMP_THR_DCTL0=0x1A0, ..., TEMP_THR_DCTL11=0x1B6 */
 	return (0x1A0 + (ch * 2));
 }
-#define TEMP_THR_DCTL(base, ch)              (*(volatile uint16_t *)((base) + npcx_temp_thr_dctl_offset(ch)))
-#define NPCX_TEMP_THR_DCTL_THRD_EN          15            /* Temperature deassertion threshold enable */
-#define NPCX_TEMP_THR_DCTL_DVAL_FIELD       FIELD(3, 8)   /* Integer deassertion value [10:3] */
-#define NPCX_TEMP_THR_DCTL_FRACTION_FIELD   FIELD(0, 3)   /* Fraction deassertion value [2:0] */
+#define TEMP_THR_DCTL(base, ch)              (*(volatile uint16_t *)((base) + npcm_temp_thr_dctl_offset(ch)))
+#define NPCM_TEMP_THR_DCTL_THRD_EN          15            /* Temperature deassertion threshold enable */
+#define NPCM_TEMP_THR_DCTL_DVAL_FIELD       FIELD(3, 8)   /* Integer deassertion value [10:3] */
+#define NPCM_TEMP_THR_DCTL_FRACTION_FIELD   FIELD(0, 3)   /* Fraction deassertion value [2:0] */
 
 /* ADC Temperature Post-Offset registers (ADCTD pair registers)
  * Datasheet: ADCTD1-0PO=0x1C0h, ADCTD3-2PO=0x1C2h, ADCTD5-4PO=0x1C4h, ADCTD7-6PO=0x1C6h,
@@ -376,21 +376,21 @@ static inline uint32_t npcx_temp_thr_dctl_offset(uint32_t ch)
  * Usage: pair=0 → ADCTD1-0PO (TD0,TD1), pair=1 → ADCTD3-2PO (TD2,TD3), ...,
  *        pair=5 → ADCTD11-10PO (TD10,TD11)
  */
-static inline uint32_t npcx_adctd_po_offset(uint32_t pair)
+static inline uint32_t npcm_adctd_po_offset(uint32_t pair)
 {
 	/* pair=0..5, ADCTD1-0PO=0x1C0, ..., ADCTD11-10PO=0x1CA */
 	return (0x1C0 + (pair * 2));
 }
-#define ADCTD_PO(base, pair)             (*(volatile uint16_t *)((base) + npcx_adctd_po_offset(pair)))
-#define NPCX_ADCTD_PO_LOW_FIELD          FIELD(0, 8)   /* TDn_POST_OFFSET (even channel) [7:0] */
-#define NPCX_ADCTD_PO_HIGH_FIELD         FIELD(8, 8)   /* TDn+1_POST_OFFSET (odd channel) [15:8] */
+#define ADCTD_PO(base, pair)             (*(volatile uint16_t *)((base) + npcm_adctd_po_offset(pair)))
+#define NPCM_ADCTD_PO_LOW_FIELD          FIELD(0, 8)   /* TDn_POST_OFFSET (even channel) [7:0] */
+#define NPCM_ADCTD_PO_HIGH_FIELD         FIELD(8, 8)   /* TDn+1_POST_OFFSET (odd channel) [15:8] */
 
-#endif /* CONFIG_ADC_V2T_NPCX */
+#endif /* CONFIG_ADC_V2T_NPCM */
 
 /* Threshold comparator V2 support */
-#ifdef CONFIG_ADC_NPCX_CMP_V2
-#define NPCX_THEN_OFFSET                      0x2C
-#define THEN(base) (*(volatile uint16_t *)((base) + NPCX_THEN_OFFSET))
+#ifdef CONFIG_ADC_NPCM_CMP_V2
+#define NPCM_THEN_OFFSET                      0x2C
+#define THEN(base) (*(volatile uint16_t *)((base) + NPCM_THEN_OFFSET))
 #endif
 
 #endif /* CONFIG_ADC_NPCM_SARADC */
