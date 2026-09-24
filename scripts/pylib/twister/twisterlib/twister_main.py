@@ -20,6 +20,8 @@ from twisterlib.runner import TwisterRunner
 from twisterlib.environment import TwisterEnv
 from twisterlib.package import Artifacts
 
+from jsonschema.exceptions import ValidationError
+
 logger = logging.getLogger("twister")
 logger.setLevel(logging.DEBUG)
 
@@ -121,7 +123,7 @@ def main(options, default_options):
     tplan = TestPlan(env)
     try:
         tplan.discover()
-    except RuntimeError as e:
+    except (RuntimeError, ValidationError) as e:
         logger.error(f"{e}")
         return 1
 
@@ -130,7 +132,7 @@ def main(options, default_options):
 
     try:
         tplan.load()
-    except RuntimeError as e:
+    except (RuntimeError, ValidationError) as e:
         logger.error(f"{e}")
         return 1
 

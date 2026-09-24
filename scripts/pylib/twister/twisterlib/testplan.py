@@ -39,6 +39,8 @@ from twisterlib.quarantine import Quarantine
 import list_boards
 from zephyr_module import parse_modules
 
+from jsonschema.exceptions import ValidationError
+
 ZEPHYR_BASE = os.getenv("ZEPHYR_BASE")
 if not ZEPHYR_BASE:
     sys.exit("$ZEPHYR_BASE environment variable undefined")
@@ -478,7 +480,7 @@ class TestPlan:
                                     break
 
 
-                except RuntimeError as e:
+                except (RuntimeError, ValidationError) as e:
                     logger.error("E: %s: can't load: %s" % (file, e))
                     self.load_errors += 1
 

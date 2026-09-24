@@ -1,111 +1,159 @@
 #
 # Schema to validate a YAML file describing a Zephyr test platform
 #
-# We load this with pykwalify
-# (http://pykwalify.readthedocs.io/en/unstable/validation-rules.html),
-# a YAML structure validator, to validate the YAML files that describe
-# Zephyr test platforms
+# We load this with jsonschema (https://json-schema.org/), a JSON/YAML
+# structure validator, to validate the YAML files that describe Zephyr
+# test platforms
 #
 # The original spec comes from Zephyr's twister script
 #
-
-type: map
-mapping:
-  "identifier":
-    type: str
-  "maintainers":
-    type: seq
-    seq:
-      - type: str
-  "name":
-    type: str
-  "type":
-    type: str
-    enum: ["mcu", "qemu", "sim", "unit", "native"]
-  "simulation":
-    type: str
+type: object
+additionalProperties: false
+properties:
+  identifier:
+    type:
+    - string
+    - 'null'
+  maintainers:
+    type:
+    - array
+    - 'null'
+    items:
+      type: string
+  name:
+    type:
+    - string
+    - 'null'
+  type:
+    type:
+    - string
+    - 'null'
     enum:
-      [
-        "qemu",
-        "simics",
-        "xt-sim",
-        "renode",
-        "nsim",
-        "mdb-nsim",
-        "tsim",
-        "armfvp",
-        "native",
-        "custom",
-      ]
-  "simulation_exec":
-    type: str
-  "arch":
-    type: str
+    - mcu
+    - qemu
+    - sim
+    - unit
+    - native
+  simulation:
+    type:
+    - string
+    - 'null'
     enum:
-      [
-        # architectures
-        "arc",
-        "arm",
-        "arm64",
-        "mips",
-        "nios2",
-        "posix",
-        "riscv",
-        "sparc",
-        "x86",
-        "xtensa",
-
-        # unit testing
-        "unit",
-      ]
-  "vendor":
-    type: str
-  "tier":
-    type: int
-  "toolchain":
-    type: seq
-    seq:
-      - type: str
-  "sysbuild":
-    type: bool
-  "env":
-    type: seq
-    seq:
-      - type: str
-  "ram":
-    type: int
-  "flash":
-    type: int
-  "twister":
-    type: bool
-  "supported":
-    type: seq
-    seq:
-      - type: str
-  "testing":
-    type: map
-    mapping:
-      "timeout_multiplier":
-        type: number
-        required: false
-      "default":
-        type: bool
-      "binaries":
-        type: seq
-        seq:
-          - type: str
-      "only_tags":
-        type: seq
-        seq:
-          - type: str
-      "ignore_tags":
-        type: seq
-        seq:
-          - type: str
-      "renode":
-        type: map
-        mapping:
-          "uart":
-            type: str
-          "resc":
-            type: str
+    - qemu
+    - simics
+    - xt-sim
+    - renode
+    - nsim
+    - mdb-nsim
+    - tsim
+    - armfvp
+    - native
+    - custom
+  simulation_exec:
+    type:
+    - string
+    - 'null'
+  arch:
+    type:
+    - string
+    - 'null'
+    enum:
+    - arc
+    - arm
+    - arm64
+    - mips
+    - nios2
+    - posix
+    - riscv
+    - sparc
+    - x86
+    - xtensa
+    - unit
+  vendor:
+    type:
+    - string
+    - 'null'
+  tier:
+    type:
+    - integer
+    - 'null'
+  toolchain:
+    type:
+    - array
+    - 'null'
+    items:
+      type: string
+  sysbuild:
+    type:
+    - boolean
+    - 'null'
+  env:
+    type:
+    - array
+    - 'null'
+    items:
+      type: string
+  ram:
+    type:
+    - integer
+    - 'null'
+  flash:
+    type:
+    - integer
+    - 'null'
+  twister:
+    type:
+    - boolean
+    - 'null'
+  supported:
+    type:
+    - array
+    - 'null'
+    items:
+      type: string
+  testing:
+    type:
+    - object
+    - 'null'
+    additionalProperties: false
+    properties:
+      timeout_multiplier:
+        type:
+        - number
+        - 'null'
+      default:
+        type:
+        - boolean
+        - 'null'
+      binaries:
+        type:
+        - array
+        - 'null'
+        items:
+          type: string
+      only_tags:
+        type:
+        - array
+        - 'null'
+        items:
+          type: string
+      ignore_tags:
+        type:
+        - array
+        - 'null'
+        items:
+          type: string
+      renode:
+        type:
+        - object
+        - 'null'
+        additionalProperties: false
+        properties:
+          uart:
+            type:
+            - string
+            - 'null'
+          resc:
+            type:
+            - string
+            - 'null'
