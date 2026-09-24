@@ -10,7 +10,7 @@ on:
     - v*-branch
     - collab-*
     - ntil-npcm5-main
-    - ntil-npcm5-v3.7.1
+    - npcm-v3.7
     paths:
     - 'scripts/west-commands.yml'
     - 'scripts/west_commands/**'
@@ -21,7 +21,7 @@ on:
     - v*-branch
     - collab-*
     - ntil-npcm5-main
-    - ntil-npcm5-v3.7.1
+    - npcm-v3.7
     paths:
     - 'scripts/west-commands.yml'
     - 'scripts/west_commands/**'

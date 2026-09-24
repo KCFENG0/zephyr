@@ -9,7 +9,7 @@ on:
       - main
       - v*-branch
       - ntil-npcm5-main
-      - ntil-npcm5-v3.7.1
+      - npcm-v3.7
     paths:
       - 'scripts/build/**'
       - '.github/workflows/scripts_tests.yml'
@@ -18,7 +18,7 @@ on:
       - main
       - v*-branch
       - ntil-npcm5-main
-      - ntil-npcm5-v3.7.1
+      - npcm-v3.7
     paths:
       - 'scripts/build/**'
       - '.github/workflows/scripts_tests.yml'

@@ -7,14 +7,14 @@ on:
       - v*-branch
       - collab-*
       - ntil-npcm5-main
-      - ntil-npcm5-v3.7.1
+      - npcm-v3.7
   pull_request_target:
     branches:
       - main
       - v*-branch
       - collab-*
       - ntil-npcm5-main
-      - ntil-npcm5-v3.7.1
+      - npcm-v3.7
   schedule:
     # Run on weekdays at 6:25 and 18:25
     - cron: '25 06,18 * * *'

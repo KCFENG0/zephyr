@@ -11,7 +11,7 @@ on:
     - main
     - v*
     - ntil-npcm5-main
-    - ntil-npcm5-v3.7.1
+    - npcm-v3.7
     types:
     - completed
 

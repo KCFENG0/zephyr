@@ -7,14 +7,14 @@ on:
       - v*-branch
       - collab-*
       - ntil-npcm5-main
-      - ntil-npcm5-v3.7.1
+      - npcm-v3.7
   pull_request:
     branches:
       - main
       - v*-branch
       - collab-*
       - ntil-npcm5-main
-      - ntil-npcm5-v3.7.1
+      - npcm-v3.7
     paths:
       - 'scripts/build/**'
       - 'scripts/requirements*.txt'

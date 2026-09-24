@@ -1,7 +1,7 @@
 name: Manifest
 on:
   pull_request_target:
-    branches: [ "ntil-npcm5-main", "ntil-npcm5-v3.7.1" ]
+    branches: [ "ntil-npcm5-main", "npcm-v3.7" ]
 
 jobs:
   contribs:
