@@ -53,9 +53,8 @@ struct adc_npcm_threshold_param {
  * @retval -EINVAL if threshold selector is invalid or device not configured for thresholds
  * @retval -ENOTSUP if threshold feature is not supported
  */
-int adc_npcm_threshold_ctrl_set_param(const struct device *dev,
-                                      const uint8_t th_sel,
-                                      const struct adc_npcm_threshold_param *param);
+int adc_npcm_threshold_ctrl_set_param(const struct device *dev, const uint8_t th_sel,
+				      const struct adc_npcm_threshold_param *param);
 
 /**
  * @brief Set dual threshold parameters
@@ -72,10 +71,8 @@ int adc_npcm_threshold_ctrl_set_param(const struct device *dev,
  * @retval -EINVAL if threshold selector is invalid
  * @retval -ENOTSUP if dual threshold mode is not supported
  */
-int adc_npcm_threshold_ctrl_set_dual_param(const struct device *dev,
-                                           const uint8_t th_sel,
-                                           uint16_t thr_dval,
-                                           bool l_h);
+int adc_npcm_threshold_ctrl_set_dual_param(const struct device *dev, const uint8_t th_sel,
+					   uint16_t thr_dval, bool l_h);
 
 /**
  * @brief Enable or disable threshold detection
@@ -91,9 +88,7 @@ int adc_npcm_threshold_ctrl_set_dual_param(const struct device *dev,
  * @retval -EINVAL if threshold selector is invalid
  * @retval negative error code on failure
  */
-int adc_npcm_threshold_ctrl_enable(const struct device *dev,
-                                   uint8_t th_sel,
-                                   const bool enable);
+int adc_npcm_threshold_ctrl_enable(const struct device *dev, uint8_t th_sel, const bool enable);
 
 /**
  * @brief Convert millivolts to threshold ADC value
@@ -108,9 +103,7 @@ int adc_npcm_threshold_ctrl_enable(const struct device *dev,
  * @retval 0 on success
  * @retval -EINVAL if voltage exceeds reference voltage
  */
-int adc_npcm_threshold_mv_to_thrval(const struct device *dev,
-                                    uint32_t val_mv,
-                                    uint32_t *thrval);
+int adc_npcm_threshold_mv_to_thrval(const struct device *dev, uint32_t val_mv, uint32_t *thrval);
 
 #ifdef CONFIG_ADC_V2T_NPCM
 
