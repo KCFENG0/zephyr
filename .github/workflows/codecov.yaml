@@ -92,6 +92,12 @@ jobs:
 
           echo "ZEPHYR_SDK_INSTALL_DIR=/opt/toolchains/zephyr-sdk-$( cat SDK_VERSION )" >> $GITHUB_ENV
 
+      - name: Install Python dependencies
+        run: |
+          # --user is rejected inside a virtualenv, so fall back to a plain install
+          python3 -m pip install --user --quiet jsonschema || \
+            python3 -m pip install --quiet jsonschema
+
       - name: Generate Test Plan with Twister
         if: github.event_name == 'pull_request_target'
         id: test-plan
@@ -207,6 +213,12 @@ jobs:
           git -c advice.detachedHead=false checkout ${BSIM_VERSION}
           west update
           make everything -s -j 8
+
+      - name: Install Python dependencies
+        run: |
+          # --user is rejected inside a virtualenv, so fall back to a plain install
+          python3 -m pip install --user --quiet jsonschema || \
+            python3 -m pip install --quiet jsonschema
 
       - name: Run Tests with Twister (Push)
         continue-on-error: true
