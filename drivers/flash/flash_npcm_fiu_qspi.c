@@ -410,12 +410,16 @@ static int qspi_npcm_fiu_uma_transceive(const struct device *dev, struct npcm_tr
         size_t addr_bytes;
         const struct npcm_qspi_cfg *qspi_cfg = data->cur_cfg;
 
-        if (qspi_cfg->enter_4ba != 0) {
-            addr_bytes = 4;
-        } else if (cfg->addr_count > 0) {
+        /* Caller-specified width wins; enter_4ba is only the fallback. */
+        if (cfg->addr_count > 0) {
             addr_bytes = cfg->addr_count;
         } else {
-            addr_bytes = 3;  /* Default to 3-byte addressing */
+            addr_bytes = (qspi_cfg->enter_4ba != 0) ? 4 : 3;
+        }
+
+        if (addr_bytes > NPCM_DEV_NUM_ADDR_4BYTE) {
+            ret = -EINVAL;
+            goto release_and_exit;
         }
 
         /* Calculate starting index for address bytes */
