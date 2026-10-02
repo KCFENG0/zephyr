@@ -47,6 +47,11 @@ FORMATS = {
 }
 FORMAT_VERSIONS = {"v1": 1, "v3": 3}  # --format CLI token -> FORMATS key
 
+# v1 is the flash_image_tool.py gen-test-flash layout: "FLSH" header, images
+# packed back to back on 4-byte boundaries, manifest binding only the MCU
+# runtime. v3 aligns to flash pages. None == FLASH_PAGE_SIZE.
+FORMAT_ALIGN = {"v1": 4, "v3": None}
+
 # The flash controller's DMA only starts once a full page is in the FIFO, so
 # every image starts on a page boundary and is padded out to a whole number of
 # pages. == builder::flash_image::FLASH_PAGE_SIZE.
@@ -116,7 +121,8 @@ def needs_source(layout: dict, name: str) -> bool:
     return any(entry.get("source") == name for entry in layout["images"])
 
 
-def build_soc_manifest(sources: dict, svn: int, key_dir: Optional[str]) -> bytes:
+def build_soc_manifest(sources: dict, svn: int, key_dir: Optional[str],
+                       bind_soc_fw: bool = True) -> bytes:
     """Sign an authorization manifest binding the MCU runtime and SoC firmware."""
     import hashlib
 
@@ -133,12 +139,13 @@ def build_soc_manifest(sources: dict, svn: int, key_dir: Optional[str]) -> bytes
             component_id=MCU_RT_FW_ID,
             flags=soc_manifest.entry_flags("in_request", exec_bit=MCU_RT_EXEC_BIT),
             load=0, staging=MCU_RT_STAGING),
-        soc_manifest.make_entry(
+    ]
+    if bind_soc_fw:
+        entries.append(soc_manifest.make_entry(
             SOC_FW_FW_ID, hashlib.sha384(sources["soc-fw"]).digest(),
             component_id=SOC_FW_FW_ID,
             flags=soc_manifest.entry_flags("load", exec_bit=SOC_FW_EXEC_BIT),
-            load=SOC_FW_LOAD, staging=SOC_FW_LOAD),
-    ]
+            load=SOC_FW_LOAD, staging=SOC_FW_LOAD))
     data = soc_manifest.generate(entries, svn=svn, keys=keys)
     checks = soc_manifest.verify_manifest(data, keys=keys)
     if not all(checks.values()):
@@ -175,8 +182,8 @@ def verify_manifest_rows(images_by_id: dict, key_dir: Optional[str]) -> list:
     for fw_id, ident, label in ((MCU_RT_FW_ID, MCU_RT_IDENTIFIER, "mcu_runtime"),
                                 (SOC_FW_FW_ID, SOC_IMAGES_BASE_IDENTIFIER, "soc_fw")):
         entry, data = entries.get(fw_id), images_by_id.get(ident)
-        if data is None:
-            continue              # slot not in this layout -- nothing to bind
+        if data is None or (entry is None and fw_id == SOC_FW_FW_ID):
+            continue              # slot not in this layout / not bound (v1)
         rows.append((f"manifest digest {label} (fw_id={fw_id})",
                      entry is not None and hashlib.sha384(data).digest() == entry["digest"]))
     return rows
@@ -219,6 +226,10 @@ def checksum(data: bytes) -> int:
     return (-sum(data)) & 0xFFFFFFFF
 
 
+def pad_to(data: bytes, align: int) -> bytes:
+    return data + b"\x00" * ((-len(data)) % align)
+
+
 def pad_to_page(data: bytes) -> bytes:
     """Pad out to a whole number of flash pages with zeros, like
     builder::flash_image::pad_to_page, so a page-granular DMA read of `size`
@@ -238,7 +249,8 @@ def image_name(identifier: int) -> str:
     return f"image_0x{identifier:08x}"
 
 
-def build_flash_image(images: list[tuple[int, bytes]], version: int) -> bytes:
+def build_flash_image(images: list[tuple[int, bytes]], version: int,
+                      align: int = FLASH_PAGE_SIZE) -> bytes:
     """Serialize (identifier, raw_data) pairs into a flash image blob, in the
     v1 or v3 on-disk layout selected by `version` (see FORMATS).
 
@@ -253,14 +265,14 @@ def build_flash_image(images: list[tuple[int, bytes]], version: int) -> bytes:
     n = len(images)
     if n == 0:
         raise ValueError("no images to pack")
-    padded = [(ident, pad_to_page(data)) for ident, data in images]
+    padded = [(ident, pad_to(data, align)) for ident, data in images]
 
     hdr_size = _flash_header_size(fmt)
     fname = b"\x00" * fmt["filename_len"]
     offset = hdr_size + _image_header_size(fmt) * n
     infos, offsets = bytearray(), []
     for ident, data in padded:
-        offset += (-offset) % FLASH_PAGE_SIZE
+        offset += (-offset) % align
         offsets.append(offset)
         body = struct.pack("<III", ident, offset, len(data)) + fname \
             + struct.pack("<I", checksum(data))
@@ -441,12 +453,14 @@ def cmd_build(argv):
     parser.add_argument("--layout", type=Path, default=DEFAULT_LAYOUT,
                         help="layout JSON describing the slot table (default: layouts/a1.json)")
     parser.add_argument("--format", required=True, choices=tuple(FORMAT_VERSIONS),
-                        help="container version to write: v3 (2.1.2+ ROM) or v1 "
-                             "(legacy-ROM boards) -- no default, see FORMATS")
+                        help="container version to write: v3 (2.1.2+ ROM, "
+                             "page-aligned) or v1 (legacy-ROM boards, "
+                             "flash_image_tool.py compatible) -- no default")
     parser.add_argument("--output", required=True)
     args = parser.parse_args(argv)
 
     layout = load_layout(args.layout)
+    align = FORMAT_ALIGN[args.format] or FLASH_PAGE_SIZE
     # soc-fw and mcu-fw are padded here, not in build_flash_image, so the
     # container slot and the SoC-manifest digest cover byte-identical data.
     # Caliptra DMA-reads `size` bytes (the padded length, from the ImageHeader)
@@ -454,8 +468,8 @@ def cmd_build(argv):
     # file would pass every build-time check and then hold the M7 in reset on
     # hardware.
     sources = {
-        "soc-fw": pad_to_page(Path(args.soc_fw).read_bytes()),
-        "mcu-fw": pad_to_page(Path(args.mcu_fw).read_bytes()) if args.mcu_fw else None,
+        "soc-fw": pad_to(Path(args.soc_fw).read_bytes(), align),
+        "mcu-fw": pad_to(Path(args.mcu_fw).read_bytes(), align) if args.mcu_fw else None,
         "caliptra-fw": Path(args.caliptra_fw).read_bytes() if args.caliptra_fw else None,
         "soc-manifest": Path(args.soc_manifest).read_bytes() if args.soc_manifest else None,
         "soc-header": Path(args.soc_header).read_bytes() if args.soc_header
@@ -467,13 +481,14 @@ def cmd_build(argv):
     # and only a2 layouts have a manifest slot.
     if needs_source(layout, "soc-manifest") and not args.soc_manifest:
         sources["soc-manifest"] = build_soc_manifest(
-            sources, args.manifest_svn, args.key_dir)
+            sources, args.manifest_svn, args.key_dir,
+            bind_soc_fw=args.format != "v1")
     images = build_layout_images(layout, sources)
     part = layout["partition"]
     output = Path(args.output)
     prep_output(output, args.flash_size)
     write_at(output, layout["slot_base_offset"],
-            build_flash_image(images, FORMAT_VERSIONS[args.format]))
+            build_flash_image(images, FORMAT_VERSIONS[args.format], align))
     write_at(output, 0, build_partition_table(
         part["active"], part["a"], part["b"], part["rollback"]))
     print(f"Wrote {layout['version']} {args.format} flash image ({len(images)} image(s), "

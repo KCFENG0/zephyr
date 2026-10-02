@@ -32,11 +32,12 @@ set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/li
 # The layout file decides which slots the image ships; flags only supply paths.
 #
 # Options:
-#   -DFLASH_LAYOUT=<x>      image variant: a1 (default, SoC fw only) | a1-mcu
-#                           (adds MCU fw) | a2 (full Caliptra) | path to a
+#   -DFLASH_LAYOUT=<x>      image variant: a1 (default, SoC fw + MCU runtime +
+#                           signed manifest) | a1-mcu (MCU fw, no manifest) | a2 (full Caliptra) | path to a
 #                           project-local layout JSON
-#   -DFLASH_FORMAT=<x>      container version: v3 (default, 2.1.2+ ROM) | v1
-#                           (legacy-ROM boards -- see flash_image.py FORMATS)
+#   -DFLASH_FORMAT=<x>      container version: v1 (default, byte-identical to
+#                           flash_image_tool.py gen-test-flash) | v3 (2.1.2+
+#                           ROM, page-aligned)
 #   -DMCU_FW=<path>         MCU firmware (default: bypass build, or the active
 #                           build when the layout wants Caliptra)
 #   -DCALIPTRA_FW=<path>    signed Caliptra FMC+RT bundle (a2 layout)
@@ -71,9 +72,9 @@ if(NOT EXISTS ${flash_layout_json})
 endif()
 
 if(NOT FLASH_FORMAT)
-  set(FLASH_FORMAT v3)
+  set(FLASH_FORMAT v1)
 endif()
-if(NOT FLASH_FORMAT STREQUAL "v1" AND NOT FLASH_FORMAT STREQUAL "v3")
+if(NOT FLASH_FORMAT MATCHES "^(v1|v3)$")
   message(FATAL_ERROR "FLASH_FORMAT=${FLASH_FORMAT}: must be v1 or v3")
 endif()
 

@@ -20,8 +20,11 @@ def _build_a1(tmp_path, soc_fw: bytes, format: str = "v3") -> tuple[bytes, int]:
     """Build an a1 image from `soc_fw`; return (raw image, slot offset)."""
     soc = tmp_path / "soc.bin"
     soc.write_bytes(soc_fw)
+    mcu = tmp_path / "mcu.bin"
+    mcu.write_bytes(b"\x5a" * 64)
     out = tmp_path / "flash.bin"
-    fi.main(["--soc-fw", str(soc), "--layout", str(LAYOUTS / "a1.json"),
+    fi.main(["--soc-fw", str(soc), "--mcu-fw", str(mcu),
+             "--layout", str(LAYOUTS / "a1.json"),
              "--format", format, "--output", str(out)])
     return out.read_bytes(), fi.load_layout(LAYOUTS / "a1.json")["slot_base_offset"]
 
@@ -96,11 +99,29 @@ def test_a2_manifest_digest_matches_padded_mcu_fw(tmp_path):
     assert entries[fi.MCU_RT_FW_ID]["digest"] == hashlib.sha384(packed_mcu).digest()
 
 
-def test_a1_build_does_not_generate_a_manifest(tmp_path):
-    """A1 layouts have no manifest slot and must not pay for LMS signing."""
-    raw, off = _build_a1(tmp_path, b"\xa5" * 16)
-    idents = [ident for ident, *_ in fi.iter_images(raw, off)]
+def test_a1_mcu_build_does_not_generate_a_manifest(tmp_path):
+    """a1-mcu has no manifest slot and must not pay for LMS signing."""
+    soc, mcu = tmp_path / "soc.bin", tmp_path / "mcu.bin"
+    soc.write_bytes(b"\xa5" * 16)
+    mcu.write_bytes(b"\x5a" * 16)
+    out = tmp_path / "flash.bin"
+    fi.main(["--soc-fw", str(soc), "--mcu-fw", str(mcu), "--format", "v3",
+             "--layout", str(LAYOUTS / "a1-mcu.json"), "--output", str(out)])
+    idents = [ident for ident, *_ in fi.iter_images(out.read_bytes(), 0x10000)]
     assert fi.SOC_MANIFEST_IDENTIFIER not in idents
+
+
+def test_v1_packs_on_4_byte_boundaries_and_binds_only_mcu(tmp_path):
+    """v1 is flash_image_tool.py compatible: FLSH header, no page alignment, and a
+    manifest that authorizes just the MCU runtime."""
+    import soc_manifest as sm
+    raw, off = _build_a1(tmp_path, b"\xa5" * 5, format="v1")
+    assert raw[off:off + 4] == b"FLSH"
+    for ident, ioff, size, *_ in fi.iter_images(raw, off):
+        assert size % 4 == 0
+    assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == b"\xa5" * 5 + b"\x00" * 3
+    entries = sm.parse_manifest(_slot(raw, off, fi.SOC_MANIFEST_IDENTIFIER))["entries"]
+    assert [e["fw_id"] for e in entries] == [fi.MCU_RT_FW_ID]
 
 
 def test_aligned_soc_fw_is_stored_unchanged(tmp_path):
@@ -141,8 +162,8 @@ def test_v1_and_v3_round_trip(tmp_path):
         assert raw[off:off + len(magic)] == magic if magic else True
         version, count, *_ = fi.parse_header(raw, off)
         assert version == fi.FORMAT_VERSIONS[fmt]
-        assert count == 3  # soc_fw, npcm_header, flash_otp
-        assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == fi.pad_to_page(b"\xa5" * 8)
+        assert count == 5  # manifest, mcu_runtime, soc_fw, npcm_header, flash_otp
+        assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == fi.pad_to(b"\xa5" * 8, fi.FORMAT_ALIGN[fmt] or fi.FLASH_PAGE_SIZE)
 
 
 def test_v1_flsh_bytes_parse_as_v1_not_a_mangled_version_word(tmp_path):
