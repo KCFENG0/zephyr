@@ -92,7 +92,8 @@ properties:
     required: true
     description: |
       APB1 prescaler. It sets the APB1 bus frequency, APB1_CLK, by dividing
-      OFMCLK(MCLK) and needs to meet the following requirements.
+      OFMCLK(MCLK) on NPCM4 or CORE_CLK(PERIPH_CLK) on NPCM5 and needs to meet
+      the following requirements.
       - The maximum APB1_CLK frequency is either the MCLK frequency divided by 1 or 100 MHz.
       - Only the following values are allowed:
         1, APB1_CLK = OFMCLK
@@ -122,7 +123,8 @@ properties:
     required: true
     description: |
       APB2 prescaler. It sets the APB2 bus frequency, APB2_CLK, by dividing
-      OFMCLK(MCLK) and needs to meet the following requirements.
+      OFMCLK(MCLK) on NPCM4 or CORE_CLK(PERIPH_CLK) on NPCM5 and needs to meet
+      the following requirements.
       - The maximum APB2_CLK frequency is either the MCLK frequency divided by 1 or 100 MHz.
       - Only the following values are allowed:
         1, APB2_CLK = OFMCLK
@@ -152,7 +154,8 @@ properties:
     required: true
     description: |
       APB3 prescaler. It sets the APB3 bus frequency, APB3_CLK, by dividing
-      OFMCLK(MCLK) and needs to meet the following requirements.
+      OFMCLK(MCLK) on NPCM4 or CORE_CLK(PERIPH_CLK) on NPCM5 and needs to meet
+      the following requirements.
       - The maximum APB3_CLK frequency is either the MCLK frequency divided by 1 or 100 MHz.
       - Only the following values are allowed:
         1, APB3_CLK = OFMCLK

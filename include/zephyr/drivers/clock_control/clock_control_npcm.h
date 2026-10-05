@@ -71,16 +71,24 @@ struct cdcg_reg {
 #define CORE_CLK           (OFMCLK / DT_PROP(NPCM_NODE_PCC_LABEL, core_prescaler))
 /* Low Frequency clock */
 #define LFCLK              32768
-/* FMUL clock */
-#if (OFMCLK > MHZ(50))
+/* FMUL clock: XF_RANGE divides OFMCLK by 8, 4 or 2 above 200, 100 and 50 MHz */
+#if (OFMCLK > MHZ(200))
+#define FMCLK              (OFMCLK / 8)
+#elif (OFMCLK > MHZ(100))
+#define FMCLK              (OFMCLK / 4)
+#elif (OFMCLK > MHZ(50))
 #define FMCLK              (OFMCLK / 2) /* FMUL clock = OFMCLK/2 */
 #else
 #define FMCLK              OFMCLK /* FMUL clock = OFMCLK */
 #endif
 /* MCLK clock */
 #define MCLK               OFMCLK /* MCLK clock = OFMCLK */
-/* APBs source clock */
+/* APBs source clock: PERIPH_CLK (CORE_CLK) on NPCM5, MCLK on NPCM4 */
+#ifdef CONFIG_SOC_SERIES_NPCM5
+#define APBSRC_CLK         CORE_CLK
+#else
 #define APBSRC_CLK         MCLK
+#endif
 /* USB2.0 clock */
 #define USB20_CLK          MHZ(12)
 /* SIO clock */
