@@ -32,10 +32,13 @@ struct freq_multiplier_t {
 #ifdef CONFIG_SOC_SERIES_NPCM5
 /*
  * NPCM5 HFCGN is XF_RANGE[7:6] | N[5:0], unlike the single XF_RANGE bit 7 on
- * NPCM4; 0x82 here would select XF_RANGE=10b and double OFMCLK. 192-400 MHz
- * (XF_RANGE 10b/11b) are left out: FMCLK and the init sequence assume /2 at most.
+ * NPCM4. XF_RANGE multiplies FMCLK by 1, 2, 4 or 8 to give OFMCLK.
  */
 static struct freq_multiplier_t freq_multiplier[] = {
+	{.ofmclk = 400000000, .hfcgn = 0xC2, .hfcgmh = 0x0B, .hfcgml = 0xEC},
+	{.ofmclk = 384000000, .hfcgn = 0xC2, .hfcgmh = 0x0B, .hfcgml = 0x72},
+	{.ofmclk = 200000000, .hfcgn = 0x82, .hfcgmh = 0x0B, .hfcgml = 0xEC},
+	{.ofmclk = 192000000, .hfcgn = 0x82, .hfcgmh = 0x0B, .hfcgml = 0x72},
 	{.ofmclk = 100000000, .hfcgn = 0x42, .hfcgmh = 0x0B, .hfcgml = 0xEC},
 	{.ofmclk = 96000000, .hfcgn = 0x42, .hfcgmh = 0x0B, .hfcgml = 0x72},
 	{.ofmclk = 80000000, .hfcgn = 0x42, .hfcgmh = 0x09, .hfcgml = 0x89},
@@ -161,6 +164,19 @@ static struct clock_control_driver_api npcm_clock_control_api = {
 	.off = npcm_clock_control_off,
 	.get_rate = npcm_clock_control_get_subsys_rate,
 };
+
+#if !defined(CONFIG_CLOCK_CONTROL_NPCM_FPGA) && defined(CONFIG_SOC_SERIES_NPCM5)
+/* NPCM5 clock limits */
+BUILD_ASSERT(CORE_CLK <= MHZ(200), "PERIPH_CLK exceeds 200 MHz, raise core-prescaler");
+BUILD_ASSERT(CORE_CLK / (AHB6DIV_VAL + 1) <= MHZ(200), "AHB6_CLK exceeds 200 MHz");
+BUILD_ASSERT(CORE_CLK / (FIUDIV_VAL + 1) <= MHZ(100), "FIUCLK exceeds 100 MHz");
+BUILD_ASSERT(NPCM_APB_CLOCK(1) <= MHZ(100), "APB1_CLK exceeds 100 MHz");
+BUILD_ASSERT(NPCM_APB_CLOCK(2) <= MHZ(100), "APB2_CLK exceeds 100 MHz");
+BUILD_ASSERT(NPCM_APB_CLOCK(3) <= MHZ(100), "APB3_CLK exceeds 100 MHz");
+BUILD_ASSERT(MCLK / (M7DIV_VAL + 1) <= MHZ(400), "M7_FCLK exceeds 400 MHz");
+BUILD_ASSERT(MCLK / (MRAMDIV_VAL + 1) <= MIN(MCLK / 2, MHZ(200)),
+	     "MRAM_CLK exceeds MCLK / 2 or 200 MHz");
+#endif
 
 #ifndef CONFIG_CLOCK_CONTROL_NPCM_FPGA
 /* Set all clock prescalers of core and peripherals. */

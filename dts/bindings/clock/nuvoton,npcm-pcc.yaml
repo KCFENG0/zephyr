@@ -35,6 +35,10 @@ properties:
     description: |
       Default frequency in Hz for HFCG output clock (OFMCLK). Currently,
       only the following values are allowed:
+        400000000, 400 MHz (NPCM5 only)
+        384000000, 384 MHz (NPCM5 only)
+        200000000, 200 MHz (NPCM5 only)
+        192000000, 192 MHz (NPCM5 only)
         100000000, 100 MHz
         96000000, 96 MHz
         80000000, 80 MHz
@@ -46,6 +50,10 @@ properties:
         20000000, 20 MHz
         10000000, 10 MHz
     enum:
+      - 400000000
+      - 384000000
+      - 200000000
+      - 192000000
       - 100000000
       - 96000000
       - 80000000
