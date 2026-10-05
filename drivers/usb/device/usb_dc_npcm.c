@@ -10,6 +10,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/dt-bindings/usb/usb.h>
+#include <zephyr/dt-bindings/pinctrl/npcm-pinctrl.h>
 #include <zephyr/drivers/pinctrl.h>
 
 #include <zephyr/logging/log.h>
@@ -166,6 +167,33 @@ static inline void usbd_flush_all_ep(void)
 }
 
 /* USBD local functions */
+#if defined(CONFIG_SOC_NPCM500)
+#define NPCM_SCFG_BASE_ADDR     DT_REG_ADDR_BY_NAME(DT_NODELABEL(pinctrl), scfg)
+#define NPCM_SCFG_REG_OFFSET(n) (((n) >> NPCM_PINCTRL_SHIFT) & NPCM_PINCTRL_MASK)
+#define NPCM_SCFG_REG_BIT(n)    ((n) & ((1 << NPCM_PINCTRL_SHIFT) - 1))
+
+/* Pulse width of the PHY power-on reset. (Unit:us) */
+#define NPCM_USB_PHY_PONRST_WIDTH (1000)
+/* Settle time the PHY needs after PONRST is released. (Unit:us) */
+#define NPCM_USB_PHY_PONRST_SETTLE (10000)
+
+/*
+ * On NPCM500 the USB PHY may stay in an unresponsive state after boot, which makes
+ * usbd_enable_phy() time out. Toggling USBDPHY_PONRST releases it.
+ */
+static void usbd_phy_power_on_reset(void)
+{
+	const mem_addr_t reg = NPCM_SCFG_BASE_ADDR +
+			       NPCM_SCFG_REG_OFFSET(NPCM_PINCTRL_ALT69_5_USBDPHY_PONRST);
+	const uint8_t mask = BIT(NPCM_SCFG_REG_BIT(NPCM_PINCTRL_ALT69_5_USBDPHY_PONRST));
+
+	sys_write8(sys_read8(reg) | mask, reg);
+	k_busy_wait(NPCM_USB_PHY_PONRST_WIDTH);
+	sys_write8(sys_read8(reg) & ~mask, reg);
+	k_busy_wait(NPCM_USB_PHY_PONRST_SETTLE);
+}
+#endif /* CONFIG_SOC_NPCM500 */
+
 static int usbd_enable_phy(void)
 {
 	uint64_t st;
@@ -484,6 +512,10 @@ int usb_dc_attach(void)
 	if (ret != 0) {
 		return ret;
 	}
+
+#if defined(CONFIG_SOC_NPCM500)
+	usbd_phy_power_on_reset();
+#endif
 
 	ret = usbd_enable_phy();
 	if (ret != 0) {
