@@ -62,6 +62,10 @@ struct cdcg_reg {
 #define FIUDIV_VAL  (DT_PROP(NPCM_NODE_PCC_LABEL, fiu_prescaler) - 1)
 /* I3C clock divider */
 #define I3C_TC_DIV_VAL  (DT_PROP(NPCM_NODE_PCC_LABEL, i3c_tc_prescaler) - 1)
+/* M7 fast clock divider (NPCM5) */
+#define M7DIV_VAL   (DT_PROP(NPCM_NODE_PCC_LABEL, m7_prescaler) - 1)
+/* MRAM clock divider (NPCM5) */
+#define MRAMDIV_VAL (DT_PROP(NPCM_NODE_PCC_LABEL, mram_prescaler) - 1)
 
 /* Core domain clock */
 #define CORE_CLK           (OFMCLK / DT_PROP(NPCM_NODE_PCC_LABEL, core_prescaler))

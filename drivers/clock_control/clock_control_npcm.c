@@ -162,6 +162,24 @@ static struct clock_control_driver_api npcm_clock_control_api = {
 	.get_rate = npcm_clock_control_get_subsys_rate,
 };
 
+#ifndef CONFIG_CLOCK_CONTROL_NPCM_FPGA
+/* Set all clock prescalers of core and peripherals. */
+static void npcm_hfcg_set_dividers(struct cdcg_reg *priv)
+{
+#ifdef CONFIG_SOC_SERIES_NPCM5
+	priv->hfcgp = (FPRED_VAL << 4) | (I3C_TC_DIV_VAL << 2) | AHB6DIV_VAL;
+	priv->hfcbcd = APB1DIV_VAL | (APB2DIV_VAL << 4);
+	priv->hfcbcd1 = (FIUDIV_VAL << 4) | APB3DIV_VAL;
+	priv->hfcbcd2 = (MRAMDIV_VAL << 2) | M7DIV_VAL;
+#else
+	priv->hfcgp = (FPRED_VAL << 4) | AHB6DIV_VAL;
+	priv->hfcbcd = APB1DIV_VAL | (APB2DIV_VAL << 4);
+	priv->hfcbcd1 = (I3C_TC_DIV_VAL << 2) | FIUDIV_VAL;
+	priv->hfcbcd2 = APB3DIV_VAL;
+#endif
+}
+#endif /* CONFIG_CLOCK_CONTROL_NPCM_FPGA */
+
 static int npcm_clock_control_init(const struct device *dev)
 {
 #ifdef CONFIG_CLOCK_CONTROL_NPCM_FPGA
@@ -207,11 +225,7 @@ static int npcm_clock_control_init(const struct device *dev)
 			;
 	}
 
-	/* Set all clock prescalers of core and peripherals. */
-	priv->hfcgp = (FPRED_VAL << 4) | AHB6DIV_VAL;
-	priv->hfcbcd = APB1DIV_VAL | (APB2DIV_VAL << 4);
-	priv->hfcbcd1 = (I3C_TC_DIV_VAL << 2) | FIUDIV_VAL;
-	priv->hfcbcd2 = APB3DIV_VAL;
+	npcm_hfcg_set_dividers(priv);
 
 	return 0;
 #endif /* CONFIG_CLOCK_CONTROL_NPCM_FPGA */

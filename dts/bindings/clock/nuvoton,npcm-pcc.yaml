@@ -223,5 +223,27 @@ properties:
       - 2
       - 4
 
+  m7-prescaler:
+    type: int
+    default: 1
+    description: |
+      NPCM5 only. M7 fast clock prescaler (M7DIV in HFCBCD2). It sets M7_FCLK by
+      dividing MCLK; M7_FCLK can be up to 400 MHz.
+    enum:
+      - 1
+      - 2
+      - 4
+
+  mram-prescaler:
+    type: int
+    default: 2
+    description: |
+      NPCM5 only. MRAM clock prescaler (MRAMDIV in HFCBCD2). It sets MRAM_CLK by
+      dividing MCLK; MRAM_CLK can be up to MCLK / 2 or 200 MHz, whichever is lower.
+    enum:
+      - 1
+      - 2
+      - 4
+
 clock-cells:
   - clk_cfg
