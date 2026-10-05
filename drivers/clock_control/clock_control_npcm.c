@@ -29,6 +29,22 @@ struct freq_multiplier_t {
 };
 
 #ifndef CONFIG_CLOCK_CONTROL_NPCM_FPGA
+#ifdef CONFIG_SOC_SERIES_NPCM5
+/*
+ * NPCM5 HFCGN is XF_RANGE[7:6] | N[5:0], unlike the single XF_RANGE bit 7 on
+ * NPCM4; 0x82 here would select XF_RANGE=10b and double OFMCLK. 192-400 MHz
+ * (XF_RANGE 10b/11b) are left out: FMCLK and the init sequence assume /2 at most.
+ */
+static struct freq_multiplier_t freq_multiplier[] = {
+	{.ofmclk = 100000000, .hfcgn = 0x42, .hfcgmh = 0x0B, .hfcgml = 0xEC},
+	{.ofmclk = 96000000, .hfcgn = 0x42, .hfcgmh = 0x0B, .hfcgml = 0x72},
+	{.ofmclk = 80000000, .hfcgn = 0x42, .hfcgmh = 0x09, .hfcgml = 0x89},
+	{.ofmclk = 66000000, .hfcgn = 0x42, .hfcgmh = 0x07, .hfcgml = 0xDE},
+	{.ofmclk = 50000000, .hfcgn = 0x02, .hfcgmh = 0x0B, .hfcgml = 0xEC},
+	{.ofmclk = 48000000, .hfcgn = 0x02, .hfcgmh = 0x0B, .hfcgml = 0x72},
+	{.ofmclk = 40000000, .hfcgn = 0x02, .hfcgmh = 0x09, .hfcgml = 0x89},
+	{.ofmclk = 33000000, .hfcgn = 0x02, .hfcgmh = 0x07, .hfcgml = 0xDE}};
+#else
 static struct freq_multiplier_t freq_multiplier[] = {
 	{.ofmclk = 100000000, .hfcgn = 0x82, .hfcgmh = 0x0B, .hfcgml = 0xEC},
 	{.ofmclk = 96000000, .hfcgn = 0x82, .hfcgmh = 0x0B, .hfcgml = 0x72},
@@ -40,6 +56,7 @@ static struct freq_multiplier_t freq_multiplier[] = {
 	{.ofmclk = 33000000, .hfcgn = 0x02, .hfcgmh = 0x07, .hfcgml = 0xDE},
 	{.ofmclk = 20000000, .hfcgn = 0x08, .hfcgmh = 0x13, .hfcgml = 0x13},
 	{.ofmclk = 10000000, .hfcgn = 0x08, .hfcgmh = 0x09, .hfcgml = 0x89}};
+#endif /* CONFIG_SOC_SERIES_NPCM5 */
 #endif
 
 /* PMC multi-registers */
