@@ -177,6 +177,30 @@ static void npcm_hfcg_set_dividers(struct cdcg_reg *priv)
 	priv->hfcbcd1 = (I3C_TC_DIV_VAL << 2) | FIUDIV_VAL;
 	priv->hfcbcd2 = APB3DIV_VAL;
 #endif
+
+	/*
+	 * Let the new dividers take effect before M/N may change: at least 16
+	 * PERIPH_CLK cycles. Each CDCG read is an APB1 access, and APB1_CLK is
+	 * never faster than PERIPH_CLK.
+	 */
+	for (int i = 0; i < 16; i++) {
+		(void)priv->hfcgp;
+	}
+}
+
+/* OFMCLK the frequency multiplier runs at now, or 0 if its M/N is not in the table */
+static uint32_t npcm_hfcg_cur_ofmclk(const struct cdcg_reg *priv)
+{
+	for (int i = 0; i < ARRAY_SIZE(freq_multiplier); i++) {
+		const struct freq_multiplier_t *f = &freq_multiplier[i];
+
+		if (priv->hfcgn == f->hfcgn && priv->hfcgml == f->hfcgml &&
+		    priv->hfcgmh == f->hfcgmh) {
+			return f->ofmclk;
+		}
+	}
+
+	return 0;
 }
 #endif /* CONFIG_CLOCK_CONTROL_NPCM_FPGA */
 
@@ -201,6 +225,15 @@ static int npcm_clock_control_init(const struct device *dev)
 	if (freq_p == NULL) {
 		LOG_ERR("Unsupported OFMCLK frequency %d", OFMCLK);
 		return -EINVAL;
+	}
+
+	/*
+	 * Slow the dividers down before raising OFMCLK so that no derived clock
+	 * exceeds its limit while the multiplier changes. An unknown M/N counts
+	 * as a raise.
+	 */
+	if (freq_p->ofmclk > npcm_hfcg_cur_ofmclk(priv)) {
+		npcm_hfcg_set_dividers(priv);
 	}
 
 	/*
