@@ -8,6 +8,7 @@
 
 #define LOG_LEVEL CONFIG_USB_DRIVER_LOG_LEVEL
 #include <zephyr/kernel.h>
+#include <zephyr/cache.h>
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/dt-bindings/usb/usb.h>
 #include <zephyr/dt-bindings/pinctrl/npcm-pinctrl.h>
@@ -165,6 +166,77 @@ static inline void usbd_flush_all_ep(void)
 		USBD->EP[i].USBD_EPRSPCTL = BIT(NPCM_USBD_EPRSPCTL_FLUSH) | BIT(1);
 	}
 }
+
+#if CONFIG_USB_DC_NPCM_DMA_SUPPORT
+/* The controller has a single DMA channel shared by every endpoint. */
+static struct k_spinlock usbd_dma_lock;
+
+/* Bounded spin count: a normal burst completes within a few microseconds. */
+#define NPCM_USB_DMA_POLL_LIMIT (1000000)
+
+/* The DMA master is a bus master, so it can only fetch word-aligned buffers. */
+static inline bool usbd_dma_usable(const void *buf)
+{
+	return ((uintptr_t)buf & (sizeof(uint32_t) - 1)) == 0;
+}
+
+/*
+ * Run one DMA burst to completion. The caller must not touch EPRSPCTL/EPTXCNT or
+ * consume the buffer until this returns; the endpoint stays in manual-validate
+ * mode, so the IN packet is only sent once EPTXCNT is written afterwards.
+ */
+static int usbd_dma_xfer(uint8_t ep_idx, void *buf, uint32_t len, bool to_host)
+{
+	k_spinlock_key_t key;
+	uint32_t spin = 0;
+	uint32_t ctl;
+	int ret = 0;
+
+	if (to_host) {
+		sys_cache_data_flush_range(buf, len);
+	}
+
+	ctl = (USBD->USBD_DMACTL & ~(NPCM_USBD_DMACTL_EPNUM_MASK |
+				     BIT(NPCM_USBD_DMACTL_DMARD) |
+				     BIT(NPCM_USBD_DMACTL_SVINEP))) | ep_idx;
+	if (to_host) {
+		/* DMARD: memory -> USB buffer, SVINEP: the DMA serves an IN endpoint. */
+		ctl |= BIT(NPCM_USBD_DMACTL_DMARD) | BIT(NPCM_USBD_DMACTL_SVINEP);
+	}
+
+	key = k_spin_lock(&usbd_dma_lock);
+
+	USBD->USBD_BUSINTSTS = BIT(NPCM_USBD_BUSINTSTS_DMADONEIF);
+	USBD->USBD_DMACTL = ctl;
+	USBD->USBD_DMAADDR = (uint32_t)buf;
+	USBD->USBD_DMACNT = len;
+	USBD->USBD_DMACTL = ctl | BIT(NPCM_USBD_DMACTL_DMAEN);
+
+	while (NPCM_IS_BIT_SET(USBD->USBD_DMACTL, NPCM_USBD_DMACTL_DMAEN) &&
+	       !NPCM_IS_BIT_SET(USBD->USBD_BUSINTSTS, NPCM_USBD_BUSINTSTS_DMADONEIF)) {
+		if (++spin >= NPCM_USB_DMA_POLL_LIMIT) {
+			usbd_reset_dma();
+			ret = -ETIMEDOUT;
+			break;
+		}
+	}
+
+	USBD->USBD_BUSINTSTS = BIT(NPCM_USBD_BUSINTSTS_DMADONEIF);
+
+	k_spin_unlock(&usbd_dma_lock, key);
+
+	if (ret != 0) {
+		LOG_ERR("Timeout: USB DMA ep %u!", ep_idx);
+		return ret;
+	}
+
+	if (!to_host) {
+		sys_cache_data_flush_and_invd_range(buf, len);
+	}
+
+	return 0;
+}
+#endif /* CONFIG_USB_DC_NPCM_DMA_SUPPORT */
 
 /* USBD local functions */
 #if defined(CONFIG_SOC_NPCM500)
@@ -931,26 +1003,27 @@ int usb_dc_ep_write(const uint8_t ep, const uint8_t *const data,
 			}
 		}
 	} else {
-#if CONFIG_USB_DC_NPCM_DMA_SUPPORT
+		bool filled = false;
+
 		if (packet_len) {
-			/* Set DMA read memory (write to USB buffer) to serve IN EPx */
-			USBD->USBD_DMACTL = (USBD->USBD_DMACTL & ~NPCM_USBD_DMACTL_EPNUM_MASK) |
-					BIT(NPCM_USBD_DMACTL_DMARD) | BIT(NPCM_USBD_DMACTL_SVINEP) | ep_idx;
-			/* Enable DMADONE interrupt */
-			USBD->USBD_BUSINTEN |= BIT(NPCM_USBD_BUSINTEN_DMADONEIEN);
-			/* Set the DMA ADDR to read */
-			USBD->USBD_DMAADDR = (uint32_t)data;
-			/* Set the DMA transfer count to read */
-			USBD->USBD_DMACNT = packet_len;
-			/* Enable DMA */
-			USBD->USBD_DMACTL |= BIT(NPCM_USBD_DMACTL_DMAEN);
-		}
-#else
-		/* Fill data */
-		for (i = 0; i < packet_len; i++) {
-			M8(&USBD->EP[ep_idx - 1].USBD_EPDAT_BYTE) = data[i];
-		}
+#if CONFIG_USB_DC_NPCM_DMA_SUPPORT
+			if (usbd_dma_usable(data)) {
+				int ret = usbd_dma_xfer(ep_idx, (void *)data,
+							packet_len, true);
+
+				if (ret != 0) {
+					return ret;
+				}
+				filled = true;
+			}
 #endif
+			if (!filled) {
+				/* Fill data */
+				for (i = 0; i < packet_len; i++) {
+					M8(&USBD->EP[ep_idx - 1].USBD_EPDAT_BYTE) = data[i];
+				}
+			}
+		}
 
 		/* packet end */
 		USBD->EP[ep_idx - 1].USBD_EPRSPCTL = BIT(NPCM_USBD_EPRSPCTL_SHORTTXEN) | BIT(1);
@@ -962,6 +1035,9 @@ int usb_dc_ep_write(const uint8_t ep, const uint8_t *const data,
 		while (1) {
 			if ((k_uptime_get() - st) > NPCM_USB_WRITE_TIMEOUT) {
 				LOG_ERR("Timeout: USB Write Data!");
+				/* Drop the stuck packet, otherwise the EP stays wedged. */
+				USBD->EP[ep_idx - 1].USBD_EPRSPCTL =
+					BIT(NPCM_USBD_EPRSPCTL_FLUSH) | BIT(1);
 				return -ETIMEDOUT;
 			}
 
@@ -1112,24 +1188,27 @@ int usb_dc_ep_read_wait(uint8_t ep, uint8_t *data, uint32_t max_data_len,
 				}
 			}
 		} else {
+			bool drained = false;
+
+			if (data_len) {
 #if CONFIG_USB_DC_NPCM_DMA_SUPPORT
-			/* Set DMA to write memory (read from USB buffer) to serve OUT EPx */
-			USBD->USBD_DMACTL = ((USBD->USBD_DMACTL & ~(NPCM_USBD_DMACTL_EPNUM_MASK |
-					BIT(NPCM_USBD_DMACTL_DMARD) | BIT(NPCM_USBD_DMACTL_SVINEP))) | ep_idx);
-			/* Enable DMADONE interrupt */
-			USBD->USBD_BUSINTEN |= BIT(NPCM_USBD_BUSINTEN_DMADONEIEN);
-			/* Set the DMA ADDR to write */
-			USBD->USBD_DMAADDR = (uint32_t)data;
-			/* Set the DMA transfer count to write */
-			USBD->USBD_DMACNT = data_len;
-			/* Enable DMA */
-			USBD->USBD_DMACTL |= BIT(NPCM_USBD_DMACTL_DMAEN);
-#else
-			/* Bulk, Interrupt */
-			for (i = 0; i < data_len; i++) {
-				*data++ = USBD->EP[ep_idx - 1].USBD_EPDAT_BYTE;
-			}
+				if (usbd_dma_usable(data)) {
+					int ret = usbd_dma_xfer(ep_idx, data,
+								data_len, false);
+
+					if (ret != 0) {
+						return ret;
+					}
+					drained = true;
+				}
 #endif
+				if (!drained) {
+					/* Bulk, Interrupt */
+					for (i = 0; i < data_len; i++) {
+						*data++ = USBD->EP[ep_idx - 1].USBD_EPDAT_BYTE;
+					}
+				}
+			}
 		}
 	}
 
