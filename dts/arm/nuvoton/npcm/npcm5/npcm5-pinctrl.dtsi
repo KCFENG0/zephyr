@@ -245,10 +245,11 @@
 
 	/omit-if-no-ref/ i3c3_scl_sda_gpio26_25: periph-i3c3 {
 		scl {
-			pinmux = <GPIO25__I3C3_SDA__PD6__LED_A__SDA1B 1>;
+			pinmux = <GPIO26__I3C3_SCL__PD5__LED_B__SCL1B 1>;
 		};
 		sda {
-			pinmux = <GPIO26__I3C3_SCL__PD5__LED_B__SCL1B 1>;
+			/* Only GPIO25 carries DEVPD3.I3C3_PUE; pupd on GPIO26 returns -ENOTSUP. */
+			pinmux = <GPIO25__I3C3_SDA__PD6__LED_A__SDA1B 1>;
 			bias-pull-up;
 		};
 	};
