@@ -65,7 +65,6 @@
 };
 
 &tach3 {
-	pin-static;
 	pinctrl-0 = <&tach3_gpio81>;
 	pinctrl-names = "default";
 };

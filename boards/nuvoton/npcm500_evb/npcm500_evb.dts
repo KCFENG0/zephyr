@@ -726,29 +726,59 @@
 	status = "okay";
 };
 
+/*
+ * MFT tachometer capture inputs. tach1/2/3 are the MFT-1/2/3 controllers;
+ * tachN_gpioXX are the TAn input pins.
+ *
+ * PWM->TA loopback jumpers (connector, schematic pin code):
+ *
+ *   Pair       PWM pin                          TA pin
+ *   PWM1/TA1   GPIO04  EMAC_TXD0     J59 E1  <-> GPIO05  EMAC_TX_EN     J59 D2
+ *   PWM2/TA2   GPIO36  I2C_CLK_4A    J61 L7  <-> GPIO37  I2C_SDA_4A     J61 M7
+ *   PWM4/TA4   GPIOA0  IOX2_LDSH     J62 C5  <-> GPIOA1  IOX2_DOUT      J62 D5
+ *   PWM5/TA5   GPIOA3  IOX2_DIN      J62 D4  <-> GPIOA4  IOX2_SCLK      J62 C4
+ *   PWM6/TA3   GPIOA5  JTAG2_TMS     J62 B4  <-> GPIO81  JTAG2_TDI      J60 C10
+ *   PWM7/TA7   GPIO00  EMAC_RXD1     J59 A1  <-> GPIO01  EMAC_RXD0      J59 B1
+ *   PWM8/TA8   GPIO02  EMAC_REF_CLK  J59 C1  <-> GPIO03  EMAC_TXD1      J59 D1
+ *   PWM9/TA9   GPIO06  EMAC_MDIO     J59 C3  <-> GPIO07  EMAC_MDC       J59 D3
+ *
+ * The test switches TCFG.MFT_IN_SEL at runtime, so any MFT can sample any TA.
+ * All three MFTs mux all eight TA pins; pin-select is just the boot default.
+ *
+ * Shared pins:
+ *   - TA2/GPIO37 is also I2C4A SDA (AF4); the tach driver inits after I2C
+ *     so TA2 wins.
+ *   - TA3/GPIO81 is JTAG2_TDI; JEN1# must select multi-function (GPIO) mode.
+ *   - TA0 is reserved in the spec; TA6/GPIOA6 (USB2.0 clock) gave unstable
+ *     capture. Neither is used.
+ */
+#define NPCM500_EVB_TA_PINCTRL \
+	<&tach1_gpio05 &tach2_gpio37 &tach3_gpio81 &tach4_gpioa1 \
+	 &tach5_gpioa4 &tach7_gpio01 &tach8_gpio03 &tach9_gpio07>
+
 &tach1 {
-	pin-select = <NPCM_TACH_PIN_SELECT_4>; /* Select tach pin 4 as input pin */
+	pin-select = <NPCM_TACH_PIN_SELECT_1>; /* TA1 = GPIO05 */
 	sample-clk = <NPCM_TACH_FREQ_LFCLK>; /* Use LFCLK as sampling clock */
 	pulses-per-round = <2>; /* number of pulses per round of encoder */
-	pinctrl-0 = <&tach4_gpioa1>;
+	pinctrl-0 = NPCM500_EVB_TA_PINCTRL;
 	pinctrl-names = "default";
 	status = "okay";
 };
 
 &tach2 {
-	pin-select = <NPCM_TACH_PIN_SELECT_5>; /* Select tach pin 5 as input pin */
+	pin-select = <NPCM_TACH_PIN_SELECT_2>; /* TA2 = GPIO37 */
 	sample-clk = <NPCM_TACH_FREQ_LFCLK>; /* Use LFCLK as sampling clock */
 	pulses-per-round = <2>; /* number of pulses per round of encoder */
-	pinctrl-0 = <&tach5_gpioa4>;
+	pinctrl-0 = NPCM500_EVB_TA_PINCTRL;
 	pinctrl-names = "default";
 	status = "okay";
 };
 
 &tach3 {
-	pin-select = <NPCM_TACH_PIN_SELECT_3>; /* Select tach pin 3 as input pin */
+	pin-select = <NPCM_TACH_PIN_SELECT_4>; /* TA4 = GPIOA1 */
 	sample-clk = <NPCM_TACH_FREQ_LFCLK>; /* Use LFCLK as sampling clock */
 	pulses-per-round = <2>; /* number of pulses per round of encoder */
-	pinctrl-0 = <&tach3_gpio81>;
+	pinctrl-0 = NPCM500_EVB_TA_PINCTRL;
 	pinctrl-names = "default";
 	status = "okay";
 };
