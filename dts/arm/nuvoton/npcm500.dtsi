@@ -63,8 +63,3 @@
 	    };
 	};
 };
-
-&tach3 {
-	pinctrl-0 = <&tach3_gpio81>;
-	pinctrl-names = "default";
-};
