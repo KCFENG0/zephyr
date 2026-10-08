@@ -289,6 +289,20 @@ static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel,
 		return ret;
 	}
 
+	/* Leave heartbeat mode left over from a previous call */
+	if (!(flags & (PWMCTL_HB_STANDARD | PWMCTL_HB_VISUAL)) &&
+	    ((inst->PWMCTL & BIT(NPCM_PWMCTL_HBNK_SEL)) ||
+	     GET_FIELD(inst->PWMCTL, NPCM_PWMCTL_HB_DC_CTL_FIELD) != NPCM_PWM_HBM_NORMAL)) {
+		inst->PWMCTL &= ~BIT(NPCM_PWMCTL_PWR);
+		inst->PWMCTL &= ~BIT(NPCM_PWMCTL_HBNK_SEL);
+		SET_FIELD(inst->PWMCTL, NPCM_PWMCTL_HB_DC_CTL_FIELD, NPCM_PWM_HBM_NORMAL);
+		if (data->cycles_per_sec == NPCM_PWM_LFCLK) {
+			inst->PWMCTL |= BIT(NPCM_PWMCTL_CKSEL);
+		} else {
+			inst->PWMCTL &= ~BIT(NPCM_PWMCTL_CKSEL);
+		}
+	}
+
 	ctl = inst->PWMCTL | BIT(NPCM_PWMCTL_PWR);
 
 	/* Set PWM polarity */
