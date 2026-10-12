@@ -48,8 +48,8 @@ FORMATS = {
 FORMAT_VERSIONS = {"v1": 1, "v3": 3}  # --format CLI token -> FORMATS key
 
 # v1 is the flash_image_tool.py gen-test-flash layout: "FLSH" header, images
-# packed back to back on 4-byte boundaries, manifest binding only the MCU
-# runtime. v3 aligns to flash pages. None == FLASH_PAGE_SIZE.
+# packed back to back on 4-byte boundaries. v3 aligns to flash pages.
+# None == FLASH_PAGE_SIZE.
 FORMAT_ALIGN = {"v1": 4, "v3": None}
 
 # The flash controller's DMA only starts once a full page is in the FIFO, so
@@ -182,8 +182,9 @@ def verify_manifest_rows(images_by_id: dict, key_dir: Optional[str]) -> list:
     for fw_id, ident, label in ((MCU_RT_FW_ID, MCU_RT_IDENTIFIER, "mcu_runtime"),
                                 (SOC_FW_FW_ID, SOC_IMAGES_BASE_IDENTIFIER, "soc_fw")):
         entry, data = entries.get(fw_id), images_by_id.get(ident)
-        if data is None or (entry is None and fw_id == SOC_FW_FW_ID):
-            continue              # slot not in this layout / not bound (v1)
+        if data is None or (entry is None and fw_id == SOC_FW_FW_ID
+                            and CALIPTRA_FMC_RT_IDENTIFIER not in images_by_id):
+            continue              # slot not in this layout / a1 binds only the MCU runtime
         rows.append((f"manifest digest {label} (fw_id={fw_id})",
                      entry is not None and hashlib.sha384(data).digest() == entry["digest"]))
     return rows
@@ -478,11 +479,15 @@ def cmd_build(argv):
         else soc_otp_bytes(args.flash_connection, args.dis_mcp),
     }
     # Synthesized like soc-header/soc-otp, but gated: signing is ~1s of LMS work
-    # and only a2 layouts have a manifest slot.
+    # and only a1/a2 layouts have a manifest slot. Only a full-Caliptra layout
+    # (one that packs the Caliptra FMC+RT bundle) has the MCU ask Caliptra to
+    # authorize the SoC firmware, so only it binds fw_id=3; without that entry
+    # Caliptra answers IMAGE_NOT_AUTHORIZED and holds the M7 in reset. a1 keeps
+    # the gen-test-flash manifest that binds just the MCU runtime.
     if needs_source(layout, "soc-manifest") and not args.soc_manifest:
         sources["soc-manifest"] = build_soc_manifest(
             sources, args.manifest_svn, args.key_dir,
-            bind_soc_fw=args.format != "v1")
+            bind_soc_fw=needs_source(layout, "caliptra-fw"))
     images = build_layout_images(layout, sources)
     part = layout["partition"]
     output = Path(args.output)

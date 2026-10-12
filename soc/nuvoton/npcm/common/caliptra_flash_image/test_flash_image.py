@@ -124,6 +124,15 @@ def test_v1_packs_on_4_byte_boundaries_and_binds_only_mcu(tmp_path):
     assert [e["fw_id"] for e in entries] == [fi.MCU_RT_FW_ID]
 
 
+def test_v1_a2_manifest_binds_soc_fw(tmp_path):
+    """a2 in v1 must still bind fw_id=3: the MCU runtime asks Caliptra to
+    authorize the SoC firmware, and an unbound one holds the M7 in reset."""
+    import soc_manifest as sm
+    raw, off = _build_a2(tmp_path, b"\xa5" * 5, format="v1")
+    entries = sm.parse_manifest(_slot(raw, off, fi.SOC_MANIFEST_IDENTIFIER))["entries"]
+    assert [e["fw_id"] for e in entries] == [fi.MCU_RT_FW_ID, fi.SOC_FW_FW_ID]
+
+
 def test_aligned_soc_fw_is_stored_unchanged(tmp_path):
     """pad_to_page() is idempotent: aligned input is byte-for-byte in the slot."""
     aligned = b"\xa5" * fi.FLASH_PAGE_SIZE
