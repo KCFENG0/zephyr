@@ -39,7 +39,8 @@ set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/li
 #                           flash_image_tool.py gen-test-flash) | v3 (2.1.2+
 #                           ROM, page-aligned)
 #   -DMCU_FW=<path>         MCU firmware (default: bypass build, or the active
-#                           build when the layout wants Caliptra)
+#                           build when the layout wants Caliptra -- active/ on
+#                           FPGA, active-evb/ on silicon)
 #   -DCALIPTRA_FW=<path>    signed Caliptra FMC+RT bundle (a2 layout)
 #   -DSOC_MANIFEST=<path>   prebuilt SoC manifest; omit to generate and sign one
 #   -DMANIFEST_SVN=<n>      security version of the generated manifest
@@ -55,7 +56,17 @@ set(FLASH_IMAGE_DIR  ${SOC_${soc_name_upper}_DIR}/common/caliptra_flash_image)
 set(FLASH_IMAGE_TOOL ${FLASH_IMAGE_DIR}/flash_image.py)
 set(caliptra_images_dir ${WEST_TOPDIR}/modules/caliptra/caliptra-mcu-sw/platforms/nuvoton/npcm500/images)
 set(MCU_FW_BYPASS       ${caliptra_images_dir}/mcu-fw/bypass/npcm-mcu-fw.bin)
-set(MCU_FW_ACTIVE       ${caliptra_images_dir}/mcu-fw/active/npcm-mcu-fw.bin)
+# The active runtime's console divisor is fixed at build time: the FPGA build
+# assumes the 10 MHz FPGA clock and garbles the MCU log on silicon, so silicon
+# boards take the image built without npcm500-fpga.
+if(CONFIG_NPCM500_FPGA)
+  set(mcu_fw_active_variant active)
+  set(mcu_fw_active_features npcm500-compat,npcm500-fpga,caliptra-soc-release)
+else()
+  set(mcu_fw_active_variant active-evb)
+  set(mcu_fw_active_features npcm500-compat,caliptra-soc-release)
+endif()
+set(MCU_FW_ACTIVE       ${caliptra_images_dir}/mcu-fw/${mcu_fw_active_variant}/npcm-mcu-fw.bin)
 set(CALIPTRA_FW_DEFAULT ${caliptra_images_dir}/caliptra/caliptra-fw.bin)
 
 # Layout selection: a name resolves under layouts/, a path is used as-is.
@@ -109,7 +120,7 @@ elseif(layout_is_caliptra)
       "FLASH_LAYOUT=${FLASH_LAYOUT} needs the active MCU runtime:\n"
       "  ${MCU_FW}\n"
       "Build it from caliptra-mcu-sw with --features "
-      "npcm500-compat,npcm500-fpga,caliptra-soc-release, or pass -DMCU_FW=<path>.\n"
+      "${mcu_fw_active_features}, or pass -DMCU_FW=<path>.\n"
       "The bypass runtime cannot perform the Caliptra boot flow.")
   endif()
 else()
