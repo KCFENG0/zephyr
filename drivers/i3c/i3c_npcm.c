@@ -1211,18 +1211,59 @@ static int npcm_i3c_target_prearm_rx_dma(const struct device *dev)
 	return 0;
 }
 
+/*
+ * A buffer can be handed to RX DMA as it is only if it starts and ends on a
+ * d-cache line boundary. Invalidating it afterwards drops whole lines, so any
+ * other data sharing the first or last line would lose its unflushed writes.
+ */
+static inline bool npcm_i3c_dma_buf_is_line_aligned(const uint8_t *buf, size_t buf_sz)
+{
+	if (!IS_ENABLED(CONFIG_DCACHE)) {
+		return true;
+	}
+
+	return IS_ALIGNED(buf, NPCM_I3C_DMA_BUF_ALIGN) && IS_ALIGNED(buf_sz, NPCM_I3C_DMA_BUF_ALIGN);
+}
+
 static int npcm_i3c_ctlr_xfer_read_fifo_dma(const struct device *dev, uint8_t addr,
 					    enum npcm_i3c_mctrl_type op_type, uint8_t *buf,
 					    size_t buf_sz, bool is_rx, bool emit_start,
 					    bool emit_stop, bool no_ending)
 {
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
+	struct npcm_i3c_data *data = dev->data;
+	uint8_t *dma_buf = buf;
+	int remain;
 	int ret;
 
 	/* Stop PDMA */
 	npcm_i3c_target_dma_off(dev, true);
 
-	ret = npcm_i3c_pdma_configure(dev, I3C_CONFIG_CONTROLLER, true, buf, buf_sz, no_ending);
+	if ((buf != NULL) && (buf_sz != 0)) {
+		if (npcm_i3c_dma_buf_is_line_aligned(buf, buf_sz)) {
+			/* Write back what the caller stored, DMA only fills what it receives */
+			sys_cache_data_flush_and_invd_range((void *)buf, buf_sz);
+		} else {
+			/*
+			 * The caller's buffer shares d-cache lines with other data, usually
+			 * its own stack frame. Receive into the line-aligned driver buffer
+			 * and copy the data out, so only driver-owned lines are invalidated.
+			 * The RX PDMA channel was taken from the target path above, so that
+			 * buffer is not in use.
+			 */
+			if (buf_sz > sizeof(data->dma_rx_buf[0])) {
+				LOG_ERR("Unaligned read of %zu bytes exceeds the %zu-byte DMA buffer",
+					buf_sz, sizeof(data->dma_rx_buf[0]));
+				return -ENOMEM;
+			}
+
+			dma_buf = data->dma_rx_buf[data->dma_rx_buf_idx];
+			sys_cache_data_invd_range((void *)dma_buf, buf_sz);
+		}
+	}
+
+	ret = npcm_i3c_pdma_configure(dev, I3C_CONFIG_CONTROLLER, true, dma_buf, buf_sz,
+				      no_ending);
 	if (ret) {
 		return ret;
 	}
@@ -1258,17 +1299,28 @@ static int npcm_i3c_ctlr_xfer_read_fifo_dma(const struct device *dev, uint8_t ad
 	}
 
 out_read_fifo_dma:
+	/*
+	 * Read the remaining count before the channel is stopped: stopping clears
+	 * the transfer-done flag, and without it a finished transfer is reported
+	 * as having one byte left.
+	 */
+	remain = npcm_i3c_pdma_remain_count(dev, true);
+
 	if (npcm_i3c_controller_dma_off(dev, true) < 0) {
 		ret = -EIO;
 	}
 
 	if (ret == 0 && (buf && buf_sz)) {
 		/* Invalidate RX buffer so CPU reads DMA-written data from RAM */
-		sys_cache_data_invd_range((void *)buf, buf_sz);
+		sys_cache_data_invd_range((void *)dma_buf, buf_sz);
 
-		ret = npcm_i3c_pdma_remain_count(dev, true);
+		ret = remain;
 		if (ret >= 0) {
 			ret = buf_sz - ret;
+
+			if (dma_buf != buf) {
+				(void)memcpy(buf, dma_buf, ret);
+			}
 		}
 	}
 
