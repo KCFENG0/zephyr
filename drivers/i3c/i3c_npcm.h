@@ -59,6 +59,16 @@ struct npcm_i3c_config {
 #endif
 };
 
+/*
+ * The RX DMA buffer is invalidated around each transfer. It must not share a
+ * d-cache line with other fields, or their unflushed writes would be dropped.
+ */
+#if defined(CONFIG_DCACHE_LINE_SIZE) && (CONFIG_DCACHE_LINE_SIZE > 0)
+#define NPCM_I3C_DMA_BUF_ALIGN CONFIG_DCACHE_LINE_SIZE
+#else
+#define NPCM_I3C_DMA_BUF_ALIGN 4
+#endif
+
 /* NPCM I3C Data */
 struct npcm_i3c_data {
 	struct i3c_driver_data common; /* Common i3c driver data */
@@ -83,8 +93,9 @@ struct npcm_i3c_data {
 	bool hw_has_hdr;            /* Hardware supports HDR-DDR */
 
 #ifdef CONFIG_I3C_NPCM_DMA
-	uint8_t dma_rx_buf[2][4096]; /* Double-buffered RX: one for DMA, one for processing */
-	uint8_t dma_rx_buf_idx;      /* Index of buffer currently used by DMA (0 or 1) */
+	/* Double-buffered RX: one for DMA, one for processing */
+	uint8_t dma_rx_buf[2][4096] __aligned(NPCM_I3C_DMA_BUF_ALIGN);
+	uint8_t dma_rx_buf_idx; /* Index of buffer currently used by DMA (0 or 1) */
 	uint16_t dma_rx_len;
 	volatile uint16_t
 		dma_triggered;  /* The bit n is set to 1 if the n-th DMA channel is triggered */
