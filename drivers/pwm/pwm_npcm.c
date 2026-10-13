@@ -18,21 +18,21 @@
 LOG_MODULE_REGISTER(pwm_npcm, LOG_LEVEL_ERR);
 
 /* 16-bit period cycles/prescaler in NPCM PWM modules */
-#define NPCM_PWM_MAX_PRESCALER      (1UL << (16))
-#define NPCM_PWM_MAX_PERIOD_CYCLES  (1UL << (16))
+#define NPCM_PWM_MAX_PRESCALER     (1UL << (16))
+#define NPCM_PWM_MAX_PERIOD_CYCLES (1UL << (16))
 
-#define NPCM_PWM_LFCLK              32768
+#define NPCM_PWM_LFCLK 32768
 
 /* PWM clock sources */
-#define NPCM_PWM_CLOCK_APB2_LFCLK   0
-#define NPCM_PWM_CLOCK_FX           1
-#define NPCM_PWM_CLOCK_FR           2
-#define NPCM_PWM_CLOCK_RESERVED     3
+#define NPCM_PWM_CLOCK_APB2_LFCLK 0
+#define NPCM_PWM_CLOCK_FX         1
+#define NPCM_PWM_CLOCK_FR         2
+#define NPCM_PWM_CLOCK_RESERVED   3
 
 /* PWM heart-beat mode selection */
-#define NPCM_PWM_HBM_NORMAL         0
-#define NPCM_PWM_HBM_VISUAL         1
-#define NPCM_PWM_HBM_STANDARD       2
+#define NPCM_PWM_HBM_NORMAL   0
+#define NPCM_PWM_HBM_VISUAL   1
+#define NPCM_PWM_HBM_STANDARD 2
 
 /* Device config */
 struct pwm_npcm_config {
@@ -64,142 +64,117 @@ struct pwm_hb_config {
 	uint32_t hb_dc_ctl_field;
 };
 
-struct pwm_hb_config hb_standard[5] = {
-	{
-		// Heartbeat Standard Example: Type A
-		.prsc = 0,
-		.ctr = 745,
-		.n_step_rs = 33,
-		.dcr = 745,
-		.ctr_fl = 745,
-		.max_dc_fl = 745,
-		.n_step_fl = 33,
-		.ext_on = 0,
-		.ext_off = 0,
-		.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD
-	},
-	{
-		// Heartbeat Standard Example: Type B
-		.prsc = 0,
-		.ctr = 181,
-		.n_step_rs = 45,
-		.dcr = 181,
-		.ctr_fl = 181,
-		.max_dc_fl = 181,
-		.n_step_fl = 45,
-		.ext_on = 0,
-		.ext_off = 0,
-		.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD
-	},
-	{
-		// Heartbeat Standard Example: Type C
-		.prsc = 0,
-		.ctr = 69,
-		.n_step_rs = 17,
-		.dcr = 69,
-		.ctr_fl = 69,
-		.max_dc_fl = 69,
-		.n_step_fl = 17,
-		.ext_on = 0,
-		.ext_off = 28,
-		.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD
-	},
-	{
-		// Heartbeat Standard Example: Type D
-		.prsc = 0,
-		.ctr = 222,
-		.n_step_rs = 56,
-		.dcr = 222,
-		.ctr_fl = 256,
-		.max_dc_fl = 256,
-		.n_step_fl = 64,
-		.ext_on = 20,
-		.ext_off = 80,
-		.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD
-	},
-	{
-		// Heartbeat Standard Example: Type D1
-		.prsc = 0,
-		.ctr = 151,
-		.n_step_rs = 28,
-		.dcr = 112,
-		.ctr_fl = 151,
-		.max_dc_fl = 112,
-		.n_step_fl = 28,
-		.ext_on = 40,
-		.ext_off = 80,
-		.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD
-	}
-};
+struct pwm_hb_config hb_standard[5] = {{// Heartbeat Standard Example: Type A
+					.prsc = 0,
+					.ctr = 745,
+					.n_step_rs = 33,
+					.dcr = 745,
+					.ctr_fl = 745,
+					.max_dc_fl = 745,
+					.n_step_fl = 33,
+					.ext_on = 0,
+					.ext_off = 0,
+					.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD},
+				       {// Heartbeat Standard Example: Type B
+					.prsc = 0,
+					.ctr = 181,
+					.n_step_rs = 45,
+					.dcr = 181,
+					.ctr_fl = 181,
+					.max_dc_fl = 181,
+					.n_step_fl = 45,
+					.ext_on = 0,
+					.ext_off = 0,
+					.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD},
+				       {// Heartbeat Standard Example: Type C
+					.prsc = 0,
+					.ctr = 69,
+					.n_step_rs = 17,
+					.dcr = 69,
+					.ctr_fl = 69,
+					.max_dc_fl = 69,
+					.n_step_fl = 17,
+					.ext_on = 0,
+					.ext_off = 28,
+					.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD},
+				       {// Heartbeat Standard Example: Type D
+					.prsc = 0,
+					.ctr = 222,
+					.n_step_rs = 56,
+					.dcr = 222,
+					.ctr_fl = 256,
+					.max_dc_fl = 256,
+					.n_step_fl = 64,
+					.ext_on = 20,
+					.ext_off = 80,
+					.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD},
+				       {// Heartbeat Standard Example: Type D1
+					.prsc = 0,
+					.ctr = 151,
+					.n_step_rs = 28,
+					.dcr = 112,
+					.ctr_fl = 151,
+					.max_dc_fl = 112,
+					.n_step_fl = 28,
+					.ext_on = 40,
+					.ext_off = 80,
+					.hb_dc_ctl_field = NPCM_PWM_HBM_STANDARD}};
 
-struct pwm_hb_config hb_visual[5] = {
-	{
-		// Heartbeat Visual Example: Type A
-		.prsc = 0,
-		.ctr = 745,
-		.n_step_rs = 33,
-		.dcr = 745,
-		.ctr_fl = 745,
-		.max_dc_fl = 745,
-		.n_step_fl = 33,
-		.ext_on = 0,
-		.ext_off = 0,
-		.hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL
-	},
-	{
-		// Heartbeat Visual Example: Type B
-		.prsc = 0,
-		.ctr = 438,
-		.n_step_rs = 19,
-		.dcr = 438,
-		.ctr_fl = 438,
-		.max_dc_fl = 438,
-		.n_step_fl = 19,
-		.ext_on = 0,
-		.ext_off = 0,
-		.hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL
-	},
-	{
-		// Heartbeat Visual Example: Type C
-		.prsc = 0,
-		.ctr = 162,
-		.n_step_rs = 7,
-		.dcr = 162,
-		.ctr_fl = 162,
-		.max_dc_fl = 162,
-		.n_step_fl = 7,
-		.ext_on = 0,
-		.ext_off = 28,
-		.hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL
-	},
-	{
-		// Heartbeat Visual Example: Type D
-		.prsc = 0,
-		.ctr = 222,
-		.n_step_rs = 56,
-		.dcr = 222,
-		.ctr_fl = 256,
-		.max_dc_fl = 256,
-		.n_step_fl = 64,
-		.ext_on = 20,
-		.ext_off = 80,
-		.hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL
-	},
-	{
-		// Heartbeat Visual Example: Type D1
-		.prsc = 0,
-		.ctr = 151,
-		.n_step_rs = 28,
-		.dcr = 112,
-		.ctr_fl = 151,
-		.max_dc_fl = 112,
-		.n_step_fl = 28,
-		.ext_on = 40,
-		.ext_off = 80,
-		.hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL
-	}
-};
-
+struct pwm_hb_config hb_visual[5] = {{// Heartbeat Visual Example: Type A
+				      .prsc = 0,
+				      .ctr = 745,
+				      .n_step_rs = 33,
+				      .dcr = 745,
+				      .ctr_fl = 745,
+				      .max_dc_fl = 745,
+				      .n_step_fl = 33,
+				      .ext_on = 0,
+				      .ext_off = 40,
+				      .hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL},
+				     {// Heartbeat Visual Example: Type B
+				      .prsc = 0,
+				      .ctr = 438,
+				      .n_step_rs = 19,
+				      .dcr = 438,
+				      .ctr_fl = 438,
+				      .max_dc_fl = 438,
+				      .n_step_fl = 19,
+				      .ext_on = 0,
+				      .ext_off = 0,
+				      .hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL},
+				     {// Heartbeat Visual Example: Type C
+				      .prsc = 0,
+				      .ctr = 162,
+				      .n_step_rs = 7,
+				      .dcr = 162,
+				      .ctr_fl = 162,
+				      .max_dc_fl = 162,
+				      .n_step_fl = 7,
+				      .ext_on = 0,
+				      .ext_off = 28,
+				      .hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL},
+				     {// Heartbeat Visual Example: Type D
+				      .prsc = 0,
+				      .ctr = 530,
+				      .n_step_rs = 23,
+				      .dcr = 530,
+				      .ctr_fl = 622,
+				      .max_dc_fl = 622,
+				      .n_step_fl = 27,
+				      .ext_on = 20,
+				      .ext_off = 80,
+				      .hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL},
+				     {// Heartbeat Visual Example: Type D1
+				      .prsc = 0,
+				      .ctr = 369,
+				      .n_step_rs = 12,
+				      .dcr = 277,
+				      .ctr_fl = 369,
+				      .max_dc_fl = 277,
+				      .n_step_fl = 12,
+				      .ext_on = 40,
+				      .ext_off = 80,
+				      .hb_dc_ctl_field = NPCM_PWM_HBM_VISUAL}};
 
 /* PWM local functions */
 static int pwm_npcm_configure(const struct device *dev, uint32_t cycles)
@@ -214,12 +189,10 @@ static int pwm_npcm_configure(const struct device *dev, uint32_t cycles)
 	inst->PWMCTL &= ~BIT(NPCM_PWMCTL_INVP);
 
 	/* Turn off PWM heart-beat mode */
-	SET_FIELD(inst->PWMCTL, NPCM_PWMCTL_HB_DC_CTL_FIELD,
-			NPCM_PWM_HBM_NORMAL);
+	SET_FIELD(inst->PWMCTL, NPCM_PWMCTL_HB_DC_CTL_FIELD, NPCM_PWM_HBM_NORMAL);
 
 	/* Select APB CLK/LFCLK clock sources to PWM module by default */
-	SET_FIELD(inst->PWMCTLEX, NPCM_PWMCTLEX_FCK_SEL_FIELD,
-			NPCM_PWM_CLOCK_APB2_LFCLK);
+	SET_FIELD(inst->PWMCTLEX, NPCM_PWMCTLEX_FCK_SEL_FIELD, NPCM_PWM_CLOCK_APB2_LFCLK);
 
 	/* Select input clock source to LFCLK or APB2 */
 	if (cycles == NPCM_PWM_LFCLK) {
@@ -234,18 +207,19 @@ static int pwm_npcm_configure(const struct device *dev, uint32_t cycles)
 /* Get the heartbeat configuration */
 struct pwm_hb_config *get_heartbeat_config(int flags, struct pwm_hb_config *hb_array)
 {
-    if (flags & PWM_HB_TYPE_A)
-        return &hb_array[0];
-    else if (flags & PWM_HB_TYPE_B)
-        return &hb_array[1];
-    else if (flags & PWM_HB_TYPE_C)
-        return &hb_array[2];
-    else if (flags & PWM_HB_TYPE_D)
-        return &hb_array[3];
-    else if (flags & PWM_HB_TYPE_D1)
-        return &hb_array[4];
-    else
-        return &hb_array[0]; // Default case
+	if (flags & PWM_HB_TYPE_A) {
+		return &hb_array[0];
+	} else if (flags & PWM_HB_TYPE_B) {
+		return &hb_array[1];
+	} else if (flags & PWM_HB_TYPE_C) {
+		return &hb_array[2];
+	} else if (flags & PWM_HB_TYPE_D) {
+		return &hb_array[3];
+	} else if (flags & PWM_HB_TYPE_D1) {
+		return &hb_array[4];
+	} else {
+		return &hb_array[0]; // Default case
+	}
 }
 
 /* Set the heartbeat configuration */
@@ -268,9 +242,8 @@ void pwm_npcm_configure_heartbeat(struct pwm_reg *inst, struct pwm_hb_config *hb
 }
 
 /* PWM API functions */
-static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel,
-                               uint32_t period_cycles, uint32_t pulse_cycles,
-                               pwm_flags_t flags)
+static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel, uint32_t period_cycles,
+			       uint32_t pulse_cycles, pwm_flags_t flags)
 {
 	/* Single channel for each PWM device */
 	ARG_UNUSED(channel);
@@ -336,13 +309,12 @@ static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel,
 	ctr = (period_cycles / prescaler) - 1;
 	dcr = (pulse_cycles / prescaler) - 1;
 
-	LOG_DBG("freq %d, pre %d, period %d, pulse %d",
-		data->cycles_per_sec / period_cycles, prsc, ctr, dcr);
+	LOG_DBG("freq %d, pre %d, period %d, pulse %d", data->cycles_per_sec / period_cycles, prsc,
+		ctr, dcr);
 
 	/* Reconfigure only if necessary */
 	if (inst->PWMCTL != ctl || inst->PRSC != prsc || inst->CTR != ctr ||
-		(flags & PWMCTL_HB_STANDARD) || (flags & PWMCTL_HB_VISUAL) ||
-		(flags & PWMCTL_SYNC)) {
+	    (flags & PWMCTL_HB_STANDARD) || (flags & PWMCTL_HB_VISUAL) || (flags & PWMCTL_SYNC)) {
 
 		/* Disable PWM before configuring */
 		inst->PWMCTL &= ~BIT(NPCM_PWMCTL_PWR);
@@ -356,7 +328,8 @@ static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel,
 
 		/* Configure heartbeat modes */
 		if (flags & PWMCTL_HB_STANDARD) {
-			pwm_npcm_configure_heartbeat(inst, get_heartbeat_config(flags, hb_standard));
+			pwm_npcm_configure_heartbeat(inst,
+						     get_heartbeat_config(flags, hb_standard));
 		} else if (flags & PWMCTL_HB_VISUAL) {
 			pwm_npcm_configure_heartbeat(inst, get_heartbeat_config(flags, hb_visual));
 		}
@@ -369,8 +342,7 @@ static int pwm_npcm_set_cycles(const struct device *dev, uint32_t channel,
 	return 0;
 }
 
-static int pwm_npcm_get_cycles_per_sec(const struct device *dev,
-				       uint32_t channel, uint64_t *cycles)
+static int pwm_npcm_get_cycles_per_sec(const struct device *dev, uint32_t channel, uint64_t *cycles)
 {
 	/* Single channel for each pwm device */
 	ARG_UNUSED(channel);
@@ -382,9 +354,7 @@ static int pwm_npcm_get_cycles_per_sec(const struct device *dev,
 
 /* PWM driver registration */
 static const struct pwm_driver_api pwm_npcm_driver_api = {
-	.set_cycles = pwm_npcm_set_cycles,
-	.get_cycles_per_sec = pwm_npcm_get_cycles_per_sec
-};
+	.set_cycles = pwm_npcm_set_cycles, .get_cycles_per_sec = pwm_npcm_get_cycles_per_sec};
 
 static int pwm_npcm_init(const struct device *dev)
 {
@@ -401,22 +371,20 @@ static int pwm_npcm_init(const struct device *dev)
 	 */
 	NPCM_REG_WORD_ACCESS_CHECK(inst->PRSC, 0xA55A);
 
-
 	if (!device_is_ready(clk_dev)) {
 		LOG_ERR("clock control device not ready");
 		return -ENODEV;
 	}
 
 	/* Turn on device clock first and get source clock freq. */
-	ret = clock_control_on(clk_dev, (clock_control_subsys_t)
-							config->clk_cfg);
+	ret = clock_control_on(clk_dev, (clock_control_subsys_t)config->clk_cfg);
 	if (ret < 0) {
 		LOG_ERR("Turn on PWM clock fail %d", ret);
 		return ret;
 	}
 
-	ret = clock_control_get_rate(clk_dev, (clock_control_subsys_t)
-			config->clk_cfg, &data->cycles_per_sec);
+	ret = clock_control_get_rate(clk_dev, (clock_control_subsys_t)config->clk_cfg,
+				     &data->cycles_per_sec);
 	if (ret < 0) {
 		LOG_ERR("Get PWM clock rate error %d", ret);
 		return ret;
@@ -424,7 +392,7 @@ static int pwm_npcm_init(const struct device *dev)
 
 	/* Bus only could be APB2 or Low frequency clock */
 	if (((config->clk_cfg >> NPCM_CLOCK_BUS_OFFSET) & NPCM_CLOCK_BUS_MASK) !=
-			NPCM_CLOCK_BUS_APB2) {
+	    NPCM_CLOCK_BUS_APB2) {
 		if ((data->cycles_per_sec != NPCM_PWM_LFCLK)) {
 			LOG_ERR("PWM only support source LF or APB2");
 			return -EINVAL;
@@ -448,21 +416,19 @@ static int pwm_npcm_init(const struct device *dev)
 	return 0;
 }
 
-#define NPCM_PWM_INIT(inst)                                                             \
-	PINCTRL_DT_INST_DEFINE(inst);		 			                \
-									                \
-	static const struct pwm_npcm_config pwm_npcm_cfg_##inst = {                     \
-		.base = (struct pwm_reg *)DT_INST_REG_ADDR(inst),                       \
-		.clk_cfg = DT_INST_PHA(inst, clocks, clk_cfg),                          \
-		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),                           \
-	};                                                                              \
-									                \
-	static struct pwm_npcm_data pwm_npcm_data_##inst;                               \
-									                \
-	DEVICE_DT_INST_DEFINE(inst,					                \
-			    &pwm_npcm_init, NULL,			                \
-			    &pwm_npcm_data_##inst, &pwm_npcm_cfg_##inst,                \
-			    PRE_KERNEL_1, CONFIG_PWM_INIT_PRIORITY,	                \
-			    &pwm_npcm_driver_api);
+#define NPCM_PWM_INIT(inst)                                                                        \
+	PINCTRL_DT_INST_DEFINE(inst);                                                              \
+                                                                                                   \
+	static const struct pwm_npcm_config pwm_npcm_cfg_##inst = {                                \
+		.base = (struct pwm_reg *)DT_INST_REG_ADDR(inst),                                  \
+		.clk_cfg = DT_INST_PHA(inst, clocks, clk_cfg),                                     \
+		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),                                      \
+	};                                                                                         \
+                                                                                                   \
+	static struct pwm_npcm_data pwm_npcm_data_##inst;                                          \
+                                                                                                   \
+	DEVICE_DT_INST_DEFINE(inst, &pwm_npcm_init, NULL, &pwm_npcm_data_##inst,                   \
+			      &pwm_npcm_cfg_##inst, PRE_KERNEL_1, CONFIG_PWM_INIT_PRIORITY,        \
+			      &pwm_npcm_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(NPCM_PWM_INIT)
