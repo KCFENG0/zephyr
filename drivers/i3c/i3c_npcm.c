@@ -2646,8 +2646,8 @@ static int npcm_i3c_target_ibi_raise(const struct device *dev, struct i3c_ibi *r
 
 		/* The payload length is too long */
 		if (request->payload_len > data->hw_ibi_max_payload) {
-			LOG_ERR("IBI payload too long (%u > %u), use dma instead",
-				request->payload_len, data->hw_ibi_max_payload);
+			LOG_ERR("IBI payload too long (%u > %u)", request->payload_len,
+				data->hw_ibi_max_payload);
 			return -EINVAL;
 		}
 
@@ -2660,6 +2660,8 @@ static int npcm_i3c_target_ibi_raise(const struct device *dev, struct i3c_ibi *r
 		/* Extended data */
 		if (request->payload_len > 1) {
 			uint8_t ext_len = request->payload_len - 1;
+			uint32_t ext1 = FIELD_PREP(NPCM_I3C_IBIEXT1_CNT, ext_len);
+			uint32_t ext2 = 0;
 
 			/*
 			 * Use IBIEXT registers for the extended data bytes (e.g. PEC)
@@ -2667,28 +2669,21 @@ static int npcm_i3c_target_ibi_raise(const struct device *dev, struct i3c_ibi *r
 			 * data that may already be staged in the TX FIFO for a
 			 * pending-read-notify flow.
 			 *
-			 * IBIEXT1 holds up to 3 bytes (EXT1..EXT3).
-			 * IBIEXT2 holds up to 4 more bytes (EXT4..EXT7).
+			 * IBIEXT1 holds up to 3 bytes (EXT1..EXT3), in bits 15:8,
+			 * 23:16 and 31:24. IBIEXT2 holds up to 4 more bytes
+			 * (EXT4..EXT7), from bits 7:0 upwards.
 			 * CNT tells hardware how many extended bytes to send.
 			 */
-			if (ext_len >= 1) {
-				NPCM_SET_REG_FIELD(i3c_inst->IBIEXT1,
-						   NPCM_I3C_IBIEXT1_EXT1,
-						   request->payload[1]);
-			}
-			if (ext_len >= 2) {
-				NPCM_SET_REG_FIELD(i3c_inst->IBIEXT1,
-						   NPCM_I3C_IBIEXT1_EXT2,
-						   request->payload[2]);
-			}
-			if (ext_len >= 3) {
-				NPCM_SET_REG_FIELD(i3c_inst->IBIEXT1,
-						   NPCM_I3C_IBIEXT1_EXT3,
-						   request->payload[3]);
+			for (uint8_t i = 1; i <= ext_len; i++) {
+				if (i <= 3) {
+					ext1 |= (uint32_t)request->payload[i] << (8 * i);
+				} else {
+					ext2 |= (uint32_t)request->payload[i] << (8 * (i - 4));
+				}
 			}
 
-			NPCM_SET_REG_FIELD(i3c_inst->IBIEXT1,
-					   NPCM_I3C_IBIEXT1_CNT, ext_len);
+			i3c_inst->IBIEXT2 = ext2;
+			i3c_inst->IBIEXT1 = ext1;
 			i3c_inst->CTRL |= NPCM_I3C_CTRL_EXTDATA;
 		} else {
 			/* No extended data — clear EXTDATA so hw only sends MDB */
@@ -3299,10 +3294,12 @@ static void npcm_i3c_read_capabilities(const struct device *dev)
 	data->hw_fifo_tx = fifo_size_map[fifotx_idx & 0x3];
 
 	/*
-	 * IBI_MR_HJ[20:16] encodes IBI/MR/HJ capability bits.
-	 * Bit 17: IBI has payload. Max payload is limited by FIFO RX size.
+	 * An IBI carries the mandatory byte in CTRL.IBIDATA plus the extended
+	 * bytes held in IBIEXT1/IBIEXT2. IBIEXT1.MAX is the number of extended
+	 * bytes this instance supports.
 	 */
-	data->hw_ibi_max_payload = data->hw_fifo_rx;
+	data->hw_ibi_max_payload =
+		1 + NPCM_GET_REG_FIELD(i3c_inst->IBIEXT1, NPCM_I3C_IBIEXT1_MAX);
 
 	LOG_DBG("CAPABILITIES: 0x%08x (FIFO RX=%u TX=%u DMA=%d HDR=%d)", caps, data->hw_fifo_rx,
 		data->hw_fifo_tx, data->hw_has_dma, data->hw_has_hdr);
