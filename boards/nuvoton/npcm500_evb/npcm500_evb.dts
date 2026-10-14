@@ -621,8 +621,8 @@
 };
 
 /*
- * FIU2: MCP internal flash (Winbond W25Q16JV, 2MB, 1.8V SPI NOR).
- * JEDEC ID: 0xEF 0x60 0x15 (Winbond, W25Q 1.8V, 2MB).
+ * FIU2: MCP internal flash (Winbond W25Q16PW, 2MB, 1.8V SPI NOR).
+ * JEDEC ID: 0xEF 0x60 0x15 (Winbond, W25Q16PW, 2MB).
  * Register base 0x40023000, DRA mapped at 0xB000_0000.
  * Per spec §4.1: "FIU2 provides access to MCP flash devices."
  * Per spec device table: NPCM500MA has 2MB MCP flash.
@@ -635,7 +635,7 @@
 
 	ext_flash_mcp: mcp_flash@0 {
 		compatible = "nuvoton,npcm-nor";
-		size = <DT_SIZE_M(2 * 8)>;  /* 2MB = 16Mbit (W25Q16JV) */
+		size = <DT_SIZE_M(2 * 8)>;  /* 2MB = 16Mbit (W25Q16PW) */
 		reg = <0>;
 		status = "okay";
 
