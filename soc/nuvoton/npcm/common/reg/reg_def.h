@@ -548,7 +548,7 @@ struct spip_reg {
 #define NPCM_CTL_SPIEN			(0)
 
 /* 0x04: SPI_CLKDIV fields */
-#define NPCM_CLKDIV_DIVIDER		FIELD(0, 10)
+#define NPCM_CLKDIV_DIVIDER		FIELD(0, 9)
 
 /* 0x08: SPI_SSCTL fields */
 #define NPCM_SSCTL_SLVTOCNT		(16)

@@ -13,6 +13,7 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/byteorder.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(spi_npcm_spip, CONFIG_SPI_LOG_LEVEL);
@@ -27,8 +28,8 @@ LOG_MODULE_REGISTER(spi_npcm_spip, CONFIG_SPI_LOG_LEVEL);
 #define SPI_NPCM_SPIP_DUAL                   0x1
 #define SPI_NPCM_SPIP_QUAD                   0x2
 
-/* The max allowed prescaler divider */
-#define SPI_NPCM_MAX_PRESCALER_DIV 1023
+/* SPIP_CLKDIV.DIVIDER is 9 bits: bus clock = source / (DIVIDER + 1) */
+#define SPI_NPCM_MAX_PRESCALER_DIV 511
 
 struct spi_npcm_spip_data {
 	struct spi_context ctx;
@@ -59,7 +60,7 @@ struct spi_npcm_spip_cfg {
 
 static int spi_npcm_spip_configure(const struct device *dev, const struct spi_config *spi_cfg)
 {
-	uint8_t prescaler_divider;
+	uint32_t divider;
 	const struct spi_npcm_spip_cfg *const config = dev->config;
 	struct spi_npcm_spip_data *const data = dev->data;
 	struct spip_reg *const reg_base = config->reg_base;
@@ -88,6 +89,22 @@ static int spi_npcm_spip_configure(const struct device *dev, const struct spi_co
 	if (operation & SPI_MODE_LOOP) {
 		LOG_ERR("Loopback mode is not supported");
 		return -ENOTSUP;
+	}
+
+	if (spi_cfg->frequency == 0) {
+		LOG_ERR("SPI frequency must be non-zero");
+		return -EINVAL;
+	}
+
+	/*
+	 * CTL/CLKDIV/SSCTL/FIFOCTL may only be changed with the controller
+	 * disabled, confirmed by SPIENSTS.
+	 */
+	reg_base->SPIP_CTL &= ~BIT(NPCM_CTL_SPIEN);
+	if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_SPIENSTS),
+		     SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
+		LOG_ERR("Check SPIENSTS Timeout");
+		return -ETIMEDOUT;
 	}
 
 	/* Get the frame length */
@@ -189,17 +206,14 @@ static int spi_npcm_spip_configure(const struct device *dev, const struct spi_co
 	/* Set RX FIFO threshold to 0 */
 	SET_FIELD(reg_base->SPIP_FIFOCTL, NPCM_FIFOCTL_RXTH, 0x0);
 
-	/* Set the SPI frequency */
-	prescaler_divider = data->src_clock_freq / spi_cfg->frequency;
-	if (prescaler_divider >= 1) {
-		prescaler_divider -= 1;
-	}
-	if (prescaler_divider >= SPI_NPCM_MAX_PRESCALER_DIV) {
-		LOG_ERR("SPI divider %d exceeds the max allowed value %d.", prescaler_divider,
-			SPI_NPCM_MAX_PRESCALER_DIV);
+	/* Set the SPI frequency: the closest rate not above the requested one */
+	divider = DIV_ROUND_UP(data->src_clock_freq, spi_cfg->frequency);
+	if (divider > SPI_NPCM_MAX_PRESCALER_DIV + 1) {
+		LOG_ERR("SPI frequency %u too low, min %u", spi_cfg->frequency,
+			data->src_clock_freq / (SPI_NPCM_MAX_PRESCALER_DIV + 1));
 		return -ENOTSUP;
 	}
-	SET_FIELD(reg_base->SPIP_CLKDIV, NPCM_CLKDIV_DIVIDER, prescaler_divider);
+	SET_FIELD(reg_base->SPIP_CLKDIV, NPCM_CLKDIV_DIVIDER, divider - 1);
 
 	data->ctx.config = spi_cfg;
 
@@ -219,15 +233,26 @@ static void spi_npcm_spip_cs_control(const struct device *dev, bool on)
 }
 
 #ifndef CONFIG_SPIP_NPCM_DMA
-static int spi_npcm_spip_process_tx_buf(struct spi_npcm_spip_data *const data, uint32_t *tx_frame)
+static void spi_npcm_spip_process_tx_buf(struct spi_npcm_spip_data *const data, uint32_t *tx_frame)
 {
-	int ret = 0;
-
 	/* Get the tx_frame from tx_buf only when tx_buf != NULL */
 	if (spi_context_tx_buf_on(&data->ctx)) {
-		*tx_frame = UNALIGNED_GET((uint8_t *)(data->ctx.tx_buf));
-	} else {
-		ret = -ENOBUFS;
+		const uint8_t *buf = data->ctx.tx_buf;
+
+		switch (data->bytes_per_frame) {
+		case 2:
+			*tx_frame = sys_get_le16(buf);
+			break;
+		case 3:
+			*tx_frame = sys_get_le24(buf);
+			break;
+		case 4:
+			*tx_frame = sys_get_le32(buf);
+			break;
+		default:
+			*tx_frame = *buf;
+			break;
+		}
 	}
 
 	/*
@@ -235,15 +260,28 @@ static int spi_npcm_spip_process_tx_buf(struct spi_npcm_spip_data *const data, u
 	 * Note: if tx_buf == NULL && tx_len != 0, the update still counts.
 	 */
 	spi_context_update_tx(&data->ctx, data->bytes_per_frame, 1);
-
-	return ret;
 }
 #endif
 
 static void spi_npcm_spip_process_rx_buf(struct spi_npcm_spip_data *const data, uint32_t rx_frame)
 {
 	if (spi_context_rx_buf_on(&data->ctx)) {
-		UNALIGNED_PUT(rx_frame, (uint8_t *)data->ctx.rx_buf);
+		uint8_t *buf = data->ctx.rx_buf;
+
+		switch (data->bytes_per_frame) {
+		case 2:
+			sys_put_le16((uint16_t)rx_frame, buf);
+			break;
+		case 3:
+			sys_put_le24(rx_frame, buf);
+			break;
+		case 4:
+			sys_put_le32(rx_frame, buf);
+			break;
+		default:
+			*buf = (uint8_t)rx_frame;
+			break;
+		}
 	}
 
 	spi_context_update_rx(&data->ctx, data->bytes_per_frame, 1);
@@ -359,8 +397,8 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 	uint32_t tx_frame = SPI_NPCM_SPIP_TX_NOP;
 #endif
 	uint32_t rx_frame = 0;
-	int ret;
 #ifdef CONFIG_SPIP_NPCM_DMA
+	int ret;
 	const struct device *dma_dev = config->dma_dev;
 	const int tx_channel = config->dma_tx_channel;
 	const int rx_channel = config->dma_rx_channel;
@@ -370,26 +408,6 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 	reg_base->SPIP_FIFOCTL |= BIT(NPCM_FIFOCTL_TXTHIEN);
 	reg_base->SPIP_FIFOCTL |= BIT(NPCM_FIFOCTL_RXTHIEN);
 #endif
-
-#ifndef CONFIG_SPIP_NPCM_DMA
-	ret = spi_npcm_spip_process_tx_buf(data, &tx_frame);
-
-	if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_BUSY),
-		     SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
-		LOG_ERR("Check Status BSY Timeout");
-		return -ETIMEDOUT;
-	}
-#endif
-
-	if (data->access_mode != SPI_NPCM_SPIP_SINGLE) {
-		if (!spi_context_tx_buf_on(&data->ctx)) {
-			/* Input mode */
-			reg_base->SPIP_CTL &= ~BIT(NPCM_CTL_QDIODIR);
-		} else {
-			/* Output mode */
-			reg_base->SPIP_CTL |= BIT(NPCM_CTL_QDIODIR);
-		}
-	}
 
 #ifdef CONFIG_SPIP_NPCM_DMA
 	/* Add SPIP TX PDMA */
@@ -423,6 +441,7 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 		spi_context_update_tx(&data->ctx, data->bytes_per_frame, 1);
 	}
 #else
+	spi_npcm_spip_process_tx_buf(data, &tx_frame);
 	reg_base->SPIP_TX = tx_frame;
 #endif
 
@@ -432,12 +451,22 @@ static int spi_npcm_spip_xfer_frame(const struct device *dev)
 		return -ETIMEDOUT;
 	}
 
-	if (spi_context_tx_on(&data->ctx)) {
-		if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_RXEMPTY),
-				SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
-			LOG_ERR("Check Status RBF Timeout");
-			return -ETIMEDOUT;
-		}
+	/*
+	 * TXEMPTY is already set while the frame is still being shifted out;
+	 * in master mode BUSY stays set until the transaction has finished.
+	 * This also leaves the controller idle for the next frame.
+	 */
+	if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_BUSY),
+		     SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
+		LOG_ERR("Check Frame Done Timeout");
+		return -ETIMEDOUT;
+	}
+
+	/* Every frame clocks one word into the RX FIFO, including the last one */
+	if (WAIT_FOR(!NPCM_IS_BIT_SET(reg_base->SPIP_STATUS, NPCM_STATUS_RXEMPTY),
+		     SPI_NPCM_SPIP_WAIT_STATUS_TIMEOUT_US, NULL) == false) {
+		LOG_ERR("Check Status RBF Timeout");
+		return -ETIMEDOUT;
 	}
 
 #ifdef CONFIG_SPIP_NPCM_DMA
@@ -542,6 +571,18 @@ static int spi_npcm_spip_transceive(const struct device *dev, const struct spi_c
 		uint8_t unused __attribute__((unused));
 
 		unused = reg_base->SPIP_RX;
+	}
+
+	/*
+	 * Dual/quad I/O is half duplex: the whole transfer is output when it carries
+	 * tx data and input otherwise. Set the direction before enabling SPIEN.
+	 */
+	if (data->access_mode != SPI_NPCM_SPIP_SINGLE) {
+		if (spi_context_tx_buf_on(ctx)) {
+			reg_base->SPIP_CTL |= BIT(NPCM_CTL_QDIODIR);
+		} else {
+			reg_base->SPIP_CTL &= ~BIT(NPCM_CTL_QDIODIR);
+		}
 	}
 
 	/* Enable SPIP module */
