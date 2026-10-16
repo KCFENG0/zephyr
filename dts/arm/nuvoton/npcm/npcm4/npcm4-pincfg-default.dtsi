@@ -490,7 +490,7 @@
 	/* GPIO22 / I3C1_SDA / DTRB / BUSY / P2_DGL */
 	gpio22__i3c1_sda__dtrb__busy__p2_dgl: pin_gpio22__i3c1_sda__dtrb__busy__p2_dgl {
 		nuvoton,pin-hw-def;
-		nuvoton,pin-reg = <NPCM_PINCTRL_ALT10_0_CRGPIO_RST_SL
+		nuvoton,pin-reg = <NPCM_PINCTRL_ALT10_6_I3C1_SL
 				NPCM_PINCTRL_ALT6B_5_URTB_DTR_SL2
 				NPCM_PINCTRL_ALT6_2_PRT_SL
 				NPCM_PINCTRL_ALT6_3_PORT80_SL
