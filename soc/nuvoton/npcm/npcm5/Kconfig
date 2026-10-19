@@ -50,6 +50,30 @@ config GPIO_NPCM_RESET_SL_POWER_UP
 	GPIO port 0-9, A-F is reset by VSB Power-Up reset.
 endchoice
 
+choice NPCM500_REV
+	prompt "NPCM500 chip revision"
+	default NPCM500_REV_A1
+	depends on SOC_SERIES_NPCM5
+	help
+	  The NPCM500 revision the image runs on, as silicon or as an FPGA
+	  bitstream. The flash-image build takes the MCU ROM's container format,
+	  the boot flows it supports and the prebuilt MCU runtime from it.
+	  Whether the target is the FPGA is separate: CONFIG_NPCM500_FPGA.
+
+config NPCM500_REV_A1
+	bool "A1"
+	help
+	  Taped-out revision, on the EVB and on the FPGA. Its MCU ROM parses
+	  v1 flash images and boots in bypass or Caliptra mode.
+
+config NPCM500_REV_B1
+	bool "B1"
+	help
+	  Revision in development, FPGA only for now. Its MCU ROM parses only
+	  v3 flash images and boots only through Caliptra.
+
+endchoice
+
 config PLATFORM_SPECIFIC_INIT
 	default n if SOC_SERIES_NPCM5
 	help

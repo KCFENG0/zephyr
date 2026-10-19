@@ -2,15 +2,21 @@
 # Licensed under the Apache-2.0 license
 """Build (and verify) an NPCM flash image from a layout table.
 
-The slot table lives in a layout JSON (layouts/, default a1.json): identifier
+The slot table lives in a layout JSON (layouts/, default bypass.json): identifier
 and source per slot, plus the flash-image container offset and the
 partition-table state. The layout file alone decides which slots a variant ships:
 
-  a1      SoC firmware only; MCU ROM boots it directly
-  a1-mcu  adds MCU firmware; MCU ROM loads and jumps to it first
-  a2      full Caliptra boot; fills the reserved Caliptra FMC+RT bundle slot
-          from --caliptra-fw and generates and signs the SoC manifest slot
-          (--soc-manifest overrides it with a prebuilt one)
+  bypass-soc  SoC firmware only; MCU ROM boots it directly
+  bypass      adds MCU firmware and a signed SoC manifest binding just the MCU
+              runtime (flash_image_tool.py gen-test-flash compatible)
+  bypass-mcu  adds MCU firmware without a manifest; MCU ROM loads and jumps to it
+  caliptra    full Caliptra boot; fills the reserved Caliptra FMC+RT bundle slot
+              from --caliptra-fw and generates and signs the SoC manifest slot
+              (--soc-manifest overrides it with a prebuilt one)
+
+Layouts are chip-neutral. The chip's MCU ROM decides the container format
+(A1: v1, B1: v3): pass it as --format; the npcm5 build derives it from
+CONFIG_NPCM500_REV_*.
 
 The container format is inlined from flash_image_tool.py (only the pieces this
 tool needs to pack and verify an image); source of truth for the format is
@@ -18,8 +24,8 @@ common/flash-image/src/lib.rs, common/config/src/{flash,boot}.rs.
 
 Usage:
   flash_image.py --soc-fw fw.bin --output flash.bin --format v3 [--mcu-fw mcu.bin] ...
-  flash_image.py verify flash.bin [--offset 0x10000 | --layout a1.json]
-  flash_image.py extract flash.bin [--offset 0x10000 | --layout a1.json] [--out-dir dir]
+  flash_image.py verify flash.bin [--offset 0x10000 | --layout bypass.json]
+  flash_image.py extract flash.bin [--offset 0x10000 | --layout bypass.json] [--out-dir dir]
 """
 
 import argparse
@@ -76,7 +82,7 @@ PARTITION_ID = {"none": 0, "a": 1, "b": 2, "staging": 3}
 PARTITION_STATUS = {"invalid": 0, "valid": 1, "bootfailed": 2, "bootsuccessful": 3}
 ROLLBACK = {"disable": 0x00000000, "enable": 0x00010000}
 
-DEFAULT_LAYOUT = Path(__file__).resolve().parent / "layouts" / "a1.json"
+DEFAULT_LAYOUT = Path(__file__).resolve().parent / "layouts" / "bypass.json"
 
 # --- npcm500 SOC header + flash OTP (common/npcm-image-header, npcm-otp-image) ---
 NPCM_IMAGE_TAG = 0x6D63704E      # "Npcm" little-endian
@@ -184,7 +190,7 @@ def verify_manifest_rows(images_by_id: dict, key_dir: Optional[str]) -> list:
         entry, data = entries.get(fw_id), images_by_id.get(ident)
         if data is None or (entry is None and fw_id == SOC_FW_FW_ID
                             and CALIPTRA_FMC_RT_IDENTIFIER not in images_by_id):
-            continue              # slot not in this layout / a1 binds only the MCU runtime
+            continue              # slot not in this layout / bypass binds only the MCU runtime
         rows.append((f"manifest digest {label} (fw_id={fw_id})",
                      entry is not None and hashlib.sha384(data).digest() == entry["digest"]))
     return rows
@@ -407,7 +413,7 @@ def build_layout_images(layout: dict,
 
     A row with no "source" is a reserved slot and never emitted; every sourced
     row is required. Which variant ships which slots is decided entirely by the
-    layout file (a1 / a1-mcu / a2), never by flags. In the A1 layouts the three
+    layout file (bypass-soc / bypass / bypass-mcu / caliptra), never by flags. In the bypass layouts the three
     soc_image_* rows are independent
     peers, not nested: soc_fw is the firmware payload; npcm_header is the NPCM
     boot-config header (UART baud, FIU flash clocks, board type -- NOT a
@@ -434,11 +440,11 @@ def cmd_build(argv):
     parser.add_argument("--soc-fw", required=True,
                         help="SoC firmware loaded by MCU ROM or MCU firmware")
     parser.add_argument("--mcu-fw",
-                        help="MCU firmware (a1-mcu and a2 layouts)")
+                        help="MCU firmware (bypass, bypass-mcu and caliptra layouts)")
     parser.add_argument("--caliptra-fw",
-                        help="signed Caliptra FMC+RT bundle (a2 layout)")
+                        help="signed Caliptra FMC+RT bundle (caliptra layout)")
     parser.add_argument("--soc-manifest",
-                        help="SoC manifest (a2 layout)")
+                        help="SoC manifest (caliptra layout)")
     parser.add_argument("--manifest-svn", type=lambda x: int(x, 0), default=0,
                         help="security version number of the generated manifest")
     parser.add_argument("--key-dir",
@@ -452,7 +458,7 @@ def cmd_build(argv):
     parser.add_argument("--flash-size", type=parse_size,
                         help="pad the image to this flash size (default: size to content)")
     parser.add_argument("--layout", type=Path, default=DEFAULT_LAYOUT,
-                        help="layout JSON describing the slot table (default: layouts/a1.json)")
+                        help="layout JSON describing the slot table (default: layouts/bypass.json)")
     parser.add_argument("--format", required=True, choices=tuple(FORMAT_VERSIONS),
                         help="container version to write: v3 (2.1.2+ ROM, "
                              "page-aligned) or v1 (legacy-ROM boards, "
@@ -479,10 +485,10 @@ def cmd_build(argv):
         else soc_otp_bytes(args.flash_connection, args.dis_mcp),
     }
     # Synthesized like soc-header/soc-otp, but gated: signing is ~1s of LMS work
-    # and only a1/a2 layouts have a manifest slot. Only a full-Caliptra layout
+    # and only the bypass and caliptra layouts have a manifest slot. Only a full-Caliptra layout
     # (one that packs the Caliptra FMC+RT bundle) has the MCU ask Caliptra to
     # authorize the SoC firmware, so only it binds fw_id=3; without that entry
-    # Caliptra answers IMAGE_NOT_AUTHORIZED and holds the M7 in reset. a1 keeps
+    # Caliptra answers IMAGE_NOT_AUTHORIZED and holds the M7 in reset. bypass keeps
     # the gen-test-flash manifest that binds just the MCU runtime.
     if needs_source(layout, "soc-manifest") and not args.soc_manifest:
         sources["soc-manifest"] = build_soc_manifest(

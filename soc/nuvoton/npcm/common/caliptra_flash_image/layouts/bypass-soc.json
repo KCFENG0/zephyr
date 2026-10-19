@@ -1,12 +1,12 @@
 {
-  "version": "a1-mcu",
-  "description": "A1 bypass-Caliptra flash image, MCU-firmware variant: MCU ROM loads and jumps to the MCU firmware, which boots the SoC firmware. Partition table at 0, single valid slot A at slot_base_offset.",
+  "version": "bypass-soc",
+  "description": "Bypass-Caliptra flash image, SoC-firmware-only variant: MCU ROM boots the SoC firmware directly. Needs nothing from caliptra-mcu-sw, so it is the default when the prebuilt bypass MCU runtime is absent. Partition table at 0, single valid slot A at slot_base_offset.",
   "slot_base_offset": "0x10000",
   "partition": { "active": "a", "a": "valid", "b": "invalid", "rollback": "enable" },
   "images": [
     { "id": "0x00000000", "name": "caliptra_fw",  "reserved": true },
     { "id": "0x00000001", "name": "soc_manifest", "reserved": true },
-    { "id": "0x00000002", "name": "mcu_runtime",  "source": "mcu-fw" },
+    { "id": "0x00000002", "name": "mcu_runtime",  "reserved": true },
     { "id": "0x00001000", "name": "soc_fw",       "source": "soc-fw" },
     { "id": "0x00001001", "name": "npcm_header",  "source": "soc-header" },
     { "id": "0x00001002", "name": "flash_otp",    "source": "soc-otp" }

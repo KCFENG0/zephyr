@@ -1,6 +1,6 @@
 {
-  "version": "a2",
-  "description": "A2 full-Caliptra flash image: partition table at 0, slot A at slot_base_offset. Fills the slots reserved in a1.json: the signed Caliptra FMC+RT bundle and the SoC manifest.",
+  "version": "caliptra",
+  "description": "Full-Caliptra flash image: partition table at 0, slot A at slot_base_offset. Fills the slots reserved in bypass.json: the signed Caliptra FMC+RT bundle and a SoC manifest that also binds the SoC firmware.",
   "slot_base_offset": "0x10000",
   "partition": { "active": "a", "a": "valid", "b": "invalid", "rollback": "enable" },
   "images": [
