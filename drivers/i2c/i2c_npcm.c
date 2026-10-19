@@ -65,9 +65,20 @@ struct i2c_npcm_config {
 	const struct pinctrl_dev_config *pcfg;  /* pinmux configuration */
 };
 
-/*rx_buf and tx_buf address must 4-align for DMA */
-#pragma pack(4)
+#ifdef CONFIG_DCACHE_LINE_SIZE
+#define I2C_DMA_BUF_ALIGN CONFIG_DCACHE_LINE_SIZE
+#else
+#define I2C_DMA_BUF_ALIGN 32
+#endif
+
+BUILD_ASSERT((I2C_MAX_RX_SIZE % I2C_DMA_BUF_ALIGN) == 0 &&
+	     (I2C_MAX_TX_SIZE % I2C_DMA_BUF_ALIGN) == 0,
+	     "I2C DMA buffers must be a multiple of the D-cache line size");
+
+/* DMA buffers own whole cache lines so invalidating them never drops other fields */
 struct i2c_npcm_data {
+	uint8_t rx_buf[I2C_MAX_RX_SIZE] __aligned(I2C_DMA_BUF_ALIGN);
+	uint8_t tx_buf[I2C_MAX_TX_SIZE] __aligned(I2C_DMA_BUF_ALIGN);
 	struct k_sem lock_sem;  /* mutex of i2c controller */
 	struct k_sem sync_sem;  /* semaphore used for synchronization */
 	enum i2c_npcm_oper_state ctrl_oper_state;
@@ -77,15 +88,12 @@ struct i2c_npcm_data {
 	uint16_t rx_cnt;
 	uint16_t tx_cnt;
 	uint8_t dev_addr; /* device address (8 bits) */
-	uint8_t rx_buf[I2C_MAX_TX_SIZE];
-	uint8_t tx_buf[I2C_MAX_RX_SIZE];
 	uint8_t *rx_msg_buf;
 	int err_code;
 	struct i2c_target_config *target_cfg[I2C_SLAVE_NUM];
 	enum i2c_npcm_slave_addrno match_addr_no;
 	uint8_t reg_buf[16];
 };
-#pragma pack()
 
 /* Driver convenience defines */
 #define I2C_INSTANCE(dev) ((struct i2c_reg *)((const struct i2c_npcm_config *)(dev)->config)->base)
