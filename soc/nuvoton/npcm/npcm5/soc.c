@@ -37,6 +37,13 @@ void soc_reset_hook(void)
 	devalt10 |= BIT(NPCM_DEVALT10_CRGPIO_SELECT_SL);
 #endif
 	inst_scfg->DEVALT10 = devalt10;
+
+	/*
+	 * Route the CORST pin reset to the M7. CORST_CTL powers up as 0 and
+	 * is only reset by VSB power-up. RMW: the ROM may have routed CORST
+	 * to other modules already.
+	 */
+	inst_scfg->CORST_CTL |= BIT(NPCM_CORST_CTL_CM7);
 }
 #endif
 

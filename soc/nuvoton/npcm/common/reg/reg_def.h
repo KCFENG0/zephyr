@@ -143,6 +143,11 @@ struct scfg_reg {
 	volatile uint8_t LV_CTL0;
 	/* 0x02B: Low-Voltage Pins Control 1 */
 	volatile uint8_t LV_CTL1;
+#if CONFIG_SOC_NPCM500
+	volatile uint8_t reserved7[92];
+	/* 0x088: CORST Reset Control */
+	volatile uint32_t CORST_CTL;
+#endif
 };
 
 /* SCFG multi-registers */
@@ -171,6 +176,7 @@ struct scfg_reg {
 #define NPCM_RSTCTL_VCC1_RST_SCRATCH          3
 #define NPCM_RSTCTL_LRESET_PLTRST_MODE        5
 #define NPCM_RSTCTL_HIPRST_MODE               6
+#define NPCM_CORST_CTL_CM7                    0
 #define NPCM_DEV_CTL3_WP_INT_FL               0
 #define NPCM_DEV_CTL3_WP_GPIO55               1
 #define NPCM_DEV_CTL3_WP_GPIO76               2
