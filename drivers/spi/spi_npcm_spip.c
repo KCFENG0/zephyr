@@ -31,6 +31,9 @@ LOG_MODULE_REGISTER(spi_npcm_spip, CONFIG_SPI_LOG_LEVEL);
 /* SPIP_CLKDIV.DIVIDER is 9 bits: bus clock = source / (DIVIDER + 1) */
 #define SPI_NPCM_MAX_PRESCALER_DIV 511
 
+/* Maximum SPIP_CLK frequency in master mode */
+#define SPI_NPCM_MAX_MASTER_FREQ MHZ(50)
+
 struct spi_npcm_spip_data {
 	struct spi_context ctx;
 	uint32_t src_clock_freq;
@@ -207,7 +210,8 @@ static int spi_npcm_spip_configure(const struct device *dev, const struct spi_co
 	SET_FIELD(reg_base->SPIP_FIFOCTL, NPCM_FIFOCTL_RXTH, 0x0);
 
 	/* Set the SPI frequency: the closest rate not above the requested one */
-	divider = DIV_ROUND_UP(data->src_clock_freq, spi_cfg->frequency);
+	divider = DIV_ROUND_UP(data->src_clock_freq,
+			       MIN(spi_cfg->frequency, SPI_NPCM_MAX_MASTER_FREQ));
 	if (divider > SPI_NPCM_MAX_PRESCALER_DIV + 1) {
 		LOG_ERR("SPI frequency %u too low, min %u", spi_cfg->frequency,
 			data->src_clock_freq / (SPI_NPCM_MAX_PRESCALER_DIV + 1));
