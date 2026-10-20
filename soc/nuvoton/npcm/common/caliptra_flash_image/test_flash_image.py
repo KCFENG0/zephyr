@@ -1,5 +1,6 @@
 """Tests for flash_image.py packing, manifest synthesis, and verification."""
 import hashlib
+import json
 from pathlib import Path
 
 import flash_image as fi
@@ -114,23 +115,29 @@ def test_bypass_mcu_build_does_not_generate_a_manifest(tmp_path):
 def test_layouts_are_chip_neutral():
     """The chip, and with it the container format, comes from the npcm5 build's
     CONFIG_NPCM500_REV_*, so a layout names only its boot flow."""
-    import json
     for path in LAYOUTS.glob("*.json"):
         layout = json.loads(path.read_text())
         assert layout["version"] == path.stem
         assert not {"chip", "format"} & layout.keys(), path.name
 
 
+def test_layouts_ship_the_npcm_header():
+    """The MCU ROM's SoC path fails with ImageInfoNotFound without slot 0x1001."""
+    for path in LAYOUTS.glob("*.json"):
+        rows = {r["name"]: r for r in json.loads(path.read_text())["images"]}
+        assert rows["npcm_header"].get("source") == "soc-header", path.name
+
+
 def test_bypass_soc_builds_from_soc_fw_alone(tmp_path):
     """bypass-soc is the fallback when caliptra-mcu-sw is absent, so it must pack
-    with no MCU firmware and ship only the SoC slots."""
+    with no MCU firmware and ship only the slots the ROM SoC path reads."""
     soc = tmp_path / "soc.bin"
     soc.write_bytes(b"\xa5" * 16)
     out = tmp_path / "flash.bin"
     fi.main(["--soc-fw", str(soc), "--format", "v1",
              "--layout", str(LAYOUTS / "bypass-soc.json"), "--output", str(out)])
     idents = [ident for ident, *_ in fi.iter_images(out.read_bytes(), 0x10000)]
-    assert idents == [fi.SOC_IMAGES_BASE_IDENTIFIER + i for i in range(3)]
+    assert idents == [fi.SOC_IMAGES_BASE_IDENTIFIER + i for i in range(2)]
 
 
 def test_v1_packs_on_4_byte_boundaries_and_binds_only_mcu(tmp_path):
@@ -193,7 +200,7 @@ def test_v1_and_v3_round_trip(tmp_path):
         assert raw[off:off + len(magic)] == magic if magic else True
         version, count, *_ = fi.parse_header(raw, off)
         assert version == fi.FORMAT_VERSIONS[fmt]
-        assert count == 5  # manifest, mcu_runtime, soc_fw, npcm_header, flash_otp
+        assert count == 4  # manifest, mcu_runtime, soc_fw, npcm_header
         assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == fi.pad_to(b"\xa5" * 8, fi.FORMAT_ALIGN[fmt] or fi.FLASH_PAGE_SIZE)
 
 

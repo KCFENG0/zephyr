@@ -413,14 +413,14 @@ def build_layout_images(layout: dict,
 
     A row with no "source" is a reserved slot and never emitted; every sourced
     row is required. Which variant ships which slots is decided entirely by the
-    layout file (bypass-soc / bypass / bypass-mcu / caliptra), never by flags. In the bypass layouts the three
-    soc_image_* rows are independent
-    peers, not nested: soc_fw is the firmware payload; npcm_header is the NPCM
-    boot-config header (UART baud, FIU flash clocks, board type -- NOT a
-    descriptor of the firmware); flash_otp is the flash OTP. The caller
-    synthesizes the last two (soc_header_bytes/soc_otp_bytes) when
-    --soc-header/--soc-otp are not given, so `verify` showing them populated
-    with no user-supplied file is expected -- the boot ROM requires both.
+    layout file (bypass-soc / bypass / bypass-mcu / caliptra), never by flags. The
+    three soc_image_* rows are independent peers, not nested: soc_fw is the
+    firmware payload; npcm_header is the NPCM boot-config header (UART baud, FIU
+    flash clocks, board type -- NOT a descriptor of the firmware); flash_otp is
+    the flash OTP. The in-tree layouts ship soc_fw (the M7 image) and npcm_header,
+    which the MCU ROM's SoC path requires, and keep flash_otp reserved, which the
+    ROM treats as optional. Sourced rows get soc_header_bytes/soc_otp_bytes unless
+    --soc-header/--soc-otp are given.
     """
     images = []
     for entry in layout["images"]:

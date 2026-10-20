@@ -9,6 +9,6 @@
     { "id": "0x00000002", "name": "mcu_runtime",  "reserved": true },
     { "id": "0x00001000", "name": "soc_fw",       "source": "soc-fw" },
     { "id": "0x00001001", "name": "npcm_header",  "source": "soc-header" },
-    { "id": "0x00001002", "name": "flash_otp",    "source": "soc-otp" }
+    { "id": "0x00001002", "name": "flash_otp",    "reserved": true }
   ]
 }
