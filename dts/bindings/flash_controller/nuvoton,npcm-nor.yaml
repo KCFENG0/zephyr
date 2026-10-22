@@ -47,3 +47,6 @@ properties:
       - "NPCM_RD_MODE_FAST" # Direct read access by command code 0bh
       - "NPCM_RD_MODE_FAST_DUAL" # Direct read access by command code bbh
       - "NPCM_RD_MODE_QUAD" # Direct read access by command code ebh
+  psram:
+    type: boolean
+    description: The device is a QSPI pSRAM instead of a NOR flash.

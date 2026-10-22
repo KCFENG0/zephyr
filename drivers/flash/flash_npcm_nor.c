@@ -283,6 +283,14 @@ static int flash_npcm_nor_erase(const struct device *dev, off_t addr, size_t siz
 		return -EINVAL;
 	}
 
+	/* pSRAM has no erase command: emulate it by filling with erase_value */
+	if (config->qspi_cfg.psram) {
+		struct npcm_qspi_data *qspi_data = config->qspi_bus->data;
+
+		return qspi_data->qspi_ops->psram_write(config->qspi_bus, &config->qspi_cfg,
+							config->mapped_addr + addr, NULL, size);
+	}
+
 	/* address must be sector-aligned */
 	if (!SPI_NOR_IS_SECTOR_ALIGNED(addr)) {
 		LOG_ERR("Addr %ld is not sector-aligned", addr);
@@ -359,6 +367,14 @@ static int flash_npcm_nor_write(const struct device *dev, off_t addr, const void
 	/* Out of the region of nor flash device? */
 	if (!is_within_region(addr, size, 0, config->flash_size)) {
 		return -EINVAL;
+	}
+
+	/* pSRAM: write through the direct-access window, no WREN/WIP */
+	if (config->qspi_cfg.psram) {
+		struct npcm_qspi_data *qspi_data = config->qspi_bus->data;
+
+		return qspi_data->qspi_ops->psram_write(config->qspi_bus, &config->qspi_cfg,
+							config->mapped_addr + addr, data, size);
 	}
 
 	/* Don't write more than a page. */
@@ -714,6 +730,17 @@ static int flash_npcm_nor_init(const struct device *dev)
 	const struct flash_npcm_nor_config *config = dev->config;
 	int ret;
 
+	/* pSRAM: always reset it and select the configured SPI/QPI mode */
+	if (config->qspi_cfg.psram) {
+		struct npcm_qspi_data *qspi_data = config->qspi_bus->data;
+
+		ret = qspi_data->qspi_ops->psram_init(config->qspi_bus, &config->qspi_cfg);
+		if (ret != 0) {
+			LOG_ERR("pSRAM init failed %d!", ret);
+		}
+		return ret;
+	}
+
 	if (!IS_ENABLED(CONFIG_FLASH_NPCM_NOR_INIT)) {
 		return 0;
 	}
@@ -778,6 +805,8 @@ static int flash_npcm_nor_init(const struct device *dev)
 	BUILD_ASSERT(DT_INST_QUAD_EN_PROP_OR(n) == JESD216_DW15_QER_NONE ||                        \
 			     DT_INST_STRING_TOKEN(n, rd_mode) == NPCM_RD_MODE_FAST_DUAL,           \
 		     "Fast Dual IO read must be selected in Quad mode");                           \
+	BUILD_ASSERT(!DT_INST_PROP(n, psram) || DT_INST_NODE_HAS_PROP(n, mapped_addr),             \
+		     "pSRAM requires mapped-addr");                                                \
 	PINCTRL_DT_INST_DEFINE(n);                                                                 \
 	static const struct flash_npcm_nor_config flash_npcm_nor_config_##n = {                    \
 		.qspi_bus = DEVICE_DT_GET(DT_PARENT(DT_DRV_INST(n))),                              \
@@ -791,6 +820,7 @@ static int flash_npcm_nor_init(const struct device *dev)
 				.enter_4ba = DT_INST_PROP_OR(n, enter_4byte_addr, 0),              \
 				.qer_type = DT_INST_QUAD_EN_PROP_OR(n),                            \
 				.rd_mode = DT_INST_STRING_TOKEN(n, rd_mode),                       \
+				.psram = DT_INST_PROP(n, psram),                                   \
 			},                                                                         \
 		IF_ENABLED(                                                                        \
 			CONFIG_FLASH_PAGE_LAYOUT,                                                  \

@@ -51,6 +51,8 @@ struct npcm_qspi_cfg {
 	uint8_t rd_mode;
 	/* Configurations for the Quad-SPI peripherals */
 	int flags;
+	/* Device is a QSPI pSRAM (volatile, direct-write capable) */
+	bool psram;
 };
 
 /**
@@ -85,16 +87,20 @@ typedef void (*qspi_npcm_mutex_unlock)(const struct device *dev);
 int flash_npcm_fiu_set_4b_mode(const struct device *dev, bool enable);
 
 struct npcm_qspi_ops {
-    void (*lock_configure)(const struct device *dev, const struct npcm_qspi_cfg *cfg,
-                          const uint32_t operation);
-    void (*unlock)(const struct device *dev);
-    int (*transceive)(const struct device *dev, struct npcm_transceive_cfg *cfg,
-                     uint32_t flags);
-    int (*set_read_mode)(const struct device *dev, uint8_t rd_mode);
-    int (*get_read_mode)(const struct device *dev, uint8_t *rd_mode);
-    int (*crc_init)(const struct device *dev, uint8_t mode, uint8_t source, uint32_t initial_value);
-    int (*crc_add_data)(const struct device *dev, const uint8_t *data, size_t length);
-    int (*crc_get_result)(const struct device *dev, uint32_t *result);
+	void (*lock_configure)(const struct device *dev, const struct npcm_qspi_cfg *cfg,
+			       const uint32_t operation);
+	void (*unlock)(const struct device *dev);
+	int (*transceive)(const struct device *dev, struct npcm_transceive_cfg *cfg,
+			  uint32_t flags);
+	int (*set_read_mode)(const struct device *dev, uint8_t rd_mode);
+	int (*get_read_mode)(const struct device *dev, uint8_t *rd_mode);
+	int (*crc_init)(const struct device *dev, uint8_t mode, uint8_t source,
+			uint32_t initial_value);
+	int (*crc_add_data)(const struct device *dev, const uint8_t *data, size_t length);
+	int (*crc_get_result)(const struct device *dev, uint32_t *result);
+	int (*psram_init)(const struct device *dev, const struct npcm_qspi_cfg *cfg);
+	int (*psram_write)(const struct device *dev, const struct npcm_qspi_cfg *cfg,
+			   uintptr_t dst, const uint8_t *src, size_t size);
 };
 
 /* Device data */

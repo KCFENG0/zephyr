@@ -607,6 +607,7 @@
 		size = <DT_SIZE_M(8 * 8)>;
 		reg = <1>;
 		status = "okay";
+		psram;
 
 		/* FIU1 SW_CS1 (SHD role) per chip-select table: HyperRAM */
 		qspi-flags = <(NPCM_QSPI_SW_CS1 | NPCM_QSPI_QPI_MODE)>;

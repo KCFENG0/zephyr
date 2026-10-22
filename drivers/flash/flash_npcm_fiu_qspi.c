@@ -6,6 +6,8 @@
 
 #define DT_DRV_COMPAT nuvoton_npcm_fiu_qspi
 
+#include <zephyr/cache.h>
+#include <zephyr/sys/barrier.h>
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/drivers/flash/npcm_flash_api_ex.h>
 #include <zephyr/drivers/pinctrl.h>
@@ -19,6 +21,20 @@
 LOG_MODULE_REGISTER(npcm_fiu_qspi, CONFIG_FLASH_LOG_LEVEL);
 
 #define NPCM_FIU_CHK_TIMEOUT_US	10000
+
+/* QSPI pSRAM (e.g. W956D4NKR) opcodes and timing */
+#define PSRAM_CMD_EXIT_QPI	0xFF
+#define PSRAM_CMD_RST_EN	0x66
+#define PSRAM_CMD_RST		0x99
+#define PSRAM_CMD_ENTER_QPI	0x38
+#define PSRAM_CMD_QUAD_READ	0xEB
+#define PSRAM_RST_WAIT_US	50  /* tRST is 30 us */
+#define PSRAM_CMD_WAIT_US	10
+/* Longest direct-write CS window; keeps CS low well below pSRAM tCSM */
+#define PSRAM_DW_RUN_MAX	16
+#define NPCM_DIRECT_WR_CFG_DEFAULT	(BIT(NPCM_DIRECT_WR_CFG_DW_CS0) | \
+					 BIT(NPCM_DIRECT_WR_CFG_DW_CS1) | \
+					 BIT(NPCM_DIRECT_WR_CFG_DW_CS2))
 
 /*
  * NPCM500 physical CS to FIU register-role mapping:
@@ -363,6 +379,17 @@ static inline void qspi_npcm_config_dra_mode(const struct device *dev,
 				       BIT(NPCM_Q_P_EN_QUAD_P_EN));
 	}
 
+	if (qspi_cfg->psram) {
+		/* pSRAM is RAM: allow AMBA direct writes in SPI mode as well */
+		core_inst->BURST_CFG |= BIT(NPCM_BURST_CFG_SPI_WR_EN);
+		host_inst->BURST_CFG |= BIT(NPCM_BURST_CFG_SPI_WR_EN);
+		if ((qspi_cfg->flags & NPCM_QSPI_QPI_MODE) &&
+		    qspi_cfg->rd_mode == NPCM_RD_MODE_QUAD) {
+			core_inst->RD_CMD_SHD = PSRAM_CMD_QUAD_READ;
+			host_inst->RD_CMD_SHD = PSRAM_CMD_QUAD_READ;
+		}
+	}
+
 	/* Set read burst to max 16 bytes */
 	SET_FIELD(core_inst->BURST_CFG, NPCM_BURST_CFG_R_BURST, rd_burst);
 	SET_FIELD(host_inst->BURST_CFG, NPCM_BURST_CFG_R_BURST, rd_burst);
@@ -700,15 +727,150 @@ static int qspi_npcm_fiu_crc_get_result(const struct device *dev, uint32_t *resu
 	return 0;
 }
 
+static int qspi_npcm_fiu_psram_cmd(const struct device *dev, uint8_t opcode, uint32_t wait_us)
+{
+	struct npcm_transceive_cfg cfg = {.opcode = opcode};
+	int ret = qspi_npcm_fiu_uma_transceive(dev, &cfg, 0);
+
+	k_busy_wait(wait_us);
+	return ret;
+}
+
+/*
+ * Bring a QSPI pSRAM into the mode selected by the DT qspi-flags and program
+ * the FIU for it. The pSRAM powers up in SPI mode, but after a warm reset it
+ * may still be in QPI, so exit QPI and software-reset it first:
+ *   FIU in SPI -> FFh (exit QPI; harmless in SPI) -> 66h/99h -> [38h] -> FIU cfg
+ * A QPI device sees the 1-wire FFh as FFh because IO1-IO3 idle high.
+ */
+static int qspi_npcm_fiu_psram_init(const struct device *dev, const struct npcm_qspi_cfg *cfg)
+{
+	struct npcm_qspi_data *const data = dev->data;
+	struct npcm_qspi_cfg spi_cfg = *cfg;
+	int ret;
+
+	k_sem_take(&data->lock_sem, K_FOREVER);
+
+	/* Issue the mode-switch commands with the FIU in plain SPI */
+	spi_cfg.flags &= ~NPCM_QSPI_QPI_MODE;
+	spi_cfg.rd_mode = NPCM_RD_MODE_NORMAL;
+	data->cur_cfg = &spi_cfg;
+	pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
+	data->sw_cs = find_lsb_set(cfg->flags & NPCM_QSPI_SW_CS_MASK) - 1;
+	qspi_npcm_config_uma_mode(dev, &spi_cfg);
+	qspi_npcm_config_dra_mode(dev, &spi_cfg);
+
+	ret = qspi_npcm_fiu_psram_cmd(dev, PSRAM_CMD_EXIT_QPI, PSRAM_CMD_WAIT_US);
+	if (ret == 0) {
+		ret = qspi_npcm_fiu_psram_cmd(dev, PSRAM_CMD_RST_EN, 0);
+	}
+	if (ret == 0) {
+		ret = qspi_npcm_fiu_psram_cmd(dev, PSRAM_CMD_RST, PSRAM_RST_WAIT_US);
+	}
+	if (ret == 0 && (cfg->flags & NPCM_QSPI_QPI_MODE)) {
+		ret = qspi_npcm_fiu_psram_cmd(dev, PSRAM_CMD_ENTER_QPI, PSRAM_CMD_WAIT_US);
+	}
+
+	/* Program the FIU for the final mode so direct access works from now on */
+	data->cur_cfg = cfg;
+	qspi_npcm_config_dra_mode(dev, cfg);
+
+	k_sem_give(&data->lock_sem);
+
+	return ret;
+}
+
+/*
+ * Write to a pSRAM through its direct-access window. Each run of up to 16
+ * bytes is one SPI write transaction: DW_CSn=0 keeps the chip select low
+ * across the AMBA writes of the run, so the run must be contiguous and short
+ * (pSRAM tCSM) and must not be interrupted.
+ */
+static int qspi_npcm_fiu_psram_write(const struct device *dev, const struct npcm_qspi_cfg *cfg,
+				     uintptr_t dst, const uint8_t *src, size_t size)
+{
+	struct fiu_reg *const inst = HAL_INSTANCE(dev);
+	struct npcm_qspi_data *const data = dev->data;
+	uint8_t dw_cfg;
+
+	qspi_npcm_fiu_mutex_lock_configure(dev, cfg, data->operation);
+
+	/*
+	 * src == NULL: fill with 0xff (erase emulation). Keep DIRECT_WR_CFG at
+	 * its default (FIU drives CS per AMBA write), so every 32-bit store is
+	 * its own short SPI write and tCSM cannot be violated; no IRQ lock or
+	 * register switching is needed.
+	 *
+	 * No D-cache maintenance is done here: this relies on the mapped window
+	 * being Device (non-cacheable) memory, i.e. CONFIG_SOC_NPCM5_HYPERRAM_MPU_DEVICE=y.
+	 * If the window is ever made cacheable, flush/invalidate the range.
+	 */
+	if (src == NULL) {
+		inst->DIRECT_WR_CFG = NPCM_DIRECT_WR_CFG_DEFAULT;
+		while (size > 0 && (dst % 4) != 0) {
+			sys_write8(0xff, dst++);
+			size--;
+		}
+		for (; size >= 4; size -= 4, dst += 4) {
+			sys_write32(0xffffffff, dst);
+		}
+		while (size > 0) {
+			sys_write8(0xff, dst++);
+			size--;
+		}
+		barrier_dsync_fence_full();
+		qspi_npcm_fiu_mutex_unlock(dev);
+		return 0;
+	}
+
+	dw_cfg = (NPCM_DIRECT_WR_CFG_DEFAULT & ~BIT(NPCM_DIRECT_WR_CFG_DW_CS0 - data->sw_cs)) |
+		 BIT(NPCM_DIRECT_WR_CFG_DIRECT_WR_BLOCK);
+
+	while (size > 0) {
+		size_t run = PSRAM_DW_RUN_MAX - (dst % PSRAM_DW_RUN_MAX);
+		unsigned int key;
+
+		if (run > size) {
+			run = size;
+		}
+
+		key = irq_lock();
+		inst->DIRECT_WR_CFG = dw_cfg;
+		if ((dst % 4) == 0 && (run % 4) == 0 && ((uintptr_t)src % 4) == 0) {
+			for (size_t i = 0; i < run; i += 4) {
+				sys_write32(*(const uint32_t *)(src + i), dst + i);
+			}
+		} else {
+			for (size_t i = 0; i < run; i++) {
+				sys_write8(src[i], dst + i);
+			}
+		}
+		sys_cache_data_flush_range((void *)dst, run);
+		barrier_dsync_fence_full();
+		inst->DIRECT_WR_CFG = NPCM_DIRECT_WR_CFG_DEFAULT;
+		irq_unlock(key);
+
+		dst += run;
+		src += run;
+		size -= run;
+	}
+
+	qspi_npcm_fiu_mutex_unlock(dev);
+
+	return 0;
+}
+
 struct npcm_qspi_ops npcm_qspi_fiu_ops = {
 	.lock_configure = qspi_npcm_fiu_mutex_lock_configure,
-        .unlock = qspi_npcm_fiu_mutex_unlock,
-        .transceive = qspi_npcm_fiu_uma_transceive,
-        .set_read_mode = qspi_npcm_fiu_set_read_mode,
-        .get_read_mode = qspi_npcm_fiu_get_read_mode,
-        .crc_init = qspi_npcm_fiu_crc_init,
-        .crc_add_data = qspi_npcm_fiu_crc_add_data,
-        .crc_get_result = qspi_npcm_fiu_crc_get_result,
+	.unlock = qspi_npcm_fiu_mutex_unlock,
+	.transceive = qspi_npcm_fiu_uma_transceive,
+	.set_read_mode = qspi_npcm_fiu_set_read_mode,
+	.get_read_mode = qspi_npcm_fiu_get_read_mode,
+	.crc_init = qspi_npcm_fiu_crc_init,
+	.crc_add_data = qspi_npcm_fiu_crc_add_data,
+	.crc_get_result = qspi_npcm_fiu_crc_get_result,
+	.psram_init = qspi_npcm_fiu_psram_init,
+	.psram_write = qspi_npcm_fiu_psram_write,
 };
 
 static int qspi_npcm_fiu_init(const struct device *dev)
