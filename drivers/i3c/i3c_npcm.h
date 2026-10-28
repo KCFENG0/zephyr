@@ -73,7 +73,6 @@ struct npcm_i3c_config {
 struct npcm_i3c_data {
 	struct i3c_driver_data common; /* Common i3c driver data */
 	struct k_mutex lock_mutex;     /* Mutex of i3c controller */
-	struct k_sem sync_sem;         /* Semaphore used for synchronization */
 	struct k_sem ibi_lock_sem;     /* Semaphore used for ibi */
 
 	/* Target data */

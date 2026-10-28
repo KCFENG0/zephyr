@@ -30,7 +30,7 @@ LOG_MODULE_REGISTER(npcm_i3c, CONFIG_I3C_LOG_LEVEL);
 #define PPBAUD_DIV_MAX           0xF
 #define I2CBAUD_DIV_MAX          0xF
 #define DAA_TGT_INFO_SZ          0x8         /* 8 bytes = PID(6) + BCR(1) + DCR(1) */
-#define I3C_TRANS_TIMEOUT_MS     K_MSEC(100) /*  Default maximum allow time for an I3C transfer */
+#define I3C_DMA_DONE_TIMEOUT_US  100000      /* Maximum time for a DMA message to COMPLETE */
 #define I3C_STATUS_CLR_MASK                                                                        \
 	(NPCM_I3C_MSTATUS_SLVSTART | NPCM_I3C_MSTATUS_MCTRLDONE | NPCM_I3C_MSTATUS_COMPLETE |      \
 	 NPCM_I3C_MSTATUS_IBIWON | NPCM_I3C_MSTATUS_NOWCNTLR)
@@ -609,18 +609,25 @@ static int npcm_i3c_pdma_dsct(const struct device *dev, bool is_rx,
 	return NPCM_PDMA_DSCT_IDX((uint32_t)*dsct_inst);
 }
 
-static void npcm_i3c_ctrl_notify(const struct device *dev)
+/*
+ * Busy-wait for MSTATUS.COMPLETE at the end of a controller DMA message.
+ *
+ * Once COMPLETE is set the controller holds the bus until it is told to emit
+ * STOP or a repeated START, and that wait counts toward the 100 us
+ * MERRWARN.TIMEOUT. Sleeping on a semaphore here lets any other ready thread
+ * of the same priority run before the caller can end the message, so poll
+ * instead, as the FIFO path does.
+ */
+static int npcm_i3c_ctrl_wait_completion(struct i3c_reg *i3c_inst)
 {
-	struct npcm_i3c_data *const data = dev->data;
+	if (WAIT_FOR(i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE, I3C_DMA_DONE_TIMEOUT_US,
+		     NULL) == false) {
+		return -ETIMEDOUT;
+	}
 
-	k_sem_give(&data->sync_sem);
-}
+	i3c_inst->MSTATUS = NPCM_I3C_MSTATUS_COMPLETE; /* W1C */
 
-static int npcm_i3c_ctrl_wait_completion(const struct device *dev)
-{
-	struct npcm_i3c_data *const data = dev->data;
-
-	return k_sem_take(&data->sync_sem, I3C_TRANS_TIMEOUT_MS);
+	return 0;
 }
 
 static int npcm_i3c_pdma_wait_completion(const struct device *dev, bool is_rx)
@@ -1288,14 +1295,16 @@ static int npcm_i3c_ctlr_xfer_read_fifo_dma(const struct device *dev, uint8_t ad
 			LOG_ERR("i3c wait dma completion timeout");
 		}
 	} else {
-		/* Enable COMPLETE interrupt */
-		i3c_inst->MINTSET |= NPCM_I3C_MINTSET_COMPLETE;
-
-		ret = npcm_i3c_ctrl_wait_completion(dev);
+		ret = npcm_i3c_ctrl_wait_completion(i3c_inst);
 		if (ret) {
-			i3c_inst->MINTCLR = NPCM_I3C_MINTCLR_COMPLETE;
 			LOG_ERR("i3c wait completion timeout");
 		}
+	}
+
+	/* End the message first: the bus is stalled until STOP is emitted */
+	if (emit_stop) {
+		npcm_i3c_request_emit_stop(i3c_inst);
+		emit_stop = false;
 	}
 
 out_read_fifo_dma:
@@ -1381,14 +1390,16 @@ static int npcm_i3c_ctlr_xfer_write_fifo_dma(const struct device *dev, uint8_t a
 			LOG_ERR("i3c wait dma completion timeout");
 		}
 	} else {
-		/* Enable COMPLETE interrupt */
-		i3c_inst->MINTSET |= NPCM_I3C_MINTSET_COMPLETE;
-
-		ret = npcm_i3c_ctrl_wait_completion(dev);
+		ret = npcm_i3c_ctrl_wait_completion(i3c_inst);
 		if (ret) {
-			i3c_inst->MINTCLR = NPCM_I3C_MINTCLR_COMPLETE;
 			LOG_ERR("i3c wait completion timeout");
 		}
+	}
+
+	/* End the message first: the bus is stalled until STOP is emitted */
+	if (emit_stop) {
+		npcm_i3c_request_emit_stop(i3c_inst);
+		emit_stop = false;
 	}
 
 out_write_fifo_dma:
@@ -3048,19 +3059,6 @@ static void npcm_i3c_isr(const struct device *dev)
 	} else if (NPCM_GET_REG_FIELD(i3c_inst->MCONFIG, NPCM_I3C_MCONFIG_MSTENA) ==
 		   NPCM_I3C_MCONFIG_MSTENA_ON) {
 		/* Controller mode */
-#ifdef CONFIG_I3C_NPCM_DMA
-		if (i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE) {
-			/* Clear COMPLETE status */
-			i3c_inst->MSTATUS = NPCM_I3C_MSTATUS_COMPLETE; /* W1C */
-
-			/* Disable COMPLETE interrupt */
-			i3c_inst->MINTCLR = NPCM_I3C_MINTCLR_COMPLETE;
-
-			npcm_i3c_ctrl_notify(dev);
-			return;
-		}
-#endif /* CONFIG_I3C_NPCM_DMA */
-
 #ifdef CONFIG_I3C_USE_IBI
 		int ret;
 
@@ -3616,7 +3614,6 @@ static int npcm_i3c_init(const struct device *dev)
 
 	/* Lock initial */
 	k_mutex_init(&data->lock_mutex);
-	k_sem_init(&data->sync_sem, 0, 1);
 	k_sem_init(&data->ibi_lock_sem, 1, 1);
 	k_sem_init(&data->target_lock_sem, 1, 1);
 	k_sem_init(&data->target_event_lock_sem, 1, 1);
