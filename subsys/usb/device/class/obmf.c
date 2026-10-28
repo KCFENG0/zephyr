@@ -384,12 +384,15 @@ static void obmf_status_cb(struct usb_cfg_data *cfg,
 	case USB_DC_CLEAR_HALT:
 		/*
 		 * [1.0rc5 C6] CLEAR_FEATURE(ENDPOINT_HALT) received.
-		 * Clear USB-layer RX buffer so the next transfer starts
-		 * cleanly. Upper-layer state cleanup is the application's
-		 * responsibility.
+		 * The device must flush its internal pipelines and reset its
+		 * counters, so clear the USB-layer RX buffer and have the
+		 * application drop its channel state like on a bus reset.
 		 */
-		LOG_WRN("Endpoint halt cleared: clearing OBMF USB-layer RX buffer");
+		LOG_WRN("Endpoint halt cleared: flushing OBMF state");
 		memset(obmf_buf, 0, sizeof(obmf_buf));
+		if (dev_data && dev_data->ops && dev_data->ops->bus_reset) {
+			dev_data->ops->bus_reset(common->dev);
+		}
 		break;
 	case USB_DC_SET_HALT:
 		LOG_WRN("Endpoint halt set");
