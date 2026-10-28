@@ -12,19 +12,22 @@ if MBOX_NPCM_CALIPTRA_MCI
 
 choice MBOX_NPCM_CALIPTRA_MCI_NOTIFY
 	prompt "MCU_MBOX notification source"
+	default MBOX_NPCM_CALIPTRA_MCI_IRQ if $(dt_compat_any_has_prop,$(DT_COMPAT_NUVOTON_NPCM_CALIPTRA_MCI_MBOX),interrupts)
 	default MBOX_NPCM_CALIPTRA_MCI_POLL
 
 config MBOX_NPCM_CALIPTRA_MCI_POLL
 	bool "Polling"
 	help
-	  A driver thread polls EXECUTE / CMD_STATUS. Use until the M7
-	  mailbox interrupt has been verified.
+	  A driver thread polls EXECUTE / CMD_STATUS continuously.
 
 config MBOX_NPCM_CALIPTRA_MCI_IRQ
 	bool "Interrupt"
 	help
-	  Use the hardware interrupt. Requires a valid interrupts property
-	  in devicetree.
+	  Use the soc_mcu_mbox*_data_avail interrupt for MCU-initiated
+	  requests. Requester completion has no M7 interrupt in HW, so it is
+	  still polled at poll-interval-ms, but only while a request is in
+	  flight. Callbacks run in ISR context. Requires an interrupts
+	  property on every enabled node.
 
 endchoice
 

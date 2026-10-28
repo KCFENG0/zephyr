@@ -20,7 +20,9 @@ properties:
 
   interrupts:
     required: false
-    description: Optional - consumed only when MBOX_NPCM_CALIPTRA_MCI_IRQ is selected.
+    description: |
+      soc_mcu_mbox*_data_avail (EXECUTE && MBOX_USER == MCU), level-high.
+      Required when MBOX_NPCM_CALIPTRA_MCI_IRQ is selected.
 
   sram-size:
     type: int
@@ -30,7 +32,10 @@ properties:
   poll-interval-ms:
     type: int
     default: 5
-    description: Poll-mode cadence in milliseconds.
+    description: |
+      Poll-mode cadence in milliseconds. In IRQ mode, the cadence for
+      watching requester completion and responder close, which raise no
+      M7 interrupt.
 
   "#mbox-cells":
     const: 1

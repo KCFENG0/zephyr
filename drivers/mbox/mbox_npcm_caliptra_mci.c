@@ -31,6 +31,7 @@ struct caliptra_mci_mbox_config {
 	mem_addr_t csr_base;
 	size_t sram_size;
 	uint32_t poll_interval_ms;
+	unsigned int irq;
 };
 
 struct caliptra_mci_mbox_channel {
@@ -43,6 +44,9 @@ struct caliptra_mci_mbox_channel {
 struct caliptra_mci_mbox_data {
 	struct caliptra_mci_mbox_channel ch[CALIPTRA_MCI_MBOX_CHANNELS];
 	struct k_spinlock lock;
+#ifdef CONFIG_MBOX_NPCM_CALIPTRA_MCI_IRQ
+	struct k_timer timer;
+#endif
 };
 
 static inline uint32_t csr_rd(const struct caliptra_mci_mbox_config *cfg, uint32_t off)
@@ -55,6 +59,27 @@ static inline void csr_wr(const struct caliptra_mci_mbox_config *cfg, uint32_t o
 {
 	sys_write32(val, cfg->csr_base + off);
 }
+
+#ifdef CONFIG_MBOX_NPCM_CALIPTRA_MCI_IRQ
+/*
+ * The M7 interrupt is soc_mcu_mbox*_data_avail = EXECUTE && USER == MCU, so
+ * it only covers MCU-initiated requests. Requester completion (CMD_STATUS)
+ * and responder close (MCU clearing EXECUTE) raise nothing on the M7 side;
+ * this one-shot timer watches them only while one is outstanding.
+ */
+static void caliptra_mci_mbox_kick(const struct device *dev)
+{
+	const struct caliptra_mci_mbox_config *cfg = dev->config;
+	struct caliptra_mci_mbox_data *data = dev->data;
+
+	k_timer_start(&data->timer, K_MSEC(cfg->poll_interval_ms), K_NO_WAIT);
+}
+#else
+static inline void caliptra_mci_mbox_kick(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+}
+#endif
 
 int caliptra_mci_mbox_acquire(const struct device *dev)
 {
@@ -204,9 +229,6 @@ int caliptra_mci_mbox_write_response(const struct device *dev,
 	K_SPINLOCK(&data->lock) {
 		ret = caliptra_mci_mbox_state_next(ch->state,
 					       CALIPTRA_MCI_MBOX_EV_RESPOND, &next);
-		if (ret == 0) {
-			ch->state = next;
-		}
 	}
 	if (ret != 0) {
 		return ret;
@@ -218,6 +240,15 @@ int caliptra_mci_mbox_write_response(const struct device *dev,
 	csr_wr(cfg, CALIPTRA_MCI_MBOX_REG_DLEN, (uint32_t)len);
 	csr_wr(cfg, CALIPTRA_MCI_MBOX_REG_TARGET_STATUS,
 	       CALIPTRA_MCI_MBOX_STATUS_DONE_BIT | (uint32_t)status);
+
+	/* Only dispatch moves a responder out of LOCKED, and it never does, so
+	 * committing CLOSING after DONE is race-free. Committing it earlier
+	 * would let dispatch see CLOSING with DONE still 0 and take it as
+	 * already closed. */
+	K_SPINLOCK(&data->lock) {
+		ch->state = next;
+	}
+	caliptra_mci_mbox_kick(dev);
 	return 0;
 }
 
@@ -244,9 +275,10 @@ int caliptra_mci_mbox_check_ecc(const struct device *dev)
 }
 
 /*
- * Single notification chokepoint. Polling and (later) the ISR both call
- * this. It decodes mailbox state for the given channel and invokes the
- * registered mbox callback. The poll/IRQ swap touches only the caller.
+ * Single notification chokepoint. The poll thread, the ISR and the IRQ-mode
+ * timer all call this. It decodes mailbox state for the given channel and
+ * invokes the registered mbox callback. In IRQ mode the callback runs in ISR
+ * context.
  */
 static void caliptra_mci_mbox_dispatch(const struct device *dev,
 				   mbox_channel_id_t channel_id)
@@ -292,19 +324,22 @@ static void caliptra_mci_mbox_dispatch(const struct device *dev,
 
 		uint32_t ex = csr_rd(cfg, CALIPTRA_MCI_MBOX_REG_EXECUTE);
 		bool execute_asserted = (ex & CALIPTRA_MCI_MBOX_EXECUTE_BIT) != 0U;
+		bool done = caliptra_mci_mbox_status_done(
+			csr_rd(cfg, CALIPTRA_MCI_MBOX_REG_TARGET_STATUS));
 
 		K_SPINLOCK(&data->lock) {
+			/* Spec steps 10-11: MCU cleared EXECUTE, which HW-clears
+			 * TARGET_STATUS.DONE. Key off DONE, not EXECUTE: the MCU
+			 * may already have raised EXECUTE for the next request
+			 * before we look, and that must still be seen below. */
+			if (ch->state == CALIPTRA_MCI_MBOX_STATE_CLOSING && !done) {
+				ch->state = CALIPTRA_MCI_MBOX_STATE_IDLE;
+			}
 			if (ch->state == CALIPTRA_MCI_MBOX_STATE_IDLE &&
 			    execute_asserted) {
 				/* Spec step 7: new request arrived. */
 				ch->state = CALIPTRA_MCI_MBOX_STATE_LOCKED;
 				fire = true;
-			} else if (ch->state == CALIPTRA_MCI_MBOX_STATE_CLOSING &&
-				   !execute_asserted) {
-				/* Spec step 10: MCU cleared EXECUTE; the
-				 * transaction has closed and HW is zeroizing
-				 * SRAM. Safe to accept a new request. */
-				ch->state = CALIPTRA_MCI_MBOX_STATE_IDLE;
 			}
 		}
 	}
@@ -350,6 +385,7 @@ static int caliptra_mci_mbox_send(const struct device *dev,
 	}
 
 	csr_wr(cfg, CALIPTRA_MCI_MBOX_REG_EXECUTE, CALIPTRA_MCI_MBOX_EXECUTE_BIT);
+	caliptra_mci_mbox_kick(dev);
 	return 0;
 }
 
@@ -395,6 +431,8 @@ static int caliptra_mci_mbox_set_enabled(const struct device *dev,
 	K_SPINLOCK(&data->lock) {
 		data->ch[channel_id].enabled = enabled;
 	}
+	/* The timer owns unmasking the IRQ; see caliptra_mci_mbox_timer_fn(). */
+	caliptra_mci_mbox_kick(dev);
 	return 0;
 }
 
@@ -422,21 +460,78 @@ static void caliptra_mci_mbox_poll_entry(void *p1, void *p2, void *p3)
 	}
 }
 
-#define CALIPTRA_MCI_MBOX_POLL_DEFINE(inst)                                              \
+#define CALIPTRA_MCI_MBOX_NOTIFY_DEFINE(inst)                                            \
 	static K_THREAD_STACK_DEFINE(caliptra_mci_mbox_stack_##inst,                     \
 		CONFIG_MBOX_NPCM_CALIPTRA_MCI_POLL_THREAD_STACK_SIZE);                   \
 	static struct k_thread caliptra_mci_mbox_thread_##inst;
 
-#define CALIPTRA_MCI_MBOX_POLL_START(inst)                                               \
+#define CALIPTRA_MCI_MBOX_NOTIFY_START(inst)                                             \
 	k_thread_create(&caliptra_mci_mbox_thread_##inst, caliptra_mci_mbox_stack_##inst,    \
 			CONFIG_MBOX_NPCM_CALIPTRA_MCI_POLL_THREAD_STACK_SIZE,            \
 			caliptra_mci_mbox_poll_entry, (void *)dev, NULL, NULL,           \
 			CONFIG_MBOX_NPCM_CALIPTRA_MCI_POLL_THREAD_PRIO, 0, K_NO_WAIT);   \
 	k_thread_name_set(&caliptra_mci_mbox_thread_##inst, "mbox" #inst "_poll");
-#else
-#define CALIPTRA_MCI_MBOX_POLL_DEFINE(inst)
-#define CALIPTRA_MCI_MBOX_POLL_START(inst)
+#elif defined(CONFIG_MBOX_NPCM_CALIPTRA_MCI_IRQ)
+static bool caliptra_mci_mbox_waiting(const struct caliptra_mci_mbox_channel *ch)
+{
+	/* BUSY is requester-only and CLOSING responder-only, so one test
+	 * covers both channels. */
+	return ch->enabled && ch->cb != NULL &&
+	       (ch->state == CALIPTRA_MCI_MBOX_STATE_BUSY ||
+		ch->state == CALIPTRA_MCI_MBOX_STATE_CLOSING);
+}
+
+static void caliptra_mci_mbox_timer_fn(struct k_timer *timer)
+{
+	const struct device *dev = k_timer_user_data_get(timer);
+	const struct caliptra_mci_mbox_config *cfg = dev->config;
+	struct caliptra_mci_mbox_data *data = dev->data;
+	struct caliptra_mci_mbox_channel *rsp = &data->ch[CALIPTRA_MCI_MBOX_CH_RESPONDER];
+	bool pending = false;
+
+	caliptra_mci_mbox_dispatch(dev, CALIPTRA_MCI_MBOX_CH_REQUESTER);
+	caliptra_mci_mbox_dispatch(dev, CALIPTRA_MCI_MBOX_CH_RESPONDER);
+
+	K_SPINLOCK(&data->lock) {
+		for (int i = 0; i < CALIPTRA_MCI_MBOX_CHANNELS; i++) {
+			pending |= caliptra_mci_mbox_waiting(&data->ch[i]);
+		}
+		/* Unmask only once the last request has closed. If a new one
+		 * is already pending the level line re-enters the ISR at once. */
+		if (rsp->enabled && rsp->state == CALIPTRA_MCI_MBOX_STATE_IDLE) {
+			irq_enable(cfg->irq);
+		}
+	}
+	if (pending) {
+		caliptra_mci_mbox_kick(dev);
+	}
+}
+
+static void caliptra_mci_mbox_isr(const struct device *dev)
+{
+	const struct caliptra_mci_mbox_config *cfg = dev->config;
+
+	/* data_avail is level and stays high until the MCU clears EXECUTE,
+	 * which it does only after our TARGET_STATUS.DONE. Mask it here; the
+	 * timer unmasks once the transaction has closed. */
+	irq_disable(cfg->irq);
+	caliptra_mci_mbox_dispatch(dev, CALIPTRA_MCI_MBOX_CH_RESPONDER);
+}
+
+#define CALIPTRA_MCI_MBOX_NOTIFY_DEFINE(inst)
+/* IRQ stays masked until a consumer enables the responder channel: that is
+ * the first point the M7 may touch mailbox CSRs (MCI AXI USER gating). */
+#define CALIPTRA_MCI_MBOX_NOTIFY_START(inst)                                             \
+	k_timer_init(&data->timer, caliptra_mci_mbox_timer_fn, NULL);                    \
+	k_timer_user_data_set(&data->timer, (void *)dev);                                \
+	IRQ_CONNECT(DT_INST_IRQN(inst), DT_INST_IRQ(inst, priority),                     \
+		    caliptra_mci_mbox_isr, DEVICE_DT_INST_GET(inst), 0);
+#define CALIPTRA_MCI_MBOX_IRQ_CFG(inst) .irq = DT_INST_IRQN(inst),
 #endif /* CONFIG_MBOX_NPCM_CALIPTRA_MCI_POLL */
+
+#ifndef CALIPTRA_MCI_MBOX_IRQ_CFG
+#define CALIPTRA_MCI_MBOX_IRQ_CFG(inst)
+#endif
 
 #define CALIPTRA_MCI_MBOX_INIT(inst)                                                     \
 	static struct caliptra_mci_mbox_data caliptra_mci_mbox_data_##inst;                  \
@@ -445,8 +540,9 @@ static void caliptra_mci_mbox_poll_entry(void *p1, void *p2, void *p3)
 		.csr_base = DT_INST_REG_ADDR_BY_NAME(inst, csr),                     \
 		.sram_size = DT_INST_PROP(inst, sram_size),                          \
 		.poll_interval_ms = DT_INST_PROP(inst, poll_interval_ms),            \
+		CALIPTRA_MCI_MBOX_IRQ_CFG(inst)                                      \
 	};                                                                           \
-	CALIPTRA_MCI_MBOX_POLL_DEFINE(inst)                                              \
+	CALIPTRA_MCI_MBOX_NOTIFY_DEFINE(inst)                                            \
 	static int caliptra_mci_mbox_init_##inst(const struct device *dev)               \
 	{                                                                            \
 		struct caliptra_mci_mbox_data *data = dev->data;                         \
@@ -458,7 +554,7 @@ static void caliptra_mci_mbox_poll_entry(void *p1, void *p2, void *p3)
 		for (int i = 0; i < CALIPTRA_MCI_MBOX_CHANNELS; i++) {                   \
 			data->ch[i].state = CALIPTRA_MCI_MBOX_STATE_IDLE;                \
 		}                                                                    \
-		CALIPTRA_MCI_MBOX_POLL_START(inst)                                       \
+		CALIPTRA_MCI_MBOX_NOTIFY_START(inst)                                     \
 		return 0;                                                            \
 	}                                                                            \
 	DEVICE_DT_INST_DEFINE(inst, caliptra_mci_mbox_init_##inst, NULL,                 \
