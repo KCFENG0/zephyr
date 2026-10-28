@@ -309,16 +309,12 @@ static void caliptra_mci_mbox_dispatch(const struct device *dev,
 			}
 		}
 	} else {
-		/* Responder must distinguish our own outgoing EXECUTE=1 (from a
-		 * requester transaction WE initiated) from a peer's incoming
-		 * EXECUTE=1. The HW MBOX_USER register names the current lock
-		 * holder: if it equals our BUSID, we own the lock and the
-		 * EXECUTE=1 is from our own write - skip responder dispatch.
-		 * If MBOX_USER differs (peer's USER or 0 during transient), the
-		 * EXECUTE could legitimately be a peer-incoming request. */
-		uint32_t user = csr_rd(cfg, CALIPTRA_MCI_MBOX_REG_USER);
-
-		if (user == CONFIG_MBOX_NPCM_CALIPTRA_MCI_BUSID) {
+		/* EXECUTE is also raised by our own requester transactions. Only
+		 * the MCU is ever our peer, so key on it holding the lock, as the
+		 * data_avail interrupt does, rather than on our own AXI USER:
+		 * that is whatever the fabric stamps on the M7, not necessarily
+		 * CONFIG_MBOX_NPCM_CALIPTRA_MCI_BUSID. */
+		if (csr_rd(cfg, CALIPTRA_MCI_MBOX_REG_USER) != CALIPTRA_MCI_MBOX_USER_MCU) {
 			return;
 		}
 

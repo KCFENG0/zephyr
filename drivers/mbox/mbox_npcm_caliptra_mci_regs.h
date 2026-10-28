@@ -43,4 +43,10 @@
  */
 #define CALIPTRA_MCI_MBOX_USER_SOC 0x00000001U
 
+/* AXI USER of the MCU (the MCI root user). The mailbox USER register holds
+ * it while the MCU owns the lock, which is what the soc_mcu_mbox*_data_avail
+ * interrupt keys on (EXECUTE && USER == MCU).
+ */
+#define CALIPTRA_MCI_MBOX_USER_MCU 0x00005500U
+
 #endif /* ZEPHYR_DRIVERS_MBOX_MBOX_NPCM_CALIPTRA_MCI_REGS_H_ */
