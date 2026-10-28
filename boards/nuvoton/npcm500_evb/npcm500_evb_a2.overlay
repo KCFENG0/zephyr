@@ -1,0 +1,14 @@
+/*
+ * Copyright (c) 2026 Nuvoton Technology Corporation.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* A2 routes soc_mcu_mbox*_data_avail to the M7 (IRQ 9 and 19); A1 does not. */
+&caliptra_mci_mbox0 {
+	interrupts = <9 3>;
+};
+
+&caliptra_mci_mbox1 {
+	interrupts = <19 3>;
+};

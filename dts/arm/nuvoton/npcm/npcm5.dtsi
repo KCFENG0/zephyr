@@ -191,6 +191,30 @@
 		};
 
 		/*
+		 * Caliptra MCI mailboxes (MCU_MBOX0/1), M7-side view: a 16 KB
+		 * SRAM aperture, and its CSR page 0x200000 above it. A1 does
+		 * not route soc_mcu_mbox*_data_avail to the M7, so the
+		 * interrupts live in the A2 board revision overlay.
+		 */
+		caliptra_mci_mbox0: mailbox@20400000 {
+			compatible = "nuvoton,npcm-caliptra-mci-mbox";
+			reg = <0x20400000 0x4000>, <0x20600000 0x28>;
+			reg-names = "sram", "csr";
+			sram-size = <0x4000>;
+			#mbox-cells = <1>;
+			status = "disabled";
+		};
+
+		caliptra_mci_mbox1: mailbox@20800000 {
+			compatible = "nuvoton,npcm-caliptra-mci-mbox";
+			reg = <0x20800000 0x4000>, <0x20a00000 0x28>;
+			reg-names = "sram", "csr";
+			sram-size = <0x4000>;
+			#mbox-cells = <1>;
+			status = "disabled";
+		};
+
+		/*
 		 * NPCM5 has no PWM_A module (PWDWN_CTL[2] bit 0 is repurposed by
 		 * JTAGM), so there is intentionally no pwm1/pwm@40080000 node.
 		 */
