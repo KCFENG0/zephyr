@@ -309,19 +309,22 @@ static void caliptra_mci_mbox_dispatch(const struct device *dev,
 			}
 		}
 	} else {
-		/* EXECUTE is also raised by our own requester transactions. Only
+		/* Sample DONE first: once the MCU releases, HW clears DONE, USER
+		 * and EXECUTE together, so a DONE=0 seen here means the USER and
+		 * EXECUTE read after it already belong to the next request, if
+		 * any. Reading EXECUTE first could pair a stale EXECUTE=1 with
+		 * the released DONE=0 and replay a closed transaction.
+		 *
+		 * EXECUTE is also raised by our own requester transactions. Only
 		 * the MCU is ever our peer, so key on it holding the lock, as the
 		 * data_avail interrupt does, rather than on our own AXI USER:
 		 * that is whatever the fabric stamps on the M7, not necessarily
 		 * CONFIG_MBOX_NPCM_CALIPTRA_MCI_BUSID. */
-		if (csr_rd(cfg, CALIPTRA_MCI_MBOX_REG_USER) != CALIPTRA_MCI_MBOX_USER_MCU) {
-			return;
-		}
-
-		uint32_t ex = csr_rd(cfg, CALIPTRA_MCI_MBOX_REG_EXECUTE);
-		bool execute_asserted = (ex & CALIPTRA_MCI_MBOX_EXECUTE_BIT) != 0U;
 		bool done = caliptra_mci_mbox_status_done(
 			csr_rd(cfg, CALIPTRA_MCI_MBOX_REG_TARGET_STATUS));
+		bool peer_request =
+			csr_rd(cfg, CALIPTRA_MCI_MBOX_REG_USER) == CALIPTRA_MCI_MBOX_USER_MCU &&
+			(csr_rd(cfg, CALIPTRA_MCI_MBOX_REG_EXECUTE) & CALIPTRA_MCI_MBOX_EXECUTE_BIT) != 0U;
 
 		K_SPINLOCK(&data->lock) {
 			/* Spec steps 10-11: MCU cleared EXECUTE, which HW-clears
@@ -331,8 +334,7 @@ static void caliptra_mci_mbox_dispatch(const struct device *dev,
 			if (ch->state == CALIPTRA_MCI_MBOX_STATE_CLOSING && !done) {
 				ch->state = CALIPTRA_MCI_MBOX_STATE_IDLE;
 			}
-			if (ch->state == CALIPTRA_MCI_MBOX_STATE_IDLE &&
-			    execute_asserted) {
+			if (ch->state == CALIPTRA_MCI_MBOX_STATE_IDLE && peer_request) {
 				/* Spec step 7: new request arrived. */
 				ch->state = CALIPTRA_MCI_MBOX_STATE_LOCKED;
 				fire = true;
