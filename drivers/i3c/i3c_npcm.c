@@ -1339,6 +1339,7 @@ static int npcm_i3c_ctlr_xfer_write_fifo_dma(const struct device *dev, uint8_t a
 {
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 	uint32_t key;
+	int remain;
 	int ret;
 
 	ret = npcm_i3c_pdma_configure(dev, I3C_CONFIG_CONTROLLER, false, buf, buf_sz, no_ending);
@@ -1391,12 +1392,19 @@ static int npcm_i3c_ctlr_xfer_write_fifo_dma(const struct device *dev, uint8_t a
 	}
 
 out_write_fifo_dma:
+	/*
+	 * Read the remaining count before the channel is stopped: stopping clears
+	 * the transfer-done flag, and without it a finished transfer is reported
+	 * as having one byte left.
+	 */
+	remain = npcm_i3c_pdma_remain_count(dev, false);
+
 	if (npcm_i3c_controller_dma_off(dev, false) < 0) {
 		ret = -EIO;
 	}
 
 	if (ret == 0 && (buf && buf_sz)) {
-		ret = npcm_i3c_pdma_remain_count(dev, false);
+		ret = remain;
 		if (ret >= 0) {
 			ret = buf_sz - ret;
 		}
