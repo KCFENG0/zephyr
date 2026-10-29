@@ -14,6 +14,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
+#include <zephyr/cache.h>
+#include <zephyr/sys/barrier.h>
 #include <zephyr/sys/__assert.h>
 #include <zephyr/sys/util.h>
 #include <errno.h>
@@ -74,8 +76,8 @@ struct eth_npcm_dev_data {
 	bool link_up;
 };
 
-#define __eth_npcm_desc __aligned(4)
-#define __eth_npcm_buf  __aligned(4)
+#define __eth_npcm_desc __aligned(32)
+#define __eth_npcm_buf  __aligned(32)
 /* Ethernet Rx DMA Descriptors */
 static struct ETH_DMA_DESCRIPTOR  DMARxDscrTab[ETH_RXBUFNB] __eth_npcm_desc;
 /* Ethernet Tx DMA Descriptors */
@@ -195,6 +197,15 @@ enum ETH_RET_STATUS ETH_ReadPHYRegister(struct ETH_HANDLE_TYPE *heth,
 	return ETH_RET_OK;
 }
 
+/* The poll demand must not overtake the descriptor write; the read-back drains the write path. */
+static void eth_tx_desc_commit(struct ETH_DMA_DESCRIPTOR *desc)
+{
+	(void)sys_cache_data_flush_range(desc, sizeof(*desc));
+	(void)sys_cache_data_invd_range(desc, sizeof(*desc));
+	(void)*(volatile uint32_t *)&desc->Status;
+	barrier_dmem_fence_full();
+}
+
 enum ETH_RET_STATUS ETH_TransmitFrame(struct ETH_HANDLE_TYPE *heth, uint32_t FrameLength)
 {
 	struct emac_reg *const emac_regs = ETH_NPCM_REG_BASE;
@@ -241,9 +252,12 @@ enum ETH_RET_STATUS ETH_TransmitFrame(struct ETH_HANDLE_TYPE *heth, uint32_t Fra
 		heth->TxDesc->ControlBufferSize = (FrameLength & ETH_DMATXDESC_TBS1);
 		/* Set Own bit of the Tx descriptor Status: gives the buffer back to ETHERNET DMA */
 		heth->TxDesc->Status |= ETH_DMATXDESC_OWN;
+		eth_tx_desc_commit(heth->TxDesc);
 		/* Point to next descriptor */
 		heth->TxDesc = (struct ETH_DMA_DESCRIPTOR *)(heth->TxDesc->Buffer2NextDescAddr);
 	} else {
+		struct ETH_DMA_DESCRIPTOR *first_desc = heth->TxDesc;
+
 		for (i = 0; i < bufcount; i++) {
 			/* Clear FIRST and LAST segment bits */
 			heth->TxDesc->Status &= ~(ETH_DMATXDESC_FS | ETH_DMATXDESC_LS);
@@ -259,23 +273,22 @@ enum ETH_RET_STATUS ETH_TransmitFrame(struct ETH_HANDLE_TYPE *heth, uint32_t Fra
 				size = FrameLength - (bufcount-1)*ETH_TX_BUF_SIZE;
 				heth->TxDesc->ControlBufferSize = (size & ETH_DMATXDESC_TBS1);
 			}
-			/* Set Own bit of the Tx descriptor Status: gives the buffer
-			 * back to ETHERNET DMA
-			 */
-			heth->TxDesc->Status |= ETH_DMATXDESC_OWN;
+			/* The first descriptor gets OWN last so the DMA cannot start a half-built frame */
+			if (i != 0) {
+				heth->TxDesc->Status |= ETH_DMATXDESC_OWN;
+				eth_tx_desc_commit(heth->TxDesc);
+			}
 			/* point to next descriptor */
 			heth->TxDesc = (struct ETH_DMA_DESCRIPTOR *)
 				(heth->TxDesc->Buffer2NextDescAddr);
 		}
+		first_desc->Status |= ETH_DMATXDESC_OWN;
+		eth_tx_desc_commit(first_desc);
 	}
 
-	/* When Tx Buffer unavailable flag is set: clear it and resume transmission */
-	if ((emac_regs->DMASR & BIT(NPCM_DMASR_TBUS)) != 0) {
-		/* Clear TBUS ETHERNET DMA flag */
-		emac_regs->DMASR = BIT(NPCM_DMASR_TBUS);
-		/* Resume DMA transmission*/
-		emac_regs->DMATPDR = 0;
-	}
+	/* Clear TBUS and always poll: a suspended DMA must be kicked even if TBUS was cleared elsewhere */
+	emac_regs->DMASR = BIT(NPCM_DMASR_TBUS);
+	emac_regs->DMATPDR = 0;
 
 	heth->State = ETH_STATE_READY;
 
@@ -297,8 +310,11 @@ enum ETH_RET_STATUS ETH_GetReceivedFrame(struct ETH_HANDLE_TYPE *heth)
 	heth->State = ETH_STATE_BUSY;
 
 	/* Scan descriptors owned by CPU */
-	while (((heth->RxDesc->Status & ETH_DMARXDESC_OWN) == 0) &&
-			(descriptorscancounter < ETH_RXBUFNB)) {
+	while (descriptorscancounter < ETH_RXBUFNB) {
+		(void)sys_cache_data_invd_range(heth->RxDesc, sizeof(*heth->RxDesc));
+		if ((heth->RxDesc->Status & ETH_DMARXDESC_OWN) != 0U) {
+			break;
+		}
 		/* Just for security */
 		descriptorscancounter++;
 
@@ -392,8 +408,24 @@ static int eth_tx(const struct device *dev, struct net_pkt *pkt)
 	}
 #endif
 	dma_tx_desc = GET_FIRST_DMA_TX_DESC(heth);
-	while (IS_ETH_DMATXDESC_OWN(dma_tx_desc) != 0) {
-		k_yield();
+	int64_t tx_deadline = k_uptime_get() + 1000;
+	struct ETH_DMA_DESCRIPTOR *wait_desc = dma_tx_desc;
+
+	/* Every descriptor of a multi-buffer frame must be free, not just the first. */
+	for (size_t k = 0; k < DIV_ROUND_UP(total_len, ETH_TX_BUF_SIZE); k++) {
+		while (1) {
+			(void)sys_cache_data_invd_range(wait_desc, sizeof(*wait_desc));
+			if (IS_ETH_DMATXDESC_OWN(wait_desc) == 0) {
+				break;
+			}
+			if (k_uptime_get() > tx_deadline) {
+				LOG_ERR("TX descriptor %p still owned by DMA", wait_desc);
+				res = -EIO;
+				goto error;
+			}
+			k_yield();
+		}
+		wait_desc = (struct ETH_DMA_DESCRIPTOR *)wait_desc->Buffer2NextDescAddr;
 	}
 
 	dma_buffer = (uint8_t *)(dma_tx_desc->Buffer1Addr);
@@ -402,6 +434,7 @@ static int eth_tx(const struct device *dev, struct net_pkt *pkt)
 		res = -ENOBUFS;
 		goto error;
 	}
+	(void)sys_cache_data_flush_range(dma_buffer, total_len);
 
 
 	hal_ret = ETH_TransmitFrame(heth, total_len);
@@ -472,6 +505,7 @@ static struct net_pkt *eth_rx(const struct device *dev, uint16_t *vlan_tag)
 		LOG_ERR("Failed to obtain RX buffer");
 		goto release_desc;
 	}
+	(void)sys_cache_data_invd_range(dma_buffer, total_len);
 
 	if (net_pkt_write(pkt, dma_buffer, total_len)) {
 		LOG_ERR("Failed to append RX buffer to context buffer");
@@ -488,6 +522,7 @@ release_desc:
 	/* Set Own bit in Rx descriptors: gives the buffers back to DMA */
 	for (int i = 0; i < heth->RxFrameInfos.SegCount; i++) {
 		dma_rx_desc->Status |= ETH_DMARXDESC_OWN;
+		(void)sys_cache_data_flush_range(dma_rx_desc, sizeof(*dma_rx_desc));
 		dma_rx_desc = (struct ETH_DMA_DESCRIPTOR *)
 			(dma_rx_desc->Buffer2NextDescAddr);
 	}
@@ -884,6 +919,8 @@ enum ETH_RET_STATUS ETH_DMATxDescListInit(struct ETH_HANDLE_TYPE *heth,
 			dmatxdesc->Buffer2NextDescAddr = (uint32_t) DMATxDescTab;
 		}
 	}
+	(void)sys_cache_data_flush_range(DMATxDescTab,
+					 sizeof(*DMATxDescTab) * TxBuffCount);
 	/* Set Transmit Descriptor List Address Register */
 	emac_regs->DMATDLAR = (uint32_t) DMATxDescTab;
 
@@ -946,6 +983,9 @@ enum ETH_RET_STATUS ETH_DMARxDescListInit(struct ETH_HANDLE_TYPE *heth,
 			DMARxDesc->Buffer2NextDescAddr = (uint32_t)(DMARxDescTab);
 		}
 	}
+	(void)sys_cache_data_invd_range(RxBuff, ETH_RX_BUF_SIZE * RxBuffCount);
+	(void)sys_cache_data_flush_range(DMARxDescTab,
+					 sizeof(*DMARxDescTab) * RxBuffCount);
 
 	/* Set Receive Descriptor List Address Register */
 	emac_regs->DMARDLAR = (uint32_t) DMARxDescTab;

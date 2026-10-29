@@ -14,7 +14,8 @@
 #if defined(CONFIG_ETH_SHELL)
 #define ETH_MAX_PACKET_SIZE    ((uint32_t)2048U)
 #else
-#define ETH_MAX_PACKET_SIZE    ((uint32_t)1524U)
+/* Multiple of the 32-byte D-cache line so each DMA buffer row is line-aligned. */
+#define ETH_MAX_PACKET_SIZE    ((uint32_t)1536U)
 #endif
 
 /* DP83848: 0x01,   IP101A: 0x01 */
