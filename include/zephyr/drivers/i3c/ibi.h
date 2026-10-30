@@ -215,6 +215,30 @@ int i3c_ibi_work_enqueue_controller_request(struct i3c_device_desc *target);
 int i3c_ibi_work_enqueue_hotjoin(const struct device *dev);
 
 /**
+ * @brief Hot-Join callback, called after the controller has run DAA for a Hot-Join request.
+ *
+ * @param dev Pointer to the I3C controller device.
+ * @param user_data Pointer passed when the callback was registered.
+ */
+typedef void (*i3c_hj_callback_t)(const struct device *dev, void *user_data);
+
+/**
+ * @brief Register a callback run after the DAA triggered by a Hot-Join request.
+ *
+ * The callback runs in the IBI workqueue once the new addresses are assigned.
+ * Pass NULL to unregister.
+ *
+ * @param dev Pointer to controller device driver instance.
+ * @param cb Callback function, or NULL.
+ * @param user_data Pointer handed back to the callback.
+ *
+ * @retval 0 If successful.
+ * @retval -ENOMEM If no free slot is left for another controller.
+ */
+int i3c_ibi_hotjoin_callback_register(const struct device *dev, i3c_hj_callback_t cb,
+				      void *user_data);
+
+/**
  * @brief Queue a generic callback for future processing.
  *
  * This queues up a generic callback in the IBI workqueue

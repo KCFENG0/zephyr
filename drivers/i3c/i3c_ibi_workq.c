@@ -167,6 +167,41 @@ out:
 	return ret;
 }
 
+#define I3C_HJ_CB_MAX 8
+
+static struct {
+	const struct device *dev;
+	i3c_hj_callback_t cb;
+	void *user_data;
+} i3c_hj_cbs[I3C_HJ_CB_MAX];
+
+int i3c_ibi_hotjoin_callback_register(const struct device *dev, i3c_hj_callback_t cb,
+				      void *user_data)
+{
+	int free_slot = -1;
+
+	for (int i = 0; i < I3C_HJ_CB_MAX; i++) {
+		if (i3c_hj_cbs[i].dev == dev) {
+			i3c_hj_cbs[i].cb = cb;
+			i3c_hj_cbs[i].user_data = user_data;
+			return 0;
+		}
+		if ((free_slot < 0) && (i3c_hj_cbs[i].dev == NULL)) {
+			free_slot = i;
+		}
+	}
+
+	if (free_slot < 0) {
+		return -ENOMEM;
+	}
+
+	i3c_hj_cbs[free_slot].dev = dev;
+	i3c_hj_cbs[free_slot].cb = cb;
+	i3c_hj_cbs[free_slot].user_data = user_data;
+
+	return 0;
+}
+
 static void i3c_ibi_work_handler(struct k_work *work)
 {
 	struct i3c_ibi_work *ibi_node = CONTAINER_OF(work, struct i3c_ibi_work, work);
@@ -216,6 +251,11 @@ static void i3c_ibi_work_handler(struct k_work *work)
 			}
 		}
 #endif /* CONFIG_I3C_TARGET */
+		for (int i = 0; i < I3C_HJ_CB_MAX; i++) {
+			if ((i3c_hj_cbs[i].dev == ibi_node->controller) && i3c_hj_cbs[i].cb) {
+				i3c_hj_cbs[i].cb(ibi_node->controller, i3c_hj_cbs[i].user_data);
+			}
+		}
 		break;
 
 	case I3C_IBI_WORKQUEUE_CB:
