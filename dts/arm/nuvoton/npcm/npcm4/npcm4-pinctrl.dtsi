@@ -264,6 +264,15 @@
 		};
 	};
 
+	/omit-if-no-ref/ cr_uart3_sin_sout_gpioc0_c1: periph-cr-uart3 {
+		sin {
+			pinmux = <GPIOC0__CR_SIN3__SINC 1>;
+		};
+		sout {
+			pinmux = <GPIOC1__CR_SOUT3__SOUTC 1>;
+		};
+	};
+
 	/* ADC peripheral interfaces */
 	/omit-if-no-ref/ adc_vin1_gpio93: periph-adc-vin1 {
 		vin {
