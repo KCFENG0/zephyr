@@ -538,10 +538,20 @@ static int npcm_i3c_xfer_write_fifo(struct i3c_reg *i3c_inst, uint8_t *buf, size
  */
 static int npcm_i3c_xfer_read_fifo(struct i3c_reg *i3c_inst, uint8_t *buf, size_t rd_sz)
 {
+	uint32_t start = k_cycle_get_32();
 	bool is_done = false;
 	int offset = 0;
 
 	while (is_done == false) {
+		/*
+		 * MCONFIG.DISTO is set, so a read stalled on a full RX FIFO
+		 * never raises MERRWARN.TIMEOUT. Bound the loop in software.
+		 */
+		if (k_cyc_to_us_floor32(k_cycle_get_32() - start) > I3C_DMA_DONE_TIMEOUT_US) {
+			LOG_ERR("read fifo timed out, %d of %zu bytes", offset, rd_sz);
+			return -ETIMEDOUT;
+		}
+
 		/* Check message is terminated */
 		if (i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE) {
 			is_done = true;
@@ -1972,9 +1982,12 @@ static int npcm_i3c_transfer(const struct device *dev, struct i3c_device_desc *t
 		npcm_i3c_request_emit_stop(i3c_inst);
 	}
 
-	/* If SCL timeout occurred, attempt full bus recovery */
-	if (i3c_inst->MERRWARN & NPCM_I3C_MERRWARN_TIMEOUT) {
-		LOG_WRN("SCL timeout detected, recovering bus");
+	/*
+	 * If the bus stalled, attempt full bus recovery. MCONFIG.DISTO is set,
+	 * so a stall shows up as a software -ETIMEDOUT, not MERRWARN.TIMEOUT.
+	 */
+	if ((ret == -ETIMEDOUT) || (i3c_inst->MERRWARN & NPCM_I3C_MERRWARN_TIMEOUT)) {
+		LOG_WRN("Transfer timed out, recovering bus");
 		npcm_i3c_recover_bus(dev);
 	}
 
@@ -3337,8 +3350,13 @@ static int npcm_i3c_controller_init(const struct device *dev, uint8_t mode)
 
 	/* Enable open-drain stop */
 	i3c_inst->MCONFIG |= NPCM_I3C_MCONFIG_ODSTOP;
-	/* Enable timeout */
-	i3c_inst->MCONFIG &= ~NPCM_I3C_MCONFIG_DISTO;
+	/*
+	 * Disable the 100 us stall timeout, as the v2.6 driver does: the
+	 * COMPLETE-to-STOP gap and the IBI ACK decision run with interrupts
+	 * enabled and can exceed it under load. Every wait in this driver has
+	 * its own software timeout instead.
+	 */
+	i3c_inst->MCONFIG |= NPCM_I3C_MCONFIG_DISTO;
 	/* Flush tx and tx FIFO buffer */
 	npcm_i3c_controller_fifo_flush(i3c_inst);
 
@@ -3755,9 +3773,12 @@ out_xfer_i2c_stop_unlock:
 		npcm_i3c_request_emit_stop(i3c_inst);
 	}
 
-	/* If SCL timeout occurred, attempt full bus recovery */
-	if (i3c_inst->MERRWARN & NPCM_I3C_MERRWARN_TIMEOUT) {
-		LOG_WRN("SCL timeout detected, recovering bus");
+	/*
+	 * If the bus stalled, attempt full bus recovery. MCONFIG.DISTO is set,
+	 * so a stall shows up as a software -ETIMEDOUT, not MERRWARN.TIMEOUT.
+	 */
+	if ((ret == -ETIMEDOUT) || (i3c_inst->MERRWARN & NPCM_I3C_MERRWARN_TIMEOUT)) {
+		LOG_WRN("Transfer timed out, recovering bus");
 		npcm_i3c_recover_bus(dev);
 	}
 
