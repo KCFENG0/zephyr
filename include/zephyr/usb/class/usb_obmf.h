@@ -16,6 +16,12 @@ extern "C" {
 
 struct obmf_ops {
 	void (*read)(const struct device *dev, uint32_t len, uint8_t *data);
+	/*
+	 * Optional. Bytes the application can still accept in read(). When a
+	 * Bulk OUT packet does not fit, it is left in the endpoint FIFO (the
+	 * endpoint keeps NAKing) until obmf_usb_rx_resume() is called.
+	 */
+	uint32_t (*rx_space)(const struct device *dev);
 #if CONFIG_OBMF_INTERRUPT_OUT_EP_SUPPORT
 	void (*int_read)(const struct device *dev, uint32_t len, uint8_t *data);
 #endif
@@ -43,6 +49,9 @@ struct obmf_ops {
 
 void usb_obmf_register_device(const struct device *dev,
 			      const struct obmf_ops *ops);
+
+/* Call after rx_space() grew, to receive a Bulk OUT packet left pending */
+void obmf_usb_rx_resume(const struct device *dev);
 
 int obmf_usb_ep_write(const struct device *dev, const uint8_t *data,
 		      uint32_t data_len, uint32_t *bytes_ret);

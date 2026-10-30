@@ -6,6 +6,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <zephyr/kernel.h>
 #include <zephyr/init.h>
 #include <string.h>
 #include <zephyr/sys/byteorder.h>
@@ -198,31 +199,82 @@ void usb_obmf_register_device(const struct device *dev, const struct obmf_ops *o
 		&usb_obmf_devlist);
 }
 
-static void obmf_out_cb(uint8_t ep, enum usb_dc_ep_cb_status_code ep_status)
+/*
+ * A Bulk OUT packet is left in the endpoint FIFO, with the endpoint NAKing,
+ * while the application has no room for it. The host controller then retries
+ * the transfer on its own, so no data is lost. obmf_usb_rx_resume() restarts
+ * the read once the application has freed space.
+ */
+static bool obmf_out_pending;
+static uint8_t obmf_out_pending_ep;
+static struct k_work_delayable obmf_out_resume_work;
+
+static void obmf_out_drain(uint8_t ep)
 {
 	struct obmf_device_info *dev_data;
 	struct usb_dev_data *common;
 	uint32_t bytes_to_read;
+	unsigned int key = irq_lock();
 
 	common = usb_get_dev_data_by_ep(&usb_obmf_devlist, ep);
 	if (common == NULL) {
+		irq_unlock(key);
 		LOG_WRN("Device data not found for endpoint %u", ep);
 		return;
 	}
 
 	dev_data = CONTAINER_OF(common, struct obmf_device_info, common);
 
-	if (ep_status != USB_DC_EP_DATA_OUT || dev_data->ops == NULL ||
-	    dev_data->ops->read == NULL) {
+	if (dev_data->ops == NULL || dev_data->ops->read == NULL) {
+		irq_unlock(key);
 		return;
 	}
 
 	usb_read(ep, NULL, 0, &bytes_to_read);
 	LOG_DBG("ep 0x%x, bytes to read %d ", ep, bytes_to_read);
 
-	usb_read(ep, obmf_buf, bytes_to_read, NULL);
+	if (dev_data->ops->rx_space != NULL &&
+	    dev_data->ops->rx_space(common->dev) < bytes_to_read) {
+		/* Not reading the packet keeps the endpoint NAKing */
+		obmf_out_pending = true;
+		obmf_out_pending_ep = ep;
+		/* Also poll, in case the application has nothing left to wake us */
+		k_work_schedule(&obmf_out_resume_work, K_MSEC(1));
+		irq_unlock(key);
+		return;
+	}
 
+	obmf_out_pending = false;
+	usb_read(ep, obmf_buf, bytes_to_read, NULL);
 	dev_data->ops->read(common->dev, bytes_to_read, obmf_buf);
+	irq_unlock(key);
+}
+
+static void obmf_out_resume_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	if (obmf_out_pending) {
+		obmf_out_drain(obmf_out_pending_ep);
+	}
+}
+
+void obmf_usb_rx_resume(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	if (obmf_out_pending) {
+		k_work_reschedule(&obmf_out_resume_work, K_NO_WAIT);
+	}
+}
+
+static void obmf_out_cb(uint8_t ep, enum usb_dc_ep_cb_status_code ep_status)
+{
+	if (ep_status != USB_DC_EP_DATA_OUT) {
+		return;
+	}
+
+	obmf_out_drain(ep);
 }
 
 int obmf_usb_ep_write(const struct device *dev, const uint8_t *data,
@@ -236,6 +288,8 @@ int obmf_usb_ep_write(const struct device *dev, const uint8_t *data,
 				(uint8_t *)data, data_len, USB_TRANS_WRITE);
 	if (ret != data_len) {
 		LOG_ERR("Transfer failure");
+		/* The host stopped polling: drop the packet left in the FIFO */
+		usb_dc_ep_flush(cfg->endpoint[0].ep_addr);
 		return -EINVAL;
 	}
 
@@ -366,6 +420,7 @@ static void obmf_status_cb(struct usb_cfg_data *cfg,
 		 */
 		LOG_WRN("USB reset: clearing OBMF USB-layer RX buffer");
 		memset(obmf_buf, 0, sizeof(obmf_buf));
+		obmf_out_pending = false;
 		if (dev_data && dev_data->ops && dev_data->ops->bus_reset) {
 			dev_data->ops->bus_reset(common->dev);
 		}
@@ -377,6 +432,7 @@ static void obmf_status_cb(struct usb_cfg_data *cfg,
 		 */
 		LOG_WRN("USB disconnected: clearing OBMF USB-layer RX buffer");
 		memset(obmf_buf, 0, sizeof(obmf_buf));
+		obmf_out_pending = false;
 		if (dev_data && dev_data->ops && dev_data->ops->bus_reset) {
 			dev_data->ops->bus_reset(common->dev);
 		}
@@ -390,6 +446,8 @@ static void obmf_status_cb(struct usb_cfg_data *cfg,
 		 */
 		LOG_WRN("Endpoint halt cleared: flushing OBMF state");
 		memset(obmf_buf, 0, sizeof(obmf_buf));
+
+		obmf_out_pending = false;
 		if (dev_data && dev_data->ops && dev_data->ops->bus_reset) {
 			dev_data->ops->bus_reset(common->dev);
 		}
@@ -461,6 +519,7 @@ static void obmf_interface_config(struct usb_desc_header *head,
 
 static int usb_obmf_device_init(const struct device *dev)
 {
+	k_work_init_delayable(&obmf_out_resume_work, obmf_out_resume_handler);
 	LOG_INF("Init OBMF USB Device: dev %p (%s)", dev, dev->name);
 	return 0;
 }
