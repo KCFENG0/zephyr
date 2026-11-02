@@ -32,6 +32,7 @@ LOG_MODULE_REGISTER(npcm_i3c, CONFIG_I3C_LOG_LEVEL);
 #define I2CBAUD_DIV_MAX          0xF
 #define DAA_TGT_INFO_SZ          0x8         /* 8 bytes = PID(6) + BCR(1) + DCR(1) */
 #define I3C_DMA_DONE_TIMEOUT_US  100000      /* Maximum time for a DMA message to COMPLETE */
+#define I3C_CTRL_LOCKED_WAIT_US  2000        /* COMPLETE wait with interrupts locked */
 #define I3C_STATUS_CLR_MASK                                                                        \
 	(NPCM_I3C_MSTATUS_SLVSTART | NPCM_I3C_MSTATUS_MCTRLDONE | NPCM_I3C_MSTATUS_COMPLETE |      \
 	 NPCM_I3C_MSTATUS_IBIWON | NPCM_I3C_MSTATUS_NOWCNTLR)
@@ -668,7 +669,8 @@ static int npcm_i3c_pdma_dsct(const struct device *dev, bool is_rx,
 }
 
 /*
- * Busy-wait for MSTATUS.COMPLETE at the end of a controller DMA message.
+ * Busy-wait for MSTATUS.COMPLETE at the end of a controller DMA message and,
+ * if requested, emit STOP right after it.
  *
  * Once COMPLETE is set the controller holds the bus until it is told to emit
  * STOP or a repeated START, and that wait counts toward the 100 us
@@ -676,10 +678,36 @@ static int npcm_i3c_pdma_dsct(const struct device *dev, bool is_rx,
  * of the same priority run before the caller can end the message, so poll
  * instead, as the FIFO path does.
  */
-static int npcm_i3c_ctrl_wait_completion(struct i3c_reg *i3c_inst)
+static int npcm_i3c_ctrl_wait_completion(struct i3c_reg *i3c_inst, bool emit_stop)
 {
-	if (WAIT_FOR(i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE, I3C_DMA_DONE_TIMEOUT_US,
-		     NULL) == false) {
+	unsigned int key;
+	bool done;
+
+	/*
+	 * Polling alone is not enough: an ISR or a higher priority thread that
+	 * runs between COMPLETE and the STOP request still stalls the bus past
+	 * 100 us, the controller aborts the message with MERRWARN.TIMEOUT and the
+	 * target flags SPAR. Poll and end the message with interrupts locked; a
+	 * full-size message at the slowest configured rate finishes well within
+	 * the locked budget, so it only bounds the latency on a stuck bus.
+	 */
+	key = irq_lock();
+	done = WAIT_FOR(i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE, I3C_CTRL_LOCKED_WAIT_US,
+			NULL);
+	if (done && emit_stop) {
+		npcm_i3c_request_emit_stop(i3c_inst);
+	}
+	irq_unlock(key);
+
+	if (!done) {
+		done = WAIT_FOR(i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE,
+				I3C_DMA_DONE_TIMEOUT_US, NULL);
+		if (emit_stop) {
+			npcm_i3c_request_emit_stop(i3c_inst);
+		}
+	}
+
+	if (!done) {
 		return -ETIMEDOUT;
 	}
 
@@ -1353,10 +1381,11 @@ static int npcm_i3c_ctlr_xfer_read_fifo_dma(const struct device *dev, uint8_t ad
 			LOG_ERR("i3c wait dma completion timeout");
 		}
 	} else {
-		ret = npcm_i3c_ctrl_wait_completion(i3c_inst);
+		ret = npcm_i3c_ctrl_wait_completion(i3c_inst, emit_stop);
 		if (ret) {
 			LOG_ERR("i3c wait completion timeout");
 		}
+		emit_stop = false;
 	}
 
 	/* End the message first: the bus is stalled until STOP is emitted */
@@ -1448,10 +1477,11 @@ static int npcm_i3c_ctlr_xfer_write_fifo_dma(const struct device *dev, uint8_t a
 			LOG_ERR("i3c wait dma completion timeout");
 		}
 	} else {
-		ret = npcm_i3c_ctrl_wait_completion(i3c_inst);
+		ret = npcm_i3c_ctrl_wait_completion(i3c_inst, emit_stop);
 		if (ret) {
 			LOG_ERR("i3c wait completion timeout");
 		}
+		emit_stop = false;
 	}
 
 	/* End the message first: the bus is stalled until STOP is emitted */
