@@ -2060,8 +2060,36 @@ static int npcm_i3c_do_daa(const struct device *dev)
 			break;
 		}
 
+		/*
+		 * MCTRLDONE only means the request was accepted. Wait until a
+		 * target has shifted out its PID/BCR/DCR (controller pauses
+		 * BETWEEN) or the DAA has finished, before reading the FIFO.
+		 */
+		if (WAIT_FOR(((i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_BETWEEN) &&
+			      (NPCM_GET_REG_FIELD(i3c_inst->MDATACTRL,
+						  NPCM_I3C_MDATACTRL_RXCOUNT) >=
+			       DAA_TGT_INFO_SZ)) ||
+			     (i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE) ||
+			     npcm_i3c_has_error(i3c_inst),
+			     I3C_CHK_TIMEOUT_US, NULL) == false) {
+			ret = -ETIMEDOUT;
+			LOG_ERR("DAA wait target info timeout");
+			break;
+		}
+
+		if (npcm_i3c_has_error(i3c_inst)) {
+			ret = -EIO;
+			LOG_ERR("DAA recv error");
+			break;
+		}
+
 		/* Receive Provisioned ID, BCR and DCR (total 8 bytes) */
 		rx_count = NPCM_GET_REG_FIELD(i3c_inst->MDATACTRL, NPCM_I3C_MDATACTRL_RXCOUNT);
+
+		if ((rx_count == 0) && (i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE)) {
+			/* No (more) target requested an address: DAA done */
+			break;
+		}
 
 		if (rx_count == DAA_TGT_INFO_SZ) {
 			for (int i = 0; i < rx_count; i++) {
@@ -2183,8 +2211,8 @@ static int npcm_i3c_do_daa(const struct device *dev)
 		 npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_IDLE);
 
 out_do_daa:
-	/* Exit DAA mode when error occurs */
-	if (ret != 0) {
+	/* Exit DAA mode on error, or if the controller still holds the bus */
+	if ((ret != 0) || (npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_IDLE)) {
 		npcm_i3c_request_emit_stop(i3c_inst);
 	}
 
