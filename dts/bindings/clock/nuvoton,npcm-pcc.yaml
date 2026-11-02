@@ -256,5 +256,16 @@ properties:
       - 2
       - 4
 
+  css-prescaler:
+    type: int
+    default: 1
+    description: |
+      NPCM5 only. Caliptra Sub-System fast clock prescaler (CSSDIV in HFCBCD2). It
+      sets CSS_FCLK by dividing OFMCLK; CSS_FCLK can be up to 50 MHz.
+    enum:
+      - 1
+      - 2
+      - 4
+
 clock-cells:
   - clk_cfg

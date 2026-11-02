@@ -66,6 +66,8 @@ struct cdcg_reg {
 #define M7DIV_VAL   (DT_PROP(NPCM_NODE_PCC_LABEL, m7_prescaler) - 1)
 /* MRAM clock divider (NPCM5) */
 #define MRAMDIV_VAL (DT_PROP(NPCM_NODE_PCC_LABEL, mram_prescaler) - 1)
+/* Caliptra Sub-System fast clock divider (NPCM5) */
+#define CSSDIV_VAL  (DT_PROP(NPCM_NODE_PCC_LABEL, css_prescaler) - 1)
 
 /* Core domain clock */
 #define CORE_CLK           (OFMCLK / DT_PROP(NPCM_NODE_PCC_LABEL, core_prescaler))

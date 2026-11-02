@@ -176,6 +176,7 @@ BUILD_ASSERT(NPCM_APB_CLOCK(3) <= MHZ(100), "APB3_CLK exceeds 100 MHz");
 BUILD_ASSERT(MCLK / (M7DIV_VAL + 1) <= MHZ(400), "M7_FCLK exceeds 400 MHz");
 BUILD_ASSERT(MCLK / (MRAMDIV_VAL + 1) <= MIN(MCLK / 2, MHZ(200)),
 	     "MRAM_CLK exceeds MCLK / 2 or 200 MHz");
+BUILD_ASSERT(OFMCLK / (CSSDIV_VAL + 1) <= MHZ(50), "CSS_FCLK exceeds 50 MHz");
 #endif
 
 #ifndef CONFIG_CLOCK_CONTROL_NPCM_FPGA
@@ -186,7 +187,7 @@ static void npcm_hfcg_set_dividers(struct cdcg_reg *priv)
 	priv->hfcgp = (FPRED_VAL << 4) | (I3C_TC_DIV_VAL << 2) | AHB6DIV_VAL;
 	priv->hfcbcd = APB1DIV_VAL | (APB2DIV_VAL << 4);
 	priv->hfcbcd1 = (FIUDIV_VAL << 4) | APB3DIV_VAL;
-	priv->hfcbcd2 = (MRAMDIV_VAL << 2) | M7DIV_VAL;
+	priv->hfcbcd2 = (CSSDIV_VAL << 4) | (MRAMDIV_VAL << 2) | M7DIV_VAL;
 #else
 	priv->hfcgp = (FPRED_VAL << 4) | AHB6DIV_VAL;
 	priv->hfcbcd = APB1DIV_VAL | (APB2DIV_VAL << 4);

@@ -32,6 +32,7 @@
 			i3c-tc-prescaler = <1>; /* I3C_TC_CLK runs at 96MHz */
 			m7-prescaler = <1>; /* M7_FCLK runs at 96MHz */
 			mram-prescaler = <2>; /* MRAM_CLK runs at 48MHz */
+			css-prescaler = <2>; /* CSS_FCLK runs at 48MHz */
 		};
 
 		timer_systick: timer-systick@400b0000 {
