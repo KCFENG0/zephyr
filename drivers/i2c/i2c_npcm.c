@@ -925,6 +925,20 @@ static void i2c_npcm_isr(const struct device *dev)
 		i2c_npcm_ctrl_isr(dev);
 	} else {
 		if (data->target_oper_state == I2C_NPCM_OPER_STA_IDLE) {
+			/*
+			 * No target is being served, but general call / ARP
+			 * matching can still address the module. SDAST is only
+			 * cleared by an SMBnSDA access, so service it here or
+			 * the interrupt fires forever and the bus stays held.
+			 */
+			if (inst->SMBnST & BIT(NPCM_SMBnST_SDAST)) {
+				if (inst->SMBnST & BIT(NPCM_SMBnST_XMIT)) {
+					inst->SMBnSDA = 0xFF;
+				} else {
+					i2c_npcm_nack(dev);
+					(void)inst->SMBnSDA;
+				}
+			}
 			/* clear all interrupt status */
 			inst->SMBnST = 0xFF;
 		} else {
