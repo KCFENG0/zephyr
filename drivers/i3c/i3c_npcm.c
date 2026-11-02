@@ -2974,6 +2974,21 @@ static inline void npcm_i3c_target_STOP_handler(const struct device *dev)
 		if (!data->tx_valid) {
 			npcm_i3c_target_dma_off(dev, false);
 		}
+	} else if ((data->target_config != NULL) &&
+		   ((npcm_i3c_pdma_remain_count(dev, true) < I3C_RX_PREARM_SIZE) ||
+		    NPCM_GET_REG_FIELD(i3c_inst->DATACTRL, NPCM_I3C_DATACTRL_RXCOUNT))) {
+		/*
+		 * A short private write can complete before the ISR runs, so
+		 * STREQWR is already clear when MATCHED is serviced and the
+		 * state never left IDLE. The pre-armed RX DMA still captured
+		 * the payload; deliver it as a write.
+		 */
+		if ((target_cb != NULL) && (target_cb->write_requested_cb != NULL)) {
+			target_cb->write_requested_cb(data->target_config);
+		}
+		if (npcm_i3c_target_xfer_end_handle_dma(dev, I3C_OP_STATE_WR) != 0) {
+			LOG_ERR("late write handle failed after stop");
+		}
 	} else {
 		/* Check RXPEND */
 		if ((i3c_inst->STATUS & NPCM_I3C_STATUS_RXPEND) && !(data->tx_valid)) {
