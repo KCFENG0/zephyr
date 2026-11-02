@@ -592,9 +592,20 @@ static void i2c_npcm_target_isr(const struct device *dev)
 			i = I2C_SLAVE_ADDR_10;
 
 		data->match_addr_no = i;
-		target_cb = data->target_cfg[data->match_addr_no]->callbacks;
 
-		if (inst->SMBnST & BIT(NPCM_SMBnST_XMIT)) {
+		if (!data->target_cfg[i]) {
+			/*
+			 * The target was unregistered (possibly from one of its
+			 * own callbacks) while a match was pending: don't serve it.
+			 */
+			if (inst->SMBnST & BIT(NPCM_SMBnST_XMIT)) {
+				data->target_oper_state = I2C_NPCM_OPER_STA_QUICK;
+			} else {
+				data->target_oper_state = I2C_NPCM_OPER_STA_IDLE;
+				i2c_npcm_nack(dev);
+			}
+		} else if (inst->SMBnST & BIT(NPCM_SMBnST_XMIT)) {
+			target_cb = data->target_cfg[i]->callbacks;
 			/* target received Read-Address */
 			if (data->target_oper_state != I2C_NPCM_OPER_STA_START) {
 				/* target received data before */
@@ -632,6 +643,7 @@ static void i2c_npcm_target_isr(const struct device *dev)
 				data->target_oper_state = I2C_NPCM_OPER_STA_QUICK;
 			}
 		} else {
+			target_cb = data->target_cfg[i]->callbacks;
 			/* target received Write-Address */
 			data->target_oper_state = I2C_NPCM_OPER_STA_READ;
 			/* Set DMA register to get data */
@@ -647,9 +659,17 @@ static void i2c_npcm_target_isr(const struct device *dev)
 	/* SDA status is set - transmit or receive       */
 	/* --------------------------------------------- */
 	if (inst->SMBnST & BIT(NPCM_SMBnST_SDAST)) {
-		const struct i2c_target_callbacks *target_cb =
-			data->target_cfg[data->match_addr_no]->callbacks;
-		if (data->target_oper_state == I2C_NPCM_OPER_STA_READ) {
+		struct i2c_target_config *cfg = data->target_cfg[data->match_addr_no];
+		const struct i2c_target_callbacks *target_cb = cfg ? cfg->callbacks : NULL;
+
+		if (!target_cb) {
+			/* No registered target: drain or pad the byte */
+			if (inst->SMBnST & BIT(NPCM_SMBnST_XMIT)) {
+				inst->SMBnSDA = 0xFF;
+			} else {
+				overflow_data = inst->SMBnSDA;
+			}
+		} else if (data->target_oper_state == I2C_NPCM_OPER_STA_READ) {
 			/* Over Flow */
 			overflow_data = inst->SMBnSDA;
 			sys_cache_data_invd_range(data->rx_buf, sizeof(data->rx_buf));
@@ -673,9 +693,12 @@ static void i2c_npcm_target_isr(const struct device *dev)
 	/* Target STOP occurred                           */
 	/* --------------------------------------------- */
 	if (inst->SMBnST & BIT(NPCM_SMBnST_SLVSTP)) {
-		const struct i2c_target_callbacks *target_cb =
-			data->target_cfg[data->match_addr_no]->callbacks;
-		if (data->target_oper_state == I2C_NPCM_OPER_STA_READ) {
+		struct i2c_target_config *cfg = data->target_cfg[data->match_addr_no];
+		const struct i2c_target_callbacks *target_cb = cfg ? cfg->callbacks : NULL;
+
+		if (!target_cb) {
+			data->target_oper_state = I2C_NPCM_OPER_STA_IDLE;
+		} else if (data->target_oper_state == I2C_NPCM_OPER_STA_READ) {
 			sys_cache_data_invd_range(data->rx_buf, sizeof(data->rx_buf));
 			len = 0;
 			while (len < i2c_npcm_get_dma_cnt(dev)) {
