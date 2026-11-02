@@ -432,6 +432,14 @@ static int npcm_i3c_recover_bus(const struct device *dev)
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 
 	/*
+	 * An IBI left waiting for a manual ACK/NACK keeps the controller in
+	 * IBIACK forever; NACK it so the target retries later.
+	 */
+	if (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IBIACK) {
+		npcm_i3c_ibi_respond_nack(i3c_inst);
+	}
+
+	/*
 	 * If the controller is in NORMACT state, tells it to emit STOP
 	 * so it can return to IDLE, or is ready to clear any pending
 	 * target initiated IBIs.
@@ -441,14 +449,22 @@ static int npcm_i3c_recover_bus(const struct device *dev)
 	};
 
 	/* Exhaust all target initiated IBI (bounded to prevent infinite loop) */
-	for (int ibi_tries = 0; ibi_tries < 10 && (i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_SLVSTART);
+	for (int ibi_tries = 0;
+	     ibi_tries < 10 && ((i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_SLVSTART) ||
+				(npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_TGTREQ));
 	     ibi_tries++) {
 		/* Tell the controller to perform auto IBI. */
 		npcm_i3c_request_auto_ibi(i3c_inst);
 
-		if (WAIT_FOR(i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE, I3C_CHK_TIMEOUT_US,
-			     NULL) == false) {
+		if (WAIT_FOR((i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE) ||
+			     (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IBIACK),
+			     I3C_CHK_TIMEOUT_US, NULL) == false) {
 			break;
+		}
+
+		/* Hot-Join and unknown IBIs stop for a manual response */
+		if (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IBIACK) {
+			npcm_i3c_ibi_respond_nack(i3c_inst);
 		}
 
 		/* Once auto IBI is done, discard bytes in FIFO. */
@@ -483,6 +499,35 @@ static inline void npcm_i3c_xfer_reset(struct i3c_reg *i3c_inst)
 	npcm_i3c_status_clear_all(i3c_inst);
 	npcm_i3c_errwarn_clear_all(i3c_inst);
 	npcm_i3c_controller_fifo_flush(i3c_inst);
+}
+
+/*
+ * Wait for the controller to be IDLE before starting a transfer. If an IBI
+ * was not serviced in time (for example a Hot-Join left in IBIACK), recover
+ * the bus instead of failing every later transfer.
+ */
+static bool npcm_i3c_wait_idle(const struct device *dev)
+{
+	struct npcm_i3c_data *data = dev->data;
+	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
+
+	if (WAIT_FOR((npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IDLE),
+		     I3C_CHK_TIMEOUT_US, NULL)) {
+		return true;
+	}
+
+	/* Don't race the IBI work if it is still servicing the request */
+	if (k_sem_take(&data->ibi_lock_sem, K_MSEC(10)) == 0) {
+		if (npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_IDLE) {
+			LOG_WRN("bus not idle (state %d, MSTATUS %#x), recovering",
+				npcm_i3c_state_get(i3c_inst), i3c_inst->MSTATUS);
+			(void)npcm_i3c_recover_bus(dev);
+		}
+		k_sem_give(&data->ibi_lock_sem);
+	}
+
+	return WAIT_FOR((npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IDLE),
+			I3C_CHK_TIMEOUT_US, NULL);
 }
 
 /*
@@ -1886,8 +1931,7 @@ static int npcm_i3c_transfer(const struct device *dev, struct i3c_device_desc *t
 	npcm_i3c_mutex_lock(dev);
 
 	/* Check bus in idle state */
-	if (WAIT_FOR((npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IDLE),
-		     I3C_CHK_TIMEOUT_US, NULL) == false) {
+	if (!npcm_i3c_wait_idle(dev)) {
 		LOG_ERR("xfer state error: %d", npcm_i3c_state_get(i3c_inst));
 		npcm_i3c_mutex_unlock(dev);
 		return -ETIMEDOUT;
@@ -2032,8 +2076,7 @@ static int npcm_i3c_do_daa(const struct device *dev)
 	memset(rx_buf, 0xff, sizeof(rx_buf));
 
 	/* Check bus in idle state */
-	if (WAIT_FOR((npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IDLE),
-		     I3C_CHK_TIMEOUT_US, NULL) == false) {
+	if (!npcm_i3c_wait_idle(dev)) {
 		LOG_ERR("DAA state error: %d", npcm_i3c_state_get(i3c_inst));
 		npcm_i3c_mutex_unlock(dev);
 		return -ETIMEDOUT;
@@ -2258,6 +2301,13 @@ static int npcm_i3c_do_ccc(const struct device *dev, struct i3c_ccc_payload *pay
 
 	npcm_i3c_mutex_lock(dev);
 
+	if (!npcm_i3c_wait_idle(dev)) {
+		LOG_ERR("CCC[0x%02x] state error: %d", payload->ccc.id,
+			npcm_i3c_state_get(i3c_inst));
+		npcm_i3c_mutex_unlock(dev);
+		return -ETIMEDOUT;
+	}
+
 	/* Disable interrupt */
 	intmask = i3c_inst->MINTSET;
 	npcm_i3c_interrupt_all_disable(i3c_inst);
@@ -2392,9 +2442,14 @@ static void npcm_i3c_ibi_work(struct k_work *work)
 	/* Use auto IBI to service the IBI */
 	npcm_i3c_request_auto_ibi(i3c_inst);
 
-	/* Wait for target to win address arbitration (ibitype and ibiaddr) */
-	if (WAIT_FOR(i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_IBIWON, I3C_CHK_TIMEOUT_US, NULL) ==
-	    false) {
+	/*
+	 * Wait for target to win address arbitration (ibitype and ibiaddr).
+	 * IBIWON is W1C and can be wiped by a status clear from another path,
+	 * so also accept the IBIACK state, which holds IBITYPE/IBIADDR too.
+	 */
+	if (WAIT_FOR((i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_IBIWON) ||
+		     (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IBIACK),
+		     I3C_CHK_TIMEOUT_US, NULL) == false) {
 		LOG_ERR("IBI work, IBIWON timeout");
 
 		goto out_ibi_work;
@@ -3786,8 +3841,7 @@ static int npcm_i3c_i2c_api_transfer(const struct device *dev, struct i2c_msg *m
 
 	npcm_i3c_mutex_lock(dev);
 
-	if (WAIT_FOR((npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IDLE),
-		     I3C_CHK_TIMEOUT_US, NULL) == false) {
+	if (!npcm_i3c_wait_idle(dev)) {
 		LOG_ERR("xfer state error: %d", npcm_i3c_state_get(i3c_inst));
 		npcm_i3c_mutex_unlock(dev);
 		return -ETIMEDOUT;
