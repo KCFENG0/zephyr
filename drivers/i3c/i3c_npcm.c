@@ -18,6 +18,7 @@ LOG_MODULE_REGISTER(npcm_i3c, CONFIG_I3C_LOG_LEVEL);
 
 /* I3C properties */
 #define I3C_CHK_TIMEOUT_US       10000 /* Timeout for checking register status */
+#define I3C_HJ_TIMEOUT_US        50000 /* Timeout for bus idle / Hot-Join acceptance */
 #define I3C_CLK_FREQ_20_MHZ      MHZ(20)
 #define I3C_CLK_FREQ_48_MHZ      MHZ(48)
 #define I3C_CLK_FREQ_96_MHZ      MHZ(96)
@@ -98,6 +99,8 @@ static void npcm_i3c_mutex_unlock(const struct device *dev)
 
 	k_mutex_unlock(&data->lock_mutex);
 }
+
+static int npcm_i3c_target_init(const struct device *dev);
 
 static void npcm_i3c_reset_module(const struct device *dev)
 {
@@ -2781,12 +2784,52 @@ static int npcm_i3c_target_ibi_raise(const struct device *dev, struct i3c_ibi *r
 			return -ENOTSUP;
 		}
 
-		k_sem_take(&data->target_event_lock_sem, K_FOREVER);
+		/* Already joined: nothing to request */
+		if (i3c_inst->DYNADDR & NPCM_I3C_DYNADDR_DAVALID) {
+			return 0;
+		}
+
+		/*
+		 * A Hot-Join may only be requested on an idle bus; otherwise the
+		 * IP can get stuck holding SDA and block the controller.
+		 */
+		if (!WAIT_FOR(!(i3c_inst->STATUS & NPCM_I3C_STATUS_STNOTSTOP),
+			      I3C_HJ_TIMEOUT_US, k_busy_wait(100))) {
+			return -EBUSY;
+		}
+
+		if (k_sem_take(&data->target_event_lock_sem, K_USEC(I3C_HJ_TIMEOUT_US)) != 0) {
+			return -EBUSY;
+		}
 		set_oper_state(dev, I3C_OP_STATE_IBI);
 
 		i3c_inst->CONFIG &= ~NPCM_I3C_CONFIG_SLVENA;
 		NPCM_SET_REG_FIELD(i3c_inst->CTRL, NPCM_I3C_CTRL_EVENT, NPCM_I3C_CTRL_EVENT_HJ);
 		i3c_inst->CONFIG |= NPCM_I3C_CONFIG_SLVENA;
+
+		/* Wait until the request is sent, or a DAA has assigned an address */
+		if (!WAIT_FOR((NPCM_GET_REG_FIELD(i3c_inst->CTRL, NPCM_I3C_CTRL_EVENT) ==
+			       NPCM_I3C_CTRL_EVENT_NORMAL) ||
+			      (i3c_inst->DYNADDR & NPCM_I3C_DYNADDR_DAVALID),
+			      I3C_HJ_TIMEOUT_US, k_busy_wait(100))) {
+			/*
+			 * Not accepted by any controller. A pending Hot-Join cannot be
+			 * withdrawn through CTRL, so reset and re-init the target to
+			 * release the bus; the controller's DAA will assign us later.
+			 */
+			npcm_i3c_reset_module(dev);
+			npcm_i3c_target_init(dev);
+			set_oper_state(dev, I3C_OP_STATE_IDLE);
+			k_sem_give(&data->target_event_lock_sem);
+			return -ETIMEDOUT;
+		}
+
+		/* Only an ACKed event releases the lock in the ISR */
+		if (NPCM_GET_REG_FIELD(i3c_inst->STATUS, NPCM_I3C_STATUS_EVDET) !=
+		    NPCM_I3C_STATUS_EVDET_REQ_SENT_ACKED) {
+			set_oper_state(dev, I3C_OP_STATE_IDLE);
+			k_sem_give(&data->target_event_lock_sem);
+		}
 		break;
 
 	default:
