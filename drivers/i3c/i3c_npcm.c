@@ -2310,7 +2310,9 @@ static int npcm_i3c_do_ccc(const struct device *dev, struct i3c_ccc_payload *pay
 	if (WAIT_FOR(i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE, I3C_CHK_TIMEOUT_US, NULL) ==
 	    false) {
 		ret = -ETIMEDOUT;
-		LOG_DBG("Check complete timeout");
+		LOG_ERR("CCC[0x%02x] complete timeout: MSTATUS %#x MERRWARN %#x MCONFIG %#x "
+			"MDATACTRL %#x", payload->ccc.id, i3c_inst->MSTATUS, i3c_inst->MERRWARN,
+			i3c_inst->MCONFIG, i3c_inst->MDATACTRL);
 		goto out_do_ccc;
 	}
 
