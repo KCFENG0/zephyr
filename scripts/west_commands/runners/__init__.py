@@ -45,6 +45,7 @@ _names = [
     'nrfjprog',
     'nrfutil',
     'nsim',
+    'npcm500_mcp',
     'nxp_s32dbg',
     'openocd',
     'pyocd',
