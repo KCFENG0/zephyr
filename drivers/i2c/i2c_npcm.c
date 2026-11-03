@@ -505,6 +505,32 @@ static void i2c_npcm_ctrl_isr(const struct device *dev)
 	}
 }
 
+static void i2c_npcm_target_stop(const struct device *dev)
+{
+	struct i2c_reg *const inst = I2C_INSTANCE(dev);
+	struct i2c_npcm_data *const data = dev->data;
+	struct i2c_target_config *cfg = data->target_cfg[data->match_addr_no];
+	const struct i2c_target_callbacks *target_cb = cfg ? cfg->callbacks : NULL;
+	uint16_t len;
+
+	if (!target_cb) {
+		data->target_oper_state = I2C_NPCM_OPER_STA_IDLE;
+	} else if (data->target_oper_state == I2C_NPCM_OPER_STA_READ) {
+		sys_cache_data_invd_range(data->rx_buf, sizeof(data->rx_buf));
+		len = 0;
+		while (len < i2c_npcm_get_dma_cnt(dev)) {
+			target_cb->write_received(cfg, data->rx_buf[len]);
+			len++;
+		}
+	}
+	if (data->target_oper_state != I2C_NPCM_OPER_STA_IDLE) {
+		target_cb->stop(cfg);
+	}
+	data->target_oper_state = I2C_NPCM_OPER_STA_START;
+	/* clear STOP flag */
+	inst->SMBnST = BIT(NPCM_SMBnST_SLVSTP);
+}
+
 static void i2c_npcm_target_isr(const struct device *dev)
 {
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
@@ -683,9 +709,12 @@ static void i2c_npcm_target_isr(const struct device *dev)
 			}
 			target_cb->write_received(data->target_cfg[data->match_addr_no], overflow_data);
 			data->target_oper_state = I2C_NPCM_OPER_STA_START;
-		} else {
+		} else if (inst->SMBnST & BIT(NPCM_SMBnST_XMIT)) {
 			/* No Enough DMA data to send */
 			inst->SMBnSDA = 0xFF;
+		} else {
+			/* SDAST in receive mode is only cleared by reading SMBnSDA */
+			overflow_data = inst->SMBnSDA;
 		}
 	}
 
@@ -693,25 +722,7 @@ static void i2c_npcm_target_isr(const struct device *dev)
 	/* Target STOP occurred                           */
 	/* --------------------------------------------- */
 	if (inst->SMBnST & BIT(NPCM_SMBnST_SLVSTP)) {
-		struct i2c_target_config *cfg = data->target_cfg[data->match_addr_no];
-		const struct i2c_target_callbacks *target_cb = cfg ? cfg->callbacks : NULL;
-
-		if (!target_cb) {
-			data->target_oper_state = I2C_NPCM_OPER_STA_IDLE;
-		} else if (data->target_oper_state == I2C_NPCM_OPER_STA_READ) {
-			sys_cache_data_invd_range(data->rx_buf, sizeof(data->rx_buf));
-			len = 0;
-			while (len < i2c_npcm_get_dma_cnt(dev)) {
-				target_cb->write_received(data->target_cfg[data->match_addr_no], data->rx_buf[len]);
-				len++;
-			}
-		}
-		if (data->target_oper_state != I2C_NPCM_OPER_STA_IDLE) {
-			target_cb->stop(data->target_cfg[data->match_addr_no]);
-		}
-		data->target_oper_state = I2C_NPCM_OPER_STA_START;
-		/* clear STOP flag */
-		inst->SMBnST = BIT(NPCM_SMBnST_SLVSTP);
+		i2c_npcm_target_stop(dev);
 	}
 }
 
@@ -921,8 +932,27 @@ static void i2c_npcm_isr(const struct device *dev)
 	data->reg_buf[14] |= inst->TIMEOUT_CTL2;
 	data->reg_buf[15] |= inst->SMBnPEC;
 
-	if (data->ctrl_oper_state != I2C_NPCM_OPER_STA_IDLE) {
+	uint8_t st = inst->SMBnST;
+	bool target_active = data->target_oper_state == I2C_NPCM_OPER_STA_READ ||
+			     data->target_oper_state == I2C_NPCM_OPER_STA_WRITE ||
+			     data->target_oper_state == I2C_NPCM_OPER_STA_QUICK;
+
+	/*
+	 * A controller transfer can be requested while another controller is
+	 * still addressing this module as a target. NMATCH/SLVSTP are
+	 * write-1-to-clear and NMATCH stalls the bus, so they must reach the
+	 * target handler even if a controller transfer is pending; otherwise
+	 * the interrupt never deasserts and the CPU livelocks in this ISR.
+	 */
+	if (!(st & BIT(NPCM_SMBnST_MASTER)) &&
+	    ((st & (BIT(NPCM_SMBnST_NMATCH) | BIT(NPCM_SMBnST_SLVSTP))) || target_active)) {
+		i2c_npcm_target_isr(dev);
+	} else if (data->ctrl_oper_state != I2C_NPCM_OPER_STA_IDLE) {
 		i2c_npcm_ctrl_isr(dev);
+		/* The target STOP may already be latched once we own the bus */
+		if (inst->SMBnST & BIT(NPCM_SMBnST_SLVSTP)) {
+			i2c_npcm_target_stop(dev);
+		}
 	} else {
 		if (data->target_oper_state == I2C_NPCM_OPER_STA_IDLE) {
 			/*
