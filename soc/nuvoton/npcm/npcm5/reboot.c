@@ -58,6 +58,8 @@ FUNC_NORETURN void npcm_soc_reset(void)
 	 */
 	(void)irq_lock();
 
+	const bool wd_running = (twd->T0CSR & BIT(NPCM_T0CSR_WD_RUN)) != 0;
+
 	/* TWCFG = 0x70: WDCT0I_SEL (reset propagation) | WDSDME (service
 	 * only via WDSDM=0x5C, so the watchdog cannot be accidentally fed)
 	 * | WDCT0I (T0IN as watchdog prescaler clock). No lock bits.
@@ -87,6 +89,14 @@ FUNC_NORETURN void npcm_soc_reset(void)
 
 	/* Load WDCNT last — this arms the already-running watchdog. */
 	twd->WDCNT = 0x02;
+
+	/* If the application watchdog is already running with WDSDME=1, the
+	 * WDCNT write above only updates the reload value; touch it so the
+	 * short count takes effect instead of waiting for the old timeout.
+	 */
+	if (wd_running) {
+		twd->WDSDM = 0x5C;
+	}
 
 	/* Watchdog is counting down; spin until it resets the SoC. */
 	for (;;) {
