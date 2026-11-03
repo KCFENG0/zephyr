@@ -1,0 +1,26 @@
+<!--
+  SPDX-License-Identifier: Apache-2.0
+
+  J-Link device for the NPCM500 MCP SPI flash (FIU2, mapped at 0xB0000000) programmed through
+  the Caliptra MCU (VeeR EL2, RV32). Install: copy this directory to
+  ~/.config/SEGGER/JLinkDevices/NUVOTON/NPCM500_MCP/ and use -device NPCM500_MCP.
+
+  J-Link's own RISC-V attach needs a V11 or later probe; with V9 probes use mcp_jlink.py.
+  WorkRAM must be MCU SRAM that the firmware never executes from: the VeeR I-cache caches
+  SRAM and cannot be invalidated by the debugger (progbufsize=0).
+-->
+<Database>
+	<Device>
+		<ChipInfo Vendor="Nuvoton"
+			Name="NPCM500_MCP"
+			WorkRAMAddr="0x30090000"
+			WorkRAMSize="0x8000"
+			Core="JLINK_CORE_RV32" />
+		<FlashBankInfo Name="MCP SPI flash"
+			BaseAddr="0xB0000000"
+			MaxSize="0x00200000"
+			Loader="NPCM500_MCP.FLM"
+			LoaderType="FLASH_ALGO_TYPE_OPEN"
+			AlwaysPresent="1" />
+	</Device>
+</Database>

@@ -96,11 +96,23 @@ Programming always runs on the Caliptra MCU (RISC-V), with JTAG connected to the
      - Uses OpenOCD to load ``mcp_stub.bin`` and the image into Caliptra MCU SRAM over the
        debug system bus. Works with any OpenOCD-supported JTAG adapter
        (``--config <adapter>.cfg``).
+   * - ``west flash --tool jlink``
+     - Uses ``support/mcp_jlink.py`` to drive the Caliptra MCU debug module over the
+       J-Link raw JTAG API and run ``support/jlink/NPCM500_MCP.FLM`` on the MCU.
+       Requires only the J-Link Software Pack and works with any J-Link probe.
+       Can also be run directly: ``mcp_jlink.py id``,
+       ``mcp_jlink.py [--reset] write <file> [offset]``,
+       ``mcp_jlink.py check <file> [offset]``.
 
 Other options: ``--no-reset`` (leave the MCU halted), ``--offset`` (4 KB aligned), ``--speed``
 (JTAG kHz), ``--config`` (OpenOCD adapter config, default ``interface/jlink.cfg``), ``-f``
-(another image). The on-target
-programmer ``mcp_stub.bin`` is prebuilt; ``make -C support/src`` rebuilds it.
+(another image). The on-target programmers ``mcp_stub.bin`` and ``NPCM500_MCP.FLM`` are
+prebuilt; ``make -C support/src`` rebuilds them.
+
+With a J-Link V11 or later probe, J-Flash and ``JLinkExe loadfile`` can also program the
+flash at ``0xB0000000`` using the SEGGER flash loader in ``support/jlink``: copy that
+directory to ``~/.config/SEGGER/JLinkDevices/NUVOTON/NPCM500_MCP`` and select device
+``NPCM500_MCP``.
 
 Build and flash the shell module sample.::
 
