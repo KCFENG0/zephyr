@@ -79,16 +79,33 @@ JTAG-only sessions.
 Flashing
 ========
 
-If the correct headers are installed, this board supports J-TAG.
+``west flash`` writes ``build/zephyr/<KERNEL_BIN_NAME>_flash.bin`` to the MCP SPI flash
+(W25Q16PW on FIU2) with the ``npcm500_mcp`` runner. The MCU is halted, with its watchdogs off and
+its SRAM overwritten by the programmer and the image buffer, so it cannot be resumed or debugged
+afterwards, so once programming succeeds the runner resets the Caliptra subsystem, MCU included,
+and its ROM boots the new image. With ``--no-reset`` the MCU stays halted: power-cycle the board
+to boot it. Board support files are in ``support/``.
+Programming always runs on the Caliptra MCU (RISC-V), with JTAG connected to the MCU.
 
-To flash with J-TAG, install the drivers for your programmer, for example:
-SEGGER J-link's drivers are at https://www.segger.com/downloads/jlink/
+.. list-table::
+   :header-rows: 1
+
+   * - Command
+     - Path
+   * - ``west flash``
+     - Uses OpenOCD to load ``mcp_stub.bin`` and the image into Caliptra MCU SRAM over the
+       debug system bus. Works with any OpenOCD-supported JTAG adapter
+       (``--config <adapter>.cfg``).
+
+Other options: ``--no-reset`` (leave the MCU halted), ``--offset`` (4 KB aligned), ``--speed``
+(JTAG kHz), ``--config`` (OpenOCD adapter config, default ``interface/jlink.cfg``), ``-f``
+(another image). The on-target
+programmer ``mcp_stub.bin`` is prebuilt; ``make -C support/src`` rebuilds it.
 
 Build and flash the shell module sample.::
 
-  west build -t clean && \
-    west build -c -p auto -b npcm500_evb samples/subsys/shell/shell_module/ && \
-    west flash --openocd /usr/local/bin/openocd
+  west build -p auto -b npcm500_evb samples/subsys/shell/shell_module/
+  west flash
 
 Debugging
 =========
