@@ -261,18 +261,27 @@ static inline int npcm_i3c_request_daa(struct i3c_reg *i3c_inst)
 	return 0;
 }
 
-/* Tell controller to start auto IBI */
-static inline int npcm_i3c_request_auto_ibi(struct i3c_reg *i3c_inst)
+/*
+ * Service a target-requested START (SLVSTART/TGTREQ) the way the npcm4xx
+ * driver does: emit START + 7Eh ourselves instead of AutoIBI. AutoIBI parks
+ * the controller waiting for an IBI and never sets MCTRLDONE if the target
+ * already released SDA (e.g. a Hot-Join withdrawn after DISEC), after which
+ * every MCTRL request is ignored. EmitStartAddr always completes: the target
+ * wins arbitration (IBIWON) or 7Eh is ACKed/NACKed.
+ */
+static inline int npcm_i3c_request_ibi_start(struct i3c_reg *i3c_inst)
 {
 	uint32_t val = 0;
 	int ret;
 
 	NPCM_SET_REG_FIELD(val, NPCM_I3C_MCTRL_IBIRESP, NPCM_I3C_MCTRL_IBIRESP_ACK);
-	NPCM_SET_REG_FIELD(val, NPCM_I3C_MCTRL_REQUEST, NPCM_I3C_MCTRL_REQUEST_AUTOIBI);
+	NPCM_SET_REG_FIELD(val, NPCM_I3C_MCTRL_REQUEST, NPCM_I3C_MCTRL_REQUEST_EMITSTARTADDR);
+	NPCM_SET_REG_FIELD(val, NPCM_I3C_MCTRL_TYPE, I3C_MCTRL_TYPE_I3C);
+	NPCM_SET_REG_FIELD(val, NPCM_I3C_MCTRL_ADDR, I3C_BROADCAST_ADDR);
 
 	ret = npcm_i3c_send_request(i3c_inst, val);
 	if (ret != 0) {
-		LOG_ERR("Request auto ibi error, %d", ret);
+		LOG_ERR("Request IBI start error, %d", ret);
 		return ret;
 	}
 
@@ -454,8 +463,15 @@ static int npcm_i3c_recover_bus(const struct device *dev)
 	     ibi_tries < 10 && ((i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_SLVSTART) ||
 				(npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_TGTREQ));
 	     ibi_tries++) {
-		/* Tell the controller to perform auto IBI. */
-		npcm_i3c_request_auto_ibi(i3c_inst);
+		/* Emit START + 7Eh so the requesting target can win arbitration */
+		i3c_inst->MSTATUS = NPCM_I3C_MSTATUS_SLVSTART;
+		if ((npcm_i3c_request_ibi_start(i3c_inst) != 0) ||
+		    !((i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_IBIWON) ||
+		      (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IBIACK))) {
+			/* The target released SDA: no IBI to service */
+			npcm_i3c_request_emit_stop(i3c_inst);
+			break;
+		}
 
 		if (WAIT_FOR((i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_COMPLETE) ||
 			     (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IBIACK),
@@ -2458,29 +2474,38 @@ static void npcm_i3c_ibi_work(struct k_work *work)
 	uint32_t ibitype, ibiaddr;
 	int ret;
 
+	/*
+	 * Serialize with CCC/DAA/private transfers: their MCTRL requests must
+	 * not interleave with AUTOIBI, or the controller is left with a pending
+	 * AUTOIBI request and ignores every later MCTRL write.
+	 */
+	npcm_i3c_mutex_lock(dev);
 	k_sem_take(&data->ibi_lock_sem, K_FOREVER);
 
 	if (npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_TGTREQ) {
-		LOG_DBG("IBI work %p running not because of IBI", work);
-		LOG_ERR("MSTATUS 0x%08x MERRWARN 0x%08x", i3c_inst->MSTATUS, i3c_inst->MERRWARN);
+		/* Already serviced by a transfer that lost arbitration to the IBI */
+		LOG_DBG("IBI work %p: no pending IBI, MSTATUS 0x%08x MERRWARN 0x%08x", work,
+			i3c_inst->MSTATUS, i3c_inst->MERRWARN);
 
-		npcm_i3c_request_emit_stop(i3c_inst);
+		if (npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_IDLE) {
+			npcm_i3c_request_emit_stop(i3c_inst);
+		}
 
 		goto out_ibi_work;
 	};
 
-	/* Use auto IBI to service the IBI */
-	npcm_i3c_request_auto_ibi(i3c_inst);
+	/* Emit START + 7Eh so the requesting target can win arbitration */
+	ret = npcm_i3c_request_ibi_start(i3c_inst);
 
 	/*
-	 * Wait for target to win address arbitration (ibitype and ibiaddr).
-	 * IBIWON is W1C and can be wiped by a status clear from another path,
-	 * so also accept the IBIACK state, which holds IBITYPE/IBIADDR too.
+	 * MCTRLDONE is set once the address phase ends, so IBIWON (or the
+	 * IBIACK state, which also holds IBITYPE/IBIADDR) is already valid.
+	 * Without it the target released SDA: just end the message.
 	 */
-	if (WAIT_FOR((i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_IBIWON) ||
-		     (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IBIACK),
-		     I3C_CHK_TIMEOUT_US, NULL) == false) {
-		LOG_ERR("IBI work, IBIWON timeout");
+	if ((ret != 0) || !((i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_IBIWON) ||
+			    (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IBIACK))) {
+		LOG_DBG("IBI work: no IBI won, MSTATUS 0x%08x", i3c_inst->MSTATUS);
+		npcm_i3c_request_emit_stop(i3c_inst);
 
 		goto out_ibi_work;
 	}
@@ -2565,6 +2590,7 @@ out_ibi_work:
 	npcm_i3c_xfer_reset(i3c_inst);
 
 	k_sem_give(&data->ibi_lock_sem);
+	npcm_i3c_mutex_unlock(dev);
 
 	/* Re-enable target initiated IBI interrupt. */
 	i3c_inst->MINTSET = NPCM_I3C_MINTSET_SLVSTART;
