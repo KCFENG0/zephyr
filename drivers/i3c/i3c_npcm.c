@@ -19,6 +19,7 @@ LOG_MODULE_REGISTER(npcm_i3c, CONFIG_I3C_LOG_LEVEL);
 /* I3C properties */
 #define I3C_CHK_TIMEOUT_US       10000 /* Timeout for checking register status */
 #define I3C_HJ_TIMEOUT_US        50000 /* Timeout for bus idle / Hot-Join acceptance */
+#define I3C_RESET_TIMEOUT_US     1000  /* Timeout for the module reset to clear PARTNO */
 #define I3C_CLK_FREQ_20_MHZ      MHZ(20)
 #define I3C_CLK_FREQ_48_MHZ      MHZ(48)
 #define I3C_CLK_FREQ_96_MHZ      MHZ(96)
@@ -111,10 +112,17 @@ static void npcm_i3c_reset_module(const struct device *dev)
 
 	index = I3C_NPCM_HW_IDX((uint32_t)i3c_inst);
 
-	/* Reset i3c module, write 1 to the bit, then write 0 */
+	/*
+	 * A warm reboot does not reset the I3C module, so a controller left
+	 * mid-request (e.g. AUTOIBI) keeps ignoring MCTRL unless this reset
+	 * really takes effect. Hold the reset until PARTNO, which reset
+	 * clears, reads back 0 (same handshake as the npcm4xx driver).
+	 */
+	i3c_inst->PARTNO = 0xffffffff;
 	pmc->SW_RST1 |= BIT(index);
-	/* Require one NOP instruction cycle time */
-	arch_nop();
+	if (!WAIT_FOR(i3c_inst->PARTNO == 0, I3C_RESET_TIMEOUT_US, NULL)) {
+		LOG_ERR("I3C%d module reset timeout", index + 1);
+	}
 	pmc->SW_RST1 &= ~BIT(index);
 }
 
