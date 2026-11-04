@@ -690,7 +690,15 @@ static void i2c_npcm_target_isr(const struct device *dev)
 	/* --------------------------------------------- */
 	/* SDA status is set - transmit or receive       */
 	/* --------------------------------------------- */
-	if (inst->SMBnST & BIT(NPCM_SMBnST_SDAST)) {
+	/*
+	 * A START pending as controller is generated right after the STOP that
+	 * ends a target write, so MASTER and SDAST can be set by the time the
+	 * target STOP is handled. That SDAST asks for the controller address
+	 * byte: leave it to the controller handler, or it is taken for a target
+	 * overflow and a stale SMBnSDA byte is appended to the received data.
+	 */
+	if ((inst->SMBnST & (BIT(NPCM_SMBnST_SDAST) | BIT(NPCM_SMBnST_MASTER))) ==
+	    BIT(NPCM_SMBnST_SDAST)) {
 		struct i2c_target_config *cfg = data->target_cfg[data->match_addr_no];
 		const struct i2c_target_callbacks *target_cb = cfg ? cfg->callbacks : NULL;
 
@@ -1028,11 +1036,11 @@ static void i2c_npcm_isr(const struct device *dev)
 	    ((st & (BIT(NPCM_SMBnST_NMATCH) | BIT(NPCM_SMBnST_SLVSTP))) || target_active)) {
 		i2c_npcm_target_isr(dev);
 	} else if (data->ctrl_oper_state != I2C_NPCM_OPER_STA_IDLE) {
-		i2c_npcm_ctrl_isr(dev);
-		/* The target STOP may already be latched once we own the bus */
+		/* A target write may have ended right before we got the bus */
 		if (inst->SMBnST & BIT(NPCM_SMBnST_SLVSTP)) {
 			i2c_npcm_target_stop(dev);
 		}
+		i2c_npcm_ctrl_isr(dev);
 	} else {
 		if (data->target_oper_state == I2C_NPCM_OPER_STA_IDLE) {
 			/*
