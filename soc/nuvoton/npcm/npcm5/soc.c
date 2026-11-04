@@ -15,6 +15,9 @@
 
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
+#define NPCM_CORST_CTL_USBD BIT(4)
+#define NPCM_CORST_CTL_MASK (BIT(0) | BIT(4))
+
 #ifdef CONFIG_SOC_RESET_HOOK
 void soc_reset_hook(void)
 {
@@ -39,11 +42,13 @@ void soc_reset_hook(void)
 	inst_scfg->DEVALT10 = devalt10;
 
 	/*
-	 * Route the CORST pin reset to the M7. CORST_CTL powers up as 0 and
-	 * is only reset by VSB power-up. RMW: the ROM may have routed CORST
-	 * to other modules already.
+	 * Route the CORST pin reset to the M7 and USBD domains. CORST_CTL
+	 * powers up as 0 and is only reset by VSB power-up. Clear and reassert
+	 * bits 0 and 4 so the ROM's previous route selection cannot leave stale
+	 * watchdog reset routing behind.
 	 */
-	inst_scfg->CORST_CTL |= BIT(NPCM_CORST_CTL_CM7);
+	inst_scfg->CORST_CTL = (inst_scfg->CORST_CTL & ~NPCM_CORST_CTL_MASK) |
+			       (BIT(NPCM_CORST_CTL_CM7) | NPCM_CORST_CTL_USBD);
 }
 #endif
 
