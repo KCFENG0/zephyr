@@ -145,7 +145,6 @@ static void i2c_npcm_start_DMA(const struct device *dev,
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 	struct i2c_npcm_data *data = dev->data;
 
-	inst->DMA_CTRL |= BIT(NPCM_DMA_CTRL_DMA_STALL);
 	data->reg_buf[6] |= inst->DMA_CTRL;
 	/* address */
 	inst->DMA_ADDR1 = (uint8_t)((addr) >> 0);
@@ -767,8 +766,7 @@ static void i2c_set_target_addr(const struct device *dev, int index, uint8_t tar
 
 	/* set slave addr */
 	i2c_conf_slave(dev, index, (target_addr | BIT(NPCM_SMBnADDR_SAEN)));
-	inst->SMBnCTL1 |= BIT(NPCM_SMBnCTL1_GCMEN);
-	inst->SMBnCTL3 |= BIT(NPCM_SMBnCTL3_ARPMEN);
+
 	/* Enable I2C address match interrupt */
 	if (!(inst->SMBnCTL1 & BIT(NPCM_SMBnCTL1_NMINTE)))
 		inst->SMBnCTL1 |= BIT(NPCM_SMBnCTL1_NMINTE);
