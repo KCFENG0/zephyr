@@ -34,6 +34,12 @@ LOG_MODULE_REGISTER(i2c_npcm, LOG_LEVEL_ERR);
 #define I2C_SLAVE_NUM 10
 #define I2C_RECOVER_BUS_DELAY_US 5
 
+/* Longest a transfer waits for another controller to release the bus (SMBus tTIMEOUT max) */
+#define I2C_BUS_FREE_TIMEOUT_MS 35
+/* SMBus tHIGH max: SCL and SDA high for longer than this means the bus is idle */
+#define I2C_BUS_IDLE_TIME_US 50
+#define I2C_BUS_IDLE_POLL_US 5
+
 /* I2C operation state */
 enum i2c_npcm_oper_state {
 	I2C_NPCM_OPER_STA_IDLE,
@@ -1154,6 +1160,54 @@ int i2c_npcm_recover_bus(const struct device *dev)
 	return 0;
 }
 
+static bool i2c_npcm_lines_high(struct i2c_reg *const inst)
+{
+	return NPCM_IS_BIT_SET(inst->SMBnCTL3, NPCM_SMBnCTL3_SCL_LVL) &&
+	       NPCM_IS_BIT_SET(inst->SMBnCTL3, NPCM_SMBnCTL3_SDA_LVL);
+}
+
+/*
+ * Wait until no other controller owns the bus. Own addresses stay enabled
+ * meanwhile, so a transaction addressed to this module is still served.
+ */
+static int i2c_npcm_wait_bus_free(const struct device *dev)
+{
+	struct i2c_reg *const inst = I2C_INSTANCE(dev);
+	int64_t deadline = k_uptime_get() + I2C_BUS_FREE_TIMEOUT_MS;
+	uint32_t idle_us;
+
+	do {
+		if (!(inst->SMBnCST & BIT(NPCM_SMBnCST_BB))) {
+			return 0;
+		}
+
+		/*
+		 * BB is only cleared by a STOP. If both lines stay high longer
+		 * than SMBus tHIGH(max) no transaction is in progress, so the
+		 * STOP was missed (e.g. the module was enabled mid-transaction).
+		 */
+		for (idle_us = 0; idle_us < I2C_BUS_IDLE_TIME_US;
+		     idle_us += I2C_BUS_IDLE_POLL_US) {
+			if (!i2c_npcm_lines_high(inst) ||
+			    !(inst->SMBnCST & BIT(NPCM_SMBnCST_BB))) {
+				break;
+			}
+			k_busy_wait(I2C_BUS_IDLE_POLL_US);
+		}
+		if (!(inst->SMBnCST & BIT(NPCM_SMBnCST_BB))) {
+			return 0;
+		}
+		if (idle_us >= I2C_BUS_IDLE_TIME_US) {
+			inst->SMBnCST = BIT(NPCM_SMBnCST_BB);
+			return 0;
+		}
+
+		k_msleep(1);
+	} while (k_uptime_get() < deadline);
+
+	return -EAGAIN;
+}
+
 static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 				uint8_t num_msgs, uint16_t addr)
 {
@@ -1167,6 +1221,12 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 
 	if (i2c_npcm_mutex_lock(dev, I2C_WAITING_TIME) != 0) {
 		return -EBUSY;
+	}
+
+	ret = i2c_npcm_wait_bus_free(dev);
+	if (ret != 0) {
+		i2c_npcm_mutex_unlock(dev);
+		return ret;
 	}
 
 	/* save original slave addr setting and disable all the slave devices */
