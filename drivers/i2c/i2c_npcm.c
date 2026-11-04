@@ -186,41 +186,67 @@ static uint16_t i2c_npcm_get_dma_cnt(const struct device *dev)
 
 }
 
-void Set_Cumulative_ClockLow_Timeout(const struct device *dev, uint8_t interval_ms)
+#define NPCM_TIMEOUT_ST_ALL (BIT(NPCM_TIMEOUT_ST_T_OUTST1) | BIT(NPCM_TIMEOUT_ST_T_OUTST2))
+#define NPCM_TIMEOUT_ST_EN_ALL                                                                 \
+	(BIT(NPCM_TIMEOUT_ST_T_OUTST1_EN) | BIT(NPCM_TIMEOUT_ST_T_OUTST2_EN))
+
+#if defined(CONFIG_CONTROLLER_HW_TIMEOUT_EN) || defined(CONFIG_TARGET_HW_TIMEOUT_EN)
+#define I2C_NPCM_HW_TIMEOUT 1
+
+#ifdef CONFIG_TARGET_HW_TIMEOUT_EN
+#define I2C_HW_TIMEOUT_CLK_CYCLE_MS CONFIG_TARGET_HW_TIMEOUT_CLK_CYCLE_TIME
+#define I2C_HW_TIMEOUT_CLK_LOW_MS CONFIG_TARGET_HW_TIMEOUT_CLK_LOW_TIME
+#else
+#define I2C_HW_TIMEOUT_CLK_CYCLE_MS CONFIG_CONTROLLER_HW_TIMEOUT_CLK_CYCLE_TIME
+#define I2C_HW_TIMEOUT_CLK_LOW_MS CONFIG_CONTROLLER_HW_TIMEOUT_CLK_LOW_TIME
+#endif
+
+#define NPCM_TO_CKDIV_MIN 0x03
+#define NPCM_TO_CKDIV_MAX 0x3F
+
+/* Convert a time in ms to timeout clock ticks of source / ((div + 1) * 1000) Hz */
+static uint8_t i2c_npcm_hw_timeout_ticks(uint32_t ms, uint32_t source_clk, uint32_t div)
+{
+	uint64_t ticks = (uint64_t)ms * source_clk / ((div + 1) * 1000ULL * 1000ULL);
+
+	return MIN(ticks, UINT8_MAX);
+}
+
+/* TO_CKDIV may only be written while the module is disabled */
+static void i2c_npcm_hw_timeout_init(const struct device *dev)
 {
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 	struct i2c_npcm_data *const data = dev->data;
-	uint8_t div;
+	uint32_t div = data->source_clk / 1000 / 1000 - 1;
 
-	div = data->source_clk / 1000 / 1000;
-	div = div - 1;
-	if ((div < 0x03) || (div > 0x3F)) {
+	if (div < NPCM_TO_CKDIV_MIN) {
+		LOG_ERR("%s: no HW timeout divider for %u Hz", dev->name, data->source_clk);
 		return;
 	}
-	inst->SMBnCTL2 |= BIT(NPCM_SMBnCTL2_ENABLE);
-	inst->TIMEOUT_EN = (div << NPCM_TIMEOUT_EN_TO_CKDIV);
-	inst->TIMEOUT_ST |= BIT(NPCM_TIMEOUT_ST_T_OUTST1_EN);
-	inst->TIMEOUT_ST = BIT(NPCM_TIMEOUT_ST_T_OUTST1);
-	inst->TIMEOUT_CTL2 = interval_ms;
+
+	/*
+	 * TO_CKDIV only reaches a 1 kHz timeout clock up to 64 MHz. Above that the
+	 * timeout clock runs faster, so scale the tick counts to keep the
+	 * configured times in ms.
+	 */
+	div = MIN(div, NPCM_TO_CKDIV_MAX);
+
+	inst->TIMEOUT_EN = div << NPCM_TIMEOUT_EN_TO_CKDIV;
+	inst->TIMEOUT_CTL1 =
+		i2c_npcm_hw_timeout_ticks(I2C_HW_TIMEOUT_CLK_CYCLE_MS, data->source_clk, div);
+	inst->TIMEOUT_CTL2 =
+		i2c_npcm_hw_timeout_ticks(I2C_HW_TIMEOUT_CLK_LOW_MS, data->source_clk, div);
 }
 
-void Set_Cumulative_ClockCycle_Timeout(const struct device *dev, uint8_t interval_ms)
+/* T_OUTSTx are write-1-to-clear and share the register with their enables */
+static void i2c_npcm_hw_timeout_arm(const struct device *dev)
 {
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
-	struct i2c_npcm_data *const data = dev->data;
-	uint8_t div;
 
-	div = data->source_clk / 1000 / 1000;
-	div = div - 1;
-	if ((div < 0x03) || (div > 0x3F)) {
-		return;
-	}
-	inst->SMBnCTL2 |= BIT(NPCM_SMBnCTL2_ENABLE);
-	inst->TIMEOUT_EN = (div << NPCM_TIMEOUT_EN_TO_CKDIV);
-	inst->TIMEOUT_ST |= BIT(NPCM_TIMEOUT_ST_T_OUTST2_EN);
-	inst->TIMEOUT_ST = BIT(NPCM_TIMEOUT_ST_T_OUTST2);
-	inst->TIMEOUT_CTL1 = interval_ms;
+	inst->TIMEOUT_ST = NPCM_TIMEOUT_ST_EN_ALL | NPCM_TIMEOUT_ST_ALL;
+	inst->TIMEOUT_EN |= BIT(NPCM_TIMEOUT_EN_TIMEOUT_EN);
 }
+#endif
 
 static void i2c_npcm_reset_module(const struct device *dev)
 {
@@ -228,16 +254,21 @@ static void i2c_npcm_reset_module(const struct device *dev)
 	struct i2c_npcm_data *const data = dev->data;
 	uint32_t ctl1_tmp;
 	uint32_t timeout_en_tmp;
+	uint8_t timeout_st_en;
 
 	ctl1_tmp = inst->SMBnCTL1;
 	timeout_en_tmp = inst->TIMEOUT_EN;
+	timeout_st_en = inst->TIMEOUT_ST & NPCM_TIMEOUT_ST_EN_ALL;
 
 	/* Disable and then Enable I2C module */
 	inst->SMBnCTL2 &= ~BIT(NPCM_SMBnCTL2_ENABLE);
+	/* TO_CKDIV is written while disabled, TIMEOUT_EN only sticks once enabled */
+	inst->TIMEOUT_EN = timeout_en_tmp & ~BIT(NPCM_TIMEOUT_EN_TIMEOUT_EN);
 	inst->SMBnCTL2 |= BIT(NPCM_SMBnCTL2_ENABLE);
 
 	inst->SMBnCTL1 = (ctl1_tmp & (BIT(NPCM_SMBnCTL1_INTEN) | BIT(NPCM_SMBnCTL1_EOBINTE) |
 				      BIT(NPCM_SMBnCTL1_GCMEN) | BIT(NPCM_SMBnCTL1_NMINTE)));
+	inst->TIMEOUT_ST = timeout_st_en | NPCM_TIMEOUT_ST_ALL;
 	inst->TIMEOUT_EN = timeout_en_tmp;
 
 	data->ctrl_oper_state = I2C_NPCM_OPER_STA_IDLE;
@@ -338,13 +369,13 @@ static void i2c_npcm_set_baudrate(const struct device *dev, uint32_t bus_freq)
 
 static void i2c_npcm_notify(const struct device *dev, int error)
 {
-#ifdef CONFIG_CONTROLLER_HW_TIMEOUT_EN
+#if defined(CONFIG_CONTROLLER_HW_TIMEOUT_EN) && !defined(CONFIG_TARGET_HW_TIMEOUT_EN)
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 #endif
 	struct i2c_npcm_data *const data = dev->data;
 
-#ifdef CONFIG_CONTROLLER_HW_TIMEOUT_EN
-	/* Disable HW Timeout */
+#if defined(CONFIG_CONTROLLER_HW_TIMEOUT_EN) && !defined(CONFIG_TARGET_HW_TIMEOUT_EN)
+	/* The timeout only guards controller transfers */
 	inst->TIMEOUT_EN &= ~BIT(NPCM_TIMEOUT_EN_TIMEOUT_EN);
 #endif
 
@@ -392,24 +423,6 @@ static void i2c_npcm_ctrl_isr(const struct device *dev)
 {
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 	struct i2c_npcm_data *const data = dev->data;
-
-	/* --------------------------------------------- */
-	/* Timeout occurred                              */
-	/* --------------------------------------------- */
-#ifdef CONFIG_CONTROLLER_HW_TIMEOUT_EN
-	if (inst->TIMEOUT_ST & BIT(NPCM_TIMEOUT_ST_T_OUTST1)) {
-		/* clear timeout flag */
-		inst->TIMEOUT_ST = BIT(NPCM_TIMEOUT_ST_T_OUTST1);
-		i2c_npcm_reset_module(dev);
-		i2c_npcm_notify(dev, -ETIMEDOUT);
-	}
-	if (inst->TIMEOUT_ST & BIT(NPCM_TIMEOUT_ST_T_OUTST2)) {
-		/* clear timeout flag */
-		inst->TIMEOUT_ST = BIT(NPCM_TIMEOUT_ST_T_OUTST2);
-		i2c_npcm_reset_module(dev);
-		i2c_npcm_notify(dev, -ETIMEDOUT);
-	}
-#endif
 
 	/* --------------------------------------------- */
 	/* NACK occurred                                 */
@@ -548,25 +561,6 @@ static void i2c_npcm_target_isr(const struct device *dev)
 	struct i2c_npcm_data *const data = dev->data;
 	uint16_t len;
 	uint8_t overflow_data;
-
-
-#ifdef CONFIG_TARGET_HW_TIMEOUT_EN
-	/* --------------------------------------------- */
-	/* Timeout occurred                              */
-	/* --------------------------------------------- */
-	if (inst->TIMEOUT_ST & BIT(NPCM_TIMEOUT_ST_T_OUTST1)) {
-		LOG_ERR("target: HW timeout");
-		data->target_oper_state = I2C_NPCM_OPER_STA_START;
-		inst->TIMEOUT_ST = BIT(NPCM_TIMEOUT_ST_T_OUTST1);
-		i2c_npcm_reset_module(dev);
-	}
-	if (inst->TIMEOUT_ST & BIT(NPCM_TIMEOUT_ST_T_OUTST2)) {
-		LOG_ERR("target: HW timeout");
-		data->target_oper_state = I2C_NPCM_OPER_STA_START;
-		inst->TIMEOUT_ST = BIT(NPCM_TIMEOUT_ST_T_OUTST2);
-		i2c_npcm_reset_module(dev);
-	}
-#endif
 
 	/* --------------------------------------------- */
 	/* NACK occurred                                 */
@@ -920,6 +914,47 @@ static int i2c_npcm_target_unregister(const struct device *dev,
 	return 0;
 }
 
+#ifdef I2C_NPCM_HW_TIMEOUT
+/*
+ * SCL was held low (T_OUTST1) or a transaction did not reach STOP
+ * (T_OUTST2) in time. The detector does not touch the bus, so the
+ * module has to be reset to release SCL/SDA, which also drops any
+ * transaction it was part of.
+ */
+static void i2c_npcm_hw_timeout_recover(const struct device *dev, uint8_t timeout_st)
+{
+	struct i2c_reg *const inst = I2C_INSTANCE(dev);
+	struct i2c_npcm_data *const data = dev->data;
+	bool ctrl_pending = data->ctrl_oper_state != I2C_NPCM_OPER_STA_IDLE;
+	bool registered = false;
+	int i;
+
+	LOG_ERR("%s: %s timeout (ST 0x%02x CST 0x%02x), resetting", dev->name,
+		(timeout_st & BIT(NPCM_TIMEOUT_ST_T_OUTST1)) ? "SCL low" : "transaction",
+		inst->SMBnST, inst->SMBnCST);
+
+	i2c_npcm_reset_module(dev);
+	/* also clears a DMA_EN left from the dropped transaction */
+	inst->DMA_CTRL = BIT(NPCM_DMA_CTRL_DMA_INT_CLR);
+	inst->SMBnST = 0xFF;
+
+	for (i = 0; i < I2C_SLAVE_NUM; i++) {
+		if (data->target_cfg[i]) {
+			registered = true;
+			/* a pending transfer restores its own saved addresses */
+			if (!ctrl_pending) {
+				i2c_set_target_addr(dev, i, data->target_cfg[i]->address);
+			}
+		}
+	}
+	data->target_oper_state = registered ? I2C_NPCM_OPER_STA_START : I2C_NPCM_OPER_STA_IDLE;
+
+	if (ctrl_pending) {
+		i2c_npcm_notify(dev, -ETIMEDOUT);
+	}
+}
+#endif
+
 /* I2C controller isr function */
 static void i2c_npcm_isr(const struct device *dev)
 {
@@ -942,6 +977,16 @@ static void i2c_npcm_isr(const struct device *dev)
 	data->reg_buf[13] |= inst->TIMEOUT_CTL1;
 	data->reg_buf[14] |= inst->TIMEOUT_CTL2;
 	data->reg_buf[15] |= inst->SMBnPEC;
+
+#ifdef I2C_NPCM_HW_TIMEOUT
+	uint8_t timeout_st = inst->TIMEOUT_ST;
+
+	if ((inst->TIMEOUT_EN & BIT(NPCM_TIMEOUT_EN_TIMEOUT_EN)) &&
+	    (timeout_st & NPCM_TIMEOUT_ST_ALL)) {
+		i2c_npcm_hw_timeout_recover(dev, timeout_st);
+		return;
+	}
+#endif
 
 	uint8_t st = inst->SMBnST;
 	bool target_active = data->target_oper_state == I2C_NPCM_OPER_STA_READ ||
@@ -1022,10 +1067,19 @@ static int i2c_npcm_init(const struct device *dev)
 	i2c_npcm_set_baudrate(dev, data->bitrate);
 	//inst->SMBnCTL5=0x07;
 
+#ifdef I2C_NPCM_HW_TIMEOUT
+	i2c_npcm_hw_timeout_init(dev);
+#endif
+
 	/* Enable I2C module */
 	inst->SMBnCTL2 |= BIT(NPCM_SMBnCTL2_ENABLE);
 	/* Enable I2C interrupt */
 	inst->SMBnCTL1 |= BIT(NPCM_SMBnCTL1_INTEN);
+
+#ifdef CONFIG_TARGET_HW_TIMEOUT_EN
+	/* a target can be addressed at any time, so the timeout stays armed */
+	i2c_npcm_hw_timeout_arm(dev);
+#endif
 
 	/* initialize mutux and semaphore for i2c controller */
 	ret = k_sem_init(&data->lock_sem, 1, 1);
@@ -1214,9 +1268,6 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 	int i, ret;
 	uint8_t value[I2C_SLAVE_NUM];
 
-#ifdef CONFIG_CONTROLLER_HW_TIMEOUT_EN
-	struct i2c_reg *const inst = I2C_INSTANCE(dev);
-#endif
 	struct i2c_npcm_data *const data = dev->data;
 
 	if (i2c_npcm_mutex_lock(dev, I2C_WAITING_TIME) != 0) {
@@ -1272,12 +1323,8 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 		}
 	}
 
-#ifdef CONFIG_CONTROLLER_HW_TIMEOUT_EN
-	/* Set I2C HW timeout value */
-	Set_Cumulative_ClockCycle_Timeout(dev, CONFIG_CONTROLLER_HW_TIMEOUT_CLK_CYCLE_TIME);
-	Set_Cumulative_ClockLow_Timeout(dev, CONFIG_CONTROLLER_HW_TIMEOUT_CLK_LOW_TIME);
-	/* Enable HW Timeout */
-	inst->TIMEOUT_EN |= BIT(NPCM_TIMEOUT_EN_TIMEOUT_EN);
+#if defined(CONFIG_CONTROLLER_HW_TIMEOUT_EN) && !defined(CONFIG_TARGET_HW_TIMEOUT_EN)
+	i2c_npcm_hw_timeout_arm(dev);
 #endif
 
 	k_sem_reset(&data->sync_sem);

@@ -16,7 +16,11 @@ config CONTROLLER_HW_TIMEOUT_EN
 	bool "Controller hardware timeout"
 	default n
 	help
-	  This option enables the controller hardware timeout feature.
+	  Arm the SCL low and START-to-STOP timeout detectors for the
+	  duration of each controller transfer. When one expires the module
+	  is reset to release the bus and the transfer fails with -ETIMEDOUT.
+	  Ignored when TARGET_HW_TIMEOUT_EN is set, which keeps the detectors
+	  armed all the time.
 
 config CONTROLLER_HW_TIMEOUT_CLK_CYCLE_TIME
 	depends on CONTROLLER_HW_TIMEOUT_EN
@@ -24,8 +28,7 @@ config CONTROLLER_HW_TIMEOUT_CLK_CYCLE_TIME
 	default 50
 	range 0 255
 	help
-	  This option sets the clock cycle time for the controller hardware
-	  timeout in microseconds.
+	  Longest time from START to STOP, in milliseconds.
 
 config CONTROLLER_HW_TIMEOUT_CLK_LOW_TIME
 	depends on CONTROLLER_HW_TIMEOUT_EN
@@ -33,14 +36,17 @@ config CONTROLLER_HW_TIMEOUT_CLK_LOW_TIME
 	default 25
 	range 0 255
 	help
-	  This option sets the clock low time for the controller hardware
-	  timeout in microseconds.
+	  Longest cumulative time SCL may be held low within one
+	  transaction, in milliseconds (SMBus tTIMEOUT is 25-35 ms).
 
 config TARGET_HW_TIMEOUT_EN
 	bool "Target hardware timeout"
 	default n
 	help
-	  This option enables the target hardware timeout feature.
+	  Keep the SCL low and START-to-STOP timeout detectors armed while
+	  the module is enabled. When one expires the module is reset, which
+	  releases a bus held by this module (for example SCL stretched
+	  while an interrupt is never serviced) and drops the transaction.
 	  Note that when using Quick command (SMBUS), do not enable target timeout.
 
 config TARGET_HW_TIMEOUT_CLK_LOW_TIME
@@ -49,8 +55,8 @@ config TARGET_HW_TIMEOUT_CLK_LOW_TIME
 	default 25
 	range 0 255
 	help
-	  This option sets the clock low time for the target hardware timeout
-	  in microseconds.
+	  Longest cumulative time SCL may be held low within one
+	  transaction, in milliseconds (SMBus tTIMEOUT is 25-35 ms).
 
 config TARGET_HW_TIMEOUT_CLK_CYCLE_TIME
 	depends on TARGET_HW_TIMEOUT_EN
@@ -58,5 +64,4 @@ config TARGET_HW_TIMEOUT_CLK_CYCLE_TIME
 	default 50
 	range 0 255
 	help
-	  This option sets the clock cycle time for the target hardware timeout
-	  in microseconds.
+	  Longest time from START to STOP, in milliseconds.
