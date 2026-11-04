@@ -531,8 +531,11 @@
 	 *   SW_CS0 = PVT role  -> NO physical CS pin on FIU0 (only on FIU2)
 	 *   SW_CS1 = SHD role  -> SHD_CS (GPIO44)  -> mapped 0xC000_0000
 	 *   SW_CS2 = BACK role -> PVT_CS (GPIO23)  -> mapped 0xD000_0000
+	 * Node names follow the attached flash, not the role:
+	 *   backup_flash@0 (PVT role), shd_flash@1 (SHD role),
+	 *   pvt_flash@2 (BACK role).
 	 */
-	ext_flash_pvt: w25q256jv@0 {
+	ext_flash_pvt: backup_flash@0 {
 		compatible ="nuvoton,npcm-nor";
 		size = <DT_SIZE_M(32 * 8)>;
 		reg = <0>;
@@ -546,7 +549,7 @@
 			     &fiu0_shd_quad_io2_io3_clk_gpio55_56>;
 		pinctrl-names = "default";
 	};
-	ext_flash_shd: w25q256jv@1 {
+	ext_flash_shd: shd_flash@1 {
 		compatible ="nuvoton,npcm-nor";
 		size = <DT_SIZE_M(32 * 8)>;
 		reg = <1>;
@@ -560,7 +563,7 @@
 			     &fiu0_shd_quad_io2_io3_clk_gpio55_56>;
 		pinctrl-names = "default";
 	};
-	ext_flash_back: w25q256jv@2 {
+	ext_flash_back: pvt_flash@2 {
 		compatible ="nuvoton,npcm-nor";
 		size = <DT_SIZE_M(32 * 8)>;
 		reg = <2>;
