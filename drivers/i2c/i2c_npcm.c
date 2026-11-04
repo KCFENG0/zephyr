@@ -367,6 +367,11 @@ static int i2c_npcm_mutex_lock(const struct device *dev, k_timeout_t timeout)
 {
 	struct i2c_npcm_data *const data = dev->data;
 
+	/* target (un)register may be called from a target callback in ISR */
+	if (k_is_in_isr()) {
+		timeout = K_NO_WAIT;
+	}
+
 	return k_sem_take(&data->lock_sem, timeout);
 }
 
