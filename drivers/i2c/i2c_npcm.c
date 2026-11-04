@@ -96,6 +96,7 @@ struct i2c_npcm_data {
 	uint8_t dev_addr; /* device address (8 bits) */
 	uint8_t *rx_msg_buf;
 	int err_code;
+	bool lost_bus; /* the pending controller transfer lost arbitration */
 	struct i2c_target_config *target_cfg[I2C_SLAVE_NUM];
 	enum i2c_npcm_slave_addrno match_addr_no;
 	uint8_t reg_buf[16];
@@ -731,36 +732,6 @@ static void i2c_npcm_target_isr(const struct device *dev)
 	}
 }
 
-static uint8_t i2c_ret_slave(const struct device *dev, int index)
-{
-	struct i2c_reg *const inst = I2C_INSTANCE(dev);
-
-	switch (index) {
-		case 0:
-			return inst->SMBnADDR1;
-		case 1:
-			return inst->SMBnADDR2;
-		case 2:
-			return inst->SMBnADDR3;
-		case 3:
-			return inst->SMBnADDR4;
-		case 4:
-			return inst->SMBnADDR5;
-		case 5:
-			return inst->SMBnADDR6;
-		case 6:
-			return inst->SMBnADDR7;
-		case 7:
-			return inst->SMBnADDR8;
-		case 8:
-			return inst->SMBnADDR9;
-		case 9:
-			return inst->SMBnADDR10;
-	}
-
-	return 0;
-}
-
 static void i2c_conf_slave(const struct device *dev, int index, uint8_t value)
 {
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
@@ -914,6 +885,34 @@ static int i2c_npcm_target_unregister(const struct device *dev,
 	return 0;
 }
 
+/* Disable/enable the module (drops any transfer) and keep serving as a target */
+static void i2c_npcm_reset_keep_targets(const struct device *dev)
+{
+	struct i2c_reg *const inst = I2C_INSTANCE(dev);
+	struct i2c_npcm_data *const data = dev->data;
+	bool registered = false;
+	int i;
+
+	i2c_npcm_reset_module(dev);
+	/* also clears a DMA_EN left from the dropped transaction */
+	inst->DMA_CTRL = BIT(NPCM_DMA_CTRL_DMA_INT_CLR);
+	inst->SMBnST = 0xFF;
+
+	for (i = 0; i < I2C_SLAVE_NUM; i++) {
+		if (data->target_cfg[i]) {
+			registered = true;
+			i2c_set_target_addr(dev, i, data->target_cfg[i]->address);
+		}
+	}
+	data->target_oper_state = registered ? I2C_NPCM_OPER_STA_START : I2C_NPCM_OPER_STA_IDLE;
+}
+
+static bool i2c_npcm_lines_high(struct i2c_reg *const inst)
+{
+	return NPCM_IS_BIT_SET(inst->SMBnCTL3, NPCM_SMBnCTL3_SCL_LVL) &&
+	       NPCM_IS_BIT_SET(inst->SMBnCTL3, NPCM_SMBnCTL3_SDA_LVL);
+}
+
 #ifdef I2C_NPCM_HW_TIMEOUT
 /*
  * SCL was held low (T_OUTST1) or a transaction did not reach STOP
@@ -926,31 +925,35 @@ static void i2c_npcm_hw_timeout_recover(const struct device *dev, uint8_t timeou
 	struct i2c_reg *const inst = I2C_INSTANCE(dev);
 	struct i2c_npcm_data *const data = dev->data;
 	bool ctrl_pending = data->ctrl_oper_state != I2C_NPCM_OPER_STA_IDLE;
-	bool registered = false;
-	int i;
+	/* still waiting for the bus: nothing was sent, so it can be retried */
+	bool ctrl_no_start = data->ctrl_oper_state == I2C_NPCM_OPER_STA_START;
+
+	/*
+	 * The cycle detector counts from a START and is not always stopped by
+	 * the STOP that ended the transaction: it then expires on a free bus.
+	 * Resetting the module then could drop a target transfer that is
+	 * about to start, so only clear the status when nothing uses the bus.
+	 */
+	if (!(timeout_st & BIT(NPCM_TIMEOUT_ST_T_OUTST1)) &&
+	    !(inst->SMBnCST & BIT(NPCM_SMBnCST_BB)) && i2c_npcm_lines_high(inst) &&
+	    !(inst->SMBnST & BIT(NPCM_SMBnST_MASTER)) &&
+	    !ctrl_pending &&
+	    data->target_oper_state != I2C_NPCM_OPER_STA_READ &&
+	    data->target_oper_state != I2C_NPCM_OPER_STA_WRITE &&
+	    data->target_oper_state != I2C_NPCM_OPER_STA_QUICK) {
+		inst->TIMEOUT_ST = timeout_st | NPCM_TIMEOUT_ST_ALL;
+		return;
+	}
 
 	LOG_ERR("%s: %s timeout (ST 0x%02x CST 0x%02x), resetting", dev->name,
 		(timeout_st & BIT(NPCM_TIMEOUT_ST_T_OUTST1)) ? "SCL low" : "transaction",
 		inst->SMBnST, inst->SMBnCST);
 
-	i2c_npcm_reset_module(dev);
-	/* also clears a DMA_EN left from the dropped transaction */
-	inst->DMA_CTRL = BIT(NPCM_DMA_CTRL_DMA_INT_CLR);
-	inst->SMBnST = 0xFF;
-
-	for (i = 0; i < I2C_SLAVE_NUM; i++) {
-		if (data->target_cfg[i]) {
-			registered = true;
-			/* a pending transfer restores its own saved addresses */
-			if (!ctrl_pending) {
-				i2c_set_target_addr(dev, i, data->target_cfg[i]->address);
-			}
-		}
-	}
-	data->target_oper_state = registered ? I2C_NPCM_OPER_STA_START : I2C_NPCM_OPER_STA_IDLE;
+	i2c_npcm_reset_keep_targets(dev);
 
 	if (ctrl_pending) {
-		i2c_npcm_notify(dev, -ETIMEDOUT);
+		data->lost_bus = ctrl_no_start;
+		i2c_npcm_notify(dev, ctrl_no_start ? -EAGAIN : -ETIMEDOUT);
 	}
 }
 #endif
@@ -989,6 +992,27 @@ static void i2c_npcm_isr(const struct device *dev)
 #endif
 
 	uint8_t st = inst->SMBnST;
+
+	/*
+	 * BER while requesting or owning the bus as controller means the
+	 * module lost arbitration (or saw a misplaced START/STOP); MASTER is
+	 * already cleared. It keeps matching the address of the controller
+	 * that won (NPCM4xx SMBus Slave Mode), so do not reset it here: drop
+	 * the controller transfer and let a match reach the target handler.
+	 * The transfer resets the module once the bus is free again.
+	 */
+	if ((st & BIT(NPCM_SMBnST_BER)) && !(st & BIT(NPCM_SMBnST_MASTER)) &&
+	    data->ctrl_oper_state != I2C_NPCM_OPER_STA_IDLE) {
+		inst->SMBnST = BIT(NPCM_SMBnST_BER) | BIT(NPCM_SMBnST_NEGACK) |
+			       BIT(NPCM_SMBnST_STASTR);
+		inst->SMBnCTL1 &= ~(BIT(NPCM_SMBnCTL1_START) | BIT(NPCM_SMBnCTL1_STOP));
+		/* also clears a DMA_EN set up for the dropped transfer */
+		inst->DMA_CTRL = BIT(NPCM_DMA_CTRL_DMA_INT_CLR);
+		data->lost_bus = true;
+		i2c_npcm_notify(dev, -EAGAIN);
+		st = inst->SMBnST;
+	}
+
 	bool target_active = data->target_oper_state == I2C_NPCM_OPER_STA_READ ||
 			     data->target_oper_state == I2C_NPCM_OPER_STA_WRITE ||
 			     data->target_oper_state == I2C_NPCM_OPER_STA_QUICK;
@@ -1214,12 +1238,6 @@ int i2c_npcm_recover_bus(const struct device *dev)
 	return 0;
 }
 
-static bool i2c_npcm_lines_high(struct i2c_reg *const inst)
-{
-	return NPCM_IS_BIT_SET(inst->SMBnCTL3, NPCM_SMBnCTL3_SCL_LVL) &&
-	       NPCM_IS_BIT_SET(inst->SMBnCTL3, NPCM_SMBnCTL3_SDA_LVL);
-}
-
 /*
  * Wait until no other controller owns the bus. Own addresses stay enabled
  * meanwhile, so a transaction addressed to this module is still served.
@@ -1262,11 +1280,31 @@ static int i2c_npcm_wait_bus_free(const struct device *dev)
 	return -EAGAIN;
 }
 
+/*
+ * After a lost arbitration the module may not generate another START until
+ * it is disabled and enabled again (SMB Bus Error Recovery). Do that once
+ * the other controller is done, unless it addresses this module again.
+ */
+static void i2c_npcm_reset_after_ber(const struct device *dev)
+{
+	struct i2c_reg *const inst = I2C_INSTANCE(dev);
+	struct i2c_npcm_data *const data = dev->data;
+	unsigned int key = irq_lock();
+
+	if (!(inst->SMBnCST & BIT(NPCM_SMBnCST_BB)) &&
+	    !(inst->SMBnST & BIT(NPCM_SMBnST_NMATCH)) &&
+	    data->target_oper_state != I2C_NPCM_OPER_STA_READ &&
+	    data->target_oper_state != I2C_NPCM_OPER_STA_WRITE &&
+	    data->target_oper_state != I2C_NPCM_OPER_STA_QUICK) {
+		i2c_npcm_reset_keep_targets(dev);
+	}
+	irq_unlock(key);
+}
+
 static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 				uint8_t num_msgs, uint16_t addr)
 {
-	int i, ret;
-	uint8_t value[I2C_SLAVE_NUM];
+	int ret;
 
 	struct i2c_npcm_data *const data = dev->data;
 
@@ -1280,23 +1318,19 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 		return ret;
 	}
 
-	/* save original slave addr setting and disable all the slave devices */
-	for (i = 0; i < I2C_SLAVE_NUM; i++) {
-		value[i] = i2c_ret_slave(dev, i);
-		i2c_conf_slave(dev, i, (value[i] & ~BIT(NPCM_SMBnADDR_SAEN)));
-	}
-
+	/*
+	 * Own addresses stay enabled: if another controller wins arbitration
+	 * and addresses this module, it is served as a target and the
+	 * transfer is retried, instead of NACKing that controller.
+	 */
 	/* prepare data to transfer */
 	data->rx_cnt = 0;
 	data->tx_cnt = 0;
 	data->dev_addr = addr << 1;
 	data->ctrl_oper_state = I2C_NPCM_OPER_STA_START;
 	data->err_code = 0;
+	data->lost_bus = false;
 	if (i2c_npcm_combine_msg(dev, msgs, num_msgs) < 0) {
-		/* restore slave addr setting */
-		for (i = 0; i < I2C_SLAVE_NUM; i++) {
-			i2c_conf_slave(dev, i, value[i]);
-		}
 		data->ctrl_oper_state = I2C_NPCM_OPER_STA_IDLE;
 		i2c_npcm_mutex_unlock(dev);
 		return -EPROTONOSUPPORT;
@@ -1306,10 +1340,6 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 		/* Quick command */
 		if (num_msgs != 1) {
 			/* Quick command must have one msg */
-			/* restore slave addr setting */
-			for (i = 0; i < I2C_SLAVE_NUM; i++) {
-				i2c_conf_slave(dev, i, value[i]);
-			}
 			data->ctrl_oper_state = I2C_NPCM_OPER_STA_IDLE;
 			i2c_npcm_mutex_unlock(dev);
 			return -EPROTONOSUPPORT;
@@ -1339,12 +1369,17 @@ static int i2c_npcm_transfer(const struct device *dev, struct i2c_msg *msgs,
 	}
 
 	if (data->err_code == -EAGAIN) {
-		ret = i2c_npcm_recover_bus(dev);
-	}
-
-	/* restore slave addr setting before another context can take the lock */
-	for (i = 0; i < I2C_SLAVE_NUM; i++) {
-		i2c_conf_slave(dev, i, value[i]);
+		/*
+		 * Another controller owns the bus now. Let it finish; only
+		 * clock the bus free if it never does. The message was not
+		 * sent either way, so the caller has to retry it.
+		 */
+		if (!data->lost_bus || i2c_npcm_wait_bus_free(dev) != 0) {
+			(void)i2c_npcm_recover_bus(dev);
+		} else {
+			i2c_npcm_reset_after_ber(dev);
+		}
+		ret = -EAGAIN;
 	}
 
 	i2c_npcm_mutex_unlock(dev);
