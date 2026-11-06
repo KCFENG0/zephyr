@@ -486,7 +486,7 @@
 	gpio21__back_cs__i3c1_scl__dsrb__pe__cirrx:
 	pin_gpio21__back_cs__i3c1_scl__dsrb__pe__cirrx {
 		nuvoton,pin-hw-def;
-		nuvoton,pin-reg = <NPCM_PINCTRL_ALT0_2_FIU_BACK_CS_SL
+		nuvoton,pin-reg = <NPCM_PINCTRL_ALT0_1_FIU_BACK_CS_SL
 				NPCM_PINCTRL_ALT10_6_I3C1_SL
 				NPCM_PINCTRL_ALT6B_4_URTB_DSR_SL2
 				NPCM_PINCTRL_ALT6_2_PRT_SL
