@@ -26,6 +26,11 @@
 #define NPCM_TWD_BASE DT_REG_ADDR(DT_NODELABEL(twd))
 
 #define NPCM_SCFG_CORST_CTL (SCFG_BASE_ADDR + 0x88)
+#define NPCM_RESET_ROUTE_MASK					\
+	(BIT(NPCM_CORST_CTL_CM7) | BIT(NPCM_CORST_CTL_EMAC) |	\
+	 BIT(NPCM_CORST_CTL_DMA) | BIT(NPCM_CORST_CTL_USBH) |	\
+	 BIT(NPCM_CORST_CTL_USBD) | BIT(NPCM_CORST_CTL_SIOX1) |	\
+	 BIT(NPCM_CORST_CTL_SIOX2) | BIT(NPCM_CORST_CTL_SPER))
 
 /*
  * SCFG Watchdog Reset Control register. Bit 0 (CM7) routes the watchdog
@@ -33,10 +38,13 @@
  * path must set it itself rather than relying on wdt_npcm_init().
  */
 #define NPCM_SCFG_WDTRST_CTL (SCFG_BASE_ADDR + 0x8C)
-#define NPCM_WDTRST_CTL_CM7  BIT(0)
-#define NPCM_WDTRST_CTL_USBD BIT(4)
+#define NPCM_WDTRST_CTL_ROUTE_MASK NPCM_RESET_ROUTE_MASK
 
-#define NPCM_RESET_ROUTE_MASK (BIT(0) | BIT(4))
+static inline void npcm_write_reset_route(volatile uint32_t *reg,
+						   uint32_t route)
+{
+	*reg = (*reg & ~NPCM_RESET_ROUTE_MASK) | (route & NPCM_RESET_ROUTE_MASK);
+}
 
 /* TWCFG bit 6 (WDCT0I_SEL) — required for the watchdog reset to propagate. */
 #define NPCM_TWCFG_WDCT0I_SEL BIT(6)
@@ -92,15 +100,13 @@ FUNC_NORETURN void npcm_soc_reset(void)
 	twd->TWDT0 = 0xFFFF;
 
 	/*
-	 * Route the watchdog reset to the CM7 and USBD domains. Clear and
-	 * reassert bits 0 and 4 so stale reset routing from ROM/boot code does
-	 * not linger across resets. This pattern avoids leaving unrelated bits
-	 * set while still preserving the rest of the register state.
+	 * Route reset propagation to the full NPCM500 domain set defined by the
+	 * datasheet: CM7, EMAC, DMA, USBH, USBD, SIOX1, SIOX2 and SPER. Clear
+	 * and reassert the domain bits so stale ROM/boot routing does not linger
+	 * across SoC resets. This keeps the rest of the register state intact.
 	 */
-	*wdtrst_ctl = (*wdtrst_ctl & ~NPCM_RESET_ROUTE_MASK) |
-		      (NPCM_WDTRST_CTL_CM7 | NPCM_WDTRST_CTL_USBD);
-	*corst_ctl = (*corst_ctl & ~NPCM_RESET_ROUTE_MASK) |
-		     (NPCM_CORST_CTL_CM7 | NPCM_CORST_CTL_USBD);
+	npcm_write_reset_route(wdtrst_ctl, NPCM_WDTRST_CTL_ROUTE_MASK);
+	npcm_write_reset_route(corst_ctl, NPCM_RESET_ROUTE_MASK);
 
 	/* Load WDCNT last — this arms the already-running watchdog. */
 	twd->WDCNT = 0x02;

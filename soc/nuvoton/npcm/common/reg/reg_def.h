@@ -177,7 +177,13 @@ struct scfg_reg {
 #define NPCM_RSTCTL_LRESET_PLTRST_MODE        5
 #define NPCM_RSTCTL_HIPRST_MODE               6
 #define NPCM_CORST_CTL_CM7                    0
+#define NPCM_CORST_CTL_EMAC                   3
 #define NPCM_CORST_CTL_USBD                   4
+#define NPCM_CORST_CTL_DMA                    5
+#define NPCM_CORST_CTL_USBH                   8
+#define NPCM_CORST_CTL_SIOX2                  25
+#define NPCM_CORST_CTL_SIOX1                  26
+#define NPCM_CORST_CTL_SPER                   28
 #define NPCM_DEV_CTL3_WP_INT_FL               0
 #define NPCM_DEV_CTL3_WP_GPIO55               1
 #define NPCM_DEV_CTL3_WP_GPIO76               2

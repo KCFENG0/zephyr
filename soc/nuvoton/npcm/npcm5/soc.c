@@ -15,7 +15,17 @@
 
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
-#define NPCM_CORST_CTL_MASK (BIT(0) | BIT(4))
+#define NPCM_CORST_CTL_MASK					\
+	(BIT(NPCM_CORST_CTL_CM7) | BIT(NPCM_CORST_CTL_EMAC) |	\
+	 BIT(NPCM_CORST_CTL_DMA) | BIT(NPCM_CORST_CTL_USBH) |	\
+	 BIT(NPCM_CORST_CTL_USBD) | BIT(NPCM_CORST_CTL_SIOX1) |	\
+	 BIT(NPCM_CORST_CTL_SIOX2) | BIT(NPCM_CORST_CTL_SPER))
+
+static inline void npcm_route_corst_reset(struct scfg_reg *inst_scfg)
+{
+	inst_scfg->CORST_CTL = (inst_scfg->CORST_CTL & ~NPCM_CORST_CTL_MASK) |
+			       NPCM_CORST_CTL_MASK;
+}
 
 #ifdef CONFIG_SOC_RESET_HOOK
 void soc_reset_hook(void)
@@ -41,13 +51,12 @@ void soc_reset_hook(void)
 	inst_scfg->DEVALT10 = devalt10;
 
 	/*
-	 * Route the CORST pin reset to the M7 and USBD domains. CORST_CTL
-	 * powers up as 0 and is only reset by VSB power-up. Clear and reassert
-	 * bits 0 and 4 so the ROM's previous route selection cannot leave stale
-	 * watchdog reset routing behind.
+	 * Route the CORST pin reset to the full NPCM500 domain set: CM7,
+	 * EMAC, DMA, USBH, USBD, SIOX1, SIOX2 and SPER. CORST_CTL powers up as
+	 * 0 and is only reset by VSB power-up, so clear and reassert the full
+	 * mask to avoid stale ROM/boot routing surviving into the next reset.
 	 */
-	inst_scfg->CORST_CTL = (inst_scfg->CORST_CTL & ~NPCM_CORST_CTL_MASK) |
-			       (BIT(NPCM_CORST_CTL_CM7) | NPCM_CORST_CTL_USBD);
+	npcm_route_corst_reset(inst_scfg);
 }
 #endif
 
