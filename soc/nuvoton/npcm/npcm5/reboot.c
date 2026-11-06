@@ -26,9 +26,6 @@
 #define NPCM_TWD_BASE DT_REG_ADDR(DT_NODELABEL(twd))
 
 #define NPCM_SCFG_CORST_CTL (SCFG_BASE_ADDR + 0x88)
-#define NPCM_CORST_CTL_CM7  BIT(0)
-#define NPCM_CORST_CTL_USBD BIT(4)
-#define NPCM_RESET_ROUTE_MASK (BIT(0) | BIT(4))
 
 /*
  * SCFG Watchdog Reset Control register. Bit 0 (CM7) routes the watchdog
@@ -38,6 +35,8 @@
 #define NPCM_SCFG_WDTRST_CTL (SCFG_BASE_ADDR + 0x8C)
 #define NPCM_WDTRST_CTL_CM7  BIT(0)
 #define NPCM_WDTRST_CTL_USBD BIT(4)
+
+#define NPCM_RESET_ROUTE_MASK (BIT(0) | BIT(4))
 
 /* TWCFG bit 6 (WDCT0I_SEL) — required for the watchdog reset to propagate. */
 #define NPCM_TWCFG_WDCT0I_SEL BIT(6)
