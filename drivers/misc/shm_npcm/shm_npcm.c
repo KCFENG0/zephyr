@@ -328,7 +328,7 @@ static void port80_npcm_isr(const void *arg)
 		shm_regs->DP80STS |= BIT(NPCM_DP80STS_FWR);
 	}
 
-	uint8_t len;
+	uint8_t len = 0;
 	uint16_t buf = 0;
 	uint32_t buf1 = 0;
 
@@ -352,6 +352,8 @@ static void port80_npcm_isr(const void *arg)
 			snoop_ptr[2] = (buf1 >> 16) & 0xFF;
 			snoop_ptr[3] = (buf1 >> 24) & 0xFF;
 			break;
+		default:
+			return;
 	}
 
 	if (data->rx_cb)
