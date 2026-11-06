@@ -43,6 +43,10 @@ LOG_MODULE_REGISTER(npcm_i3c, CONFIG_I3C_LOG_LEVEL);
 	 NPCM_I3C_MSTATUS_NOWCNTLR)
 /* Restarts of a START that lost arbitration to an IBI, as npcm4xx does */
 #define I3C_IBIWON_RESTART_MAX   2
+/* Target: wait for an earlier IBI to be accepted before raising a new one */
+#define I3C_TGT_IBI_LOCK_MS      1000
+/* Target: bus STOP wait before staging a response (npcm4xx put_read_data) */
+#define I3C_TGT_BUS_STOP_US      100000
 #define I3C_TGT_INTSET_MASK                                                                        \
 	(NPCM_I3C_INTSET_START | NPCM_I3C_INTSET_MATCHED | NPCM_I3C_INTSET_STOP |                  \
 	 NPCM_I3C_INTSET_DACHG | NPCM_I3C_INTSET_CCC | NPCM_I3C_INTSET_ERRWARN |                   \
@@ -2939,7 +2943,10 @@ static int npcm_i3c_target_ibi_raise(const struct device *dev, struct i3c_ibi *r
 			return -EINVAL;
 		}
 
-		k_sem_take(&data->target_event_lock_sem, K_FOREVER);
+		if (k_sem_take(&data->target_event_lock_sem, K_MSEC(I3C_TGT_IBI_LOCK_MS)) != 0) {
+			LOG_ERR("IBI: previous event still pending");
+			return -EBUSY;
+		}
 		set_oper_state(dev, I3C_OP_STATE_IBI);
 
 		/* Mandatory data byte */
@@ -3074,9 +3081,13 @@ static inline int npcm_i3c_target_MATCHED_handler(const struct device *dev)
 	uint32_t int_status = i3c_inst->STATUS;
 
 #ifdef CONFIG_I3C_NPCM_DMA
-	if (oper_state != I3C_OP_STATE_IBI) {
+	/*
+	 * While an IBI is pending only reads are ignored (they wait for the
+	 * IBI); a private write must still be delivered, as npcm4xx does.
+	 */
+	{
 		/* The current bus request is an SDR mode read or write */
-		if (int_status & NPCM_I3C_STATUS_STREQRD) {
+		if ((int_status & NPCM_I3C_STATUS_STREQRD) && (oper_state != I3C_OP_STATE_IBI)) {
 			/* SDR read request */
 			set_oper_state(dev, I3C_OP_STATE_RD);
 			ret = 1;
@@ -3097,8 +3108,8 @@ static inline int npcm_i3c_target_MATCHED_handler(const struct device *dev)
 		}
 	}
 #else
-	if (oper_state != I3C_OP_STATE_IBI) {
-		if (int_status & NPCM_I3C_STATUS_STREQRD) {
+	{
+		if ((int_status & NPCM_I3C_STATUS_STREQRD) && (oper_state != I3C_OP_STATE_IBI)) {
 			/* SDR read request */
 			set_oper_state(dev, I3C_OP_STATE_RD);
 			ret = 1;
@@ -3248,14 +3259,18 @@ static inline void npcm_i3c_target_START_handler(const struct device *dev)
 #ifdef CONFIG_I3C_NPCM_DMA
 		if (npcm_i3c_target_xfer_end_handle_dma(dev, oper_state) == -ETIMEDOUT) {
 			LOG_ERR("xfer end handle failed after start, op state=%d", oper_state);
-
-			set_oper_state(dev, I3C_OP_STATE_IDLE);
 		}
 #else
 		if (npcm_i3c_target_xfer_end_handle(dev, oper_state) != 0) {
 			LOG_ERR("xfer end handle failed after stop, op state=%d", oper_state);
 		}
 #endif
+		/*
+		 * The transfer is over; the next MATCHED sets the new state.
+		 * Left in RD/WR, the STOP would handle the end a second time and
+		 * could flush a response staged meanwhile.
+		 */
+		set_oper_state(dev, I3C_OP_STATE_IDLE);
 	}
 
 	/* Clear the status bit */
@@ -4175,12 +4190,53 @@ static int npcm_i3c_target_tx_write(const struct device *dev, uint8_t *buf, uint
 #endif
 }
 
+#ifdef CONFIG_I3C_USE_IBI
+/*
+ * Withdraw an IBI request the controller never accepted and release the
+ * event lock the EVENT interrupt would have given (npcm4xx
+ * rollback_event_state). Without it the next IBI blocks on the lock and is
+ * only raised once the stale one is accepted, so the controller reads the
+ * wrong response and its next read is NACKed.
+ */
+static void npcm_i3c_target_ibi_cancel(const struct device *dev)
+{
+	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
+	struct npcm_i3c_data *data = dev->data;
+	unsigned int key = irq_lock();
+	int retry = 100;
+
+	if (NPCM_GET_REG_FIELD(i3c_inst->CTRL, NPCM_I3C_CTRL_EVENT) !=
+	    NPCM_I3C_CTRL_EVENT_NORMAL) {
+		while (retry-- && (NPCM_GET_REG_FIELD(i3c_inst->CTRL, NPCM_I3C_CTRL_EVENT) !=
+				   NPCM_I3C_CTRL_EVENT_NORMAL)) {
+			NPCM_SET_REG_FIELD(i3c_inst->CTRL, NPCM_I3C_CTRL_EVENT,
+					   NPCM_I3C_CTRL_EVENT_NORMAL);
+		}
+		k_sem_give(&data->target_event_lock_sem);
+	}
+
+	if (get_oper_state(dev) == I3C_OP_STATE_IBI) {
+		set_oper_state(dev, I3C_OP_STATE_IDLE);
+	}
+
+	irq_unlock(key);
+}
+#endif
+
 static int npcm_i3c_target_pending_read_notify(const struct device *dev, uint8_t *buf,
 					       uint16_t len, struct i3c_ibi *notifier)
 {
 	int ret;
 #ifdef CONFIG_I3C_NPCM_DMA
 	struct npcm_i3c_data *data = dev->data;
+	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
+
+	/* Don't restage the TX data in the middle of a bus transfer */
+	if (!WAIT_FOR(!(i3c_inst->STATUS & NPCM_I3C_STATUS_STNOTSTOP), I3C_TGT_BUS_STOP_US,
+		      k_usleep(50))) {
+		LOG_ERR("pending read: bus busy");
+		return -EBUSY;
+	}
 
 	/* Clear any stale signal before starting the TX+IBI sequence.
 	 * Must be done before npcm_i3c_target_tx_write() to avoid a race
@@ -4220,6 +4276,7 @@ static int npcm_i3c_target_pending_read_notify(const struct device *dev, uint8_t
 	ret = k_sem_take(&data->tx_complete_sem, K_MSEC(1000));
 	if (ret != 0) {
 		LOG_ERR("wait master private read timeout (%d)", ret);
+		npcm_i3c_target_ibi_cancel(dev);
 		/* Clean up: disable DMA, flush TX FIFO, clear tx_valid */
 		data->tx_valid = false;
 		npcm_i3c_target_dma_off(dev, false);
