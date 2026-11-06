@@ -172,8 +172,7 @@ static void mctp_interface_config(struct usb_desc_header *head,
 
 
 #define DEFINE_MCTP_CFG_DATA(x, _)					\
-	USBD_CFG_DATA_DEFINE(primary, mctp)				\
-	struct usb_cfg_data mctp_config_##x = {				\
+	USBD_DEFINE_CFG_DATA(mctp_config_##x) = {				\
 		.usb_device_description = NULL,				\
 		.interface_config = mctp_interface_config,		\
 		.interface_descriptor = &mctp_cfg_##x.if0,		\

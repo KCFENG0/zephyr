@@ -443,8 +443,7 @@ static void obmf_interface_config(struct usb_desc_header *head,
 }
 
 #define DEFINE_OBMF_CFG_DATA(x, _) \
-	USBD_CFG_DATA_DEFINE(primary, obmf) \
-	struct usb_cfg_data obmf_config_##x = { \
+	USBD_DEFINE_CFG_DATA(obmf_config_##x) = { \
 		.usb_device_description = NULL, \
 		.interface_config = obmf_interface_config, \
 		.interface_descriptor = &obmf_cfg_##x.if0, \
