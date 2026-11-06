@@ -1809,6 +1809,19 @@ static int npcm_i3c_do_one_xfer_dma(const struct device *dev, uint8_t addr,
 	return ret;
 }
 
+/*
+ * A staged response has been read by the controller: the TX DMA moved all of
+ * it into the FIFO and the FIFO is empty again.
+ */
+static bool npcm_i3c_target_tx_drained(const struct device *dev)
+{
+	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
+	struct npcm_i3c_data *const data = dev->data;
+
+	return data->tx_valid && (npcm_i3c_pdma_remain_count(dev, false) == 0) &&
+	       (NPCM_GET_REG_FIELD(i3c_inst->DATACTRL, NPCM_I3C_DATACTRL_TXCOUNT) == 0);
+}
+
 /* brief:  Handle the end of transfer (read request or write request).
  *         The ending signal might be either STOP or Sr.
  * return: -EINVAL: operation not read or write request.
@@ -3192,6 +3205,17 @@ static inline void npcm_i3c_target_STOP_handler(const struct device *dev)
 	 * For read request: disable the pdma operation.
 	 */
 #ifdef CONFIG_I3C_NPCM_DMA
+	if ((oper_state != I3C_OP_STATE_RD) && npcm_i3c_target_tx_drained(dev)) {
+		/*
+		 * A short private read can complete before the ISR runs: STREQRD
+		 * is already clear when MATCHED is serviced, or the read was
+		 * ignored because the IBI STOP was still unserviced. The staged
+		 * response has been read, so finish it as a read to release the
+		 * pending-read waiter.
+		 */
+		npcm_i3c_target_xfer_end_handle_dma(dev, I3C_OP_STATE_RD);
+	}
+
 	if ((oper_state == I3C_OP_STATE_WR) || (oper_state == I3C_OP_STATE_RD)) {
 		if (npcm_i3c_target_xfer_end_handle_dma(dev, oper_state) != 0) {
 			LOG_ERR("xfer end handle failed after stop, op state=%d", oper_state);
@@ -4274,6 +4298,17 @@ static int npcm_i3c_target_pending_read_notify(const struct device *dev, uint8_t
 	 * This mirrors v2.6's k_sem_take(&pDevice->ibi_complete, K_MSEC(100)).
 	 */
 	ret = k_sem_take(&data->tx_complete_sem, K_MSEC(1000));
+	if (ret != 0) {
+		unsigned int key = irq_lock();
+
+		/* Read by the controller, but its STOP was not seen as a read */
+		if (npcm_i3c_target_tx_drained(dev)) {
+			data->tx_valid = false;
+			npcm_i3c_target_dma_off(dev, false);
+			ret = 0;
+		}
+		irq_unlock(key);
+	}
 	if (ret != 0) {
 		LOG_ERR("wait master private read timeout (%d)", ret);
 		npcm_i3c_target_ibi_cancel(dev);
