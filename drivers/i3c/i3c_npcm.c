@@ -34,9 +34,15 @@ LOG_MODULE_REGISTER(npcm_i3c, CONFIG_I3C_LOG_LEVEL);
 #define DAA_TGT_INFO_SZ          0x8         /* 8 bytes = PID(6) + BCR(1) + DCR(1) */
 #define I3C_DMA_DONE_TIMEOUT_US  100000      /* Maximum time for a DMA message to COMPLETE */
 #define I3C_CTRL_LOCKED_WAIT_US  2000        /* COMPLETE wait with interrupts locked */
+/*
+ * SLVSTART is left for the ISR: clearing it at the end of a transfer would
+ * lose an IBI requested while the controller interrupts were masked.
+ */
 #define I3C_STATUS_CLR_MASK                                                                        \
-	(NPCM_I3C_MSTATUS_SLVSTART | NPCM_I3C_MSTATUS_MCTRLDONE | NPCM_I3C_MSTATUS_COMPLETE |      \
-	 NPCM_I3C_MSTATUS_IBIWON | NPCM_I3C_MSTATUS_NOWCNTLR)
+	(NPCM_I3C_MSTATUS_MCTRLDONE | NPCM_I3C_MSTATUS_COMPLETE | NPCM_I3C_MSTATUS_IBIWON |        \
+	 NPCM_I3C_MSTATUS_NOWCNTLR)
+/* Restarts of a START that lost arbitration to an IBI, as npcm4xx does */
+#define I3C_IBIWON_RESTART_MAX   2
 #define I3C_TGT_INTSET_MASK                                                                        \
 	(NPCM_I3C_INTSET_START | NPCM_I3C_INTSET_MATCHED | NPCM_I3C_INTSET_STOP |                  \
 	 NPCM_I3C_INTSET_DACHG | NPCM_I3C_INTSET_CCC | NPCM_I3C_INTSET_ERRWARN |                   \
@@ -162,6 +168,35 @@ static inline void npcm_i3c_interrupt_enable(struct i3c_reg *i3c_inst, uint32_t 
 	i3c_inst->MINTSET = mask;
 }
 
+#ifdef CONFIG_I3C_USE_IBI
+static void npcm_i3c_ibi_work(struct k_work *work);
+
+/*
+ * Called once the controller interrupts are enabled again after a transfer.
+ * A target request that is still pending (its SLVSTART was consumed while
+ * the interrupts were masked) would otherwise wait for the next transfer.
+ */
+static void npcm_i3c_ibi_kick(const struct device *dev)
+{
+	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
+
+	if ((npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_TGTREQ) ||
+	    !(i3c_inst->MINTSET & NPCM_I3C_MINTSET_SLVSTART)) {
+		return;
+	}
+
+	/* The IBI work re-enables SLVSTART when done */
+	i3c_inst->MINTCLR = NPCM_I3C_MINTCLR_SLVSTART;
+	if (i3c_ibi_work_enqueue_cb(dev, npcm_i3c_ibi_work) < 0) {
+		i3c_inst->MINTSET = NPCM_I3C_MINTSET_SLVSTART;
+	}
+}
+#else
+static inline void npcm_i3c_ibi_kick(const struct device *dev)
+{
+}
+#endif
+
 static void npcm_i3c_enable_target_interrupt(const struct device *dev, bool enable)
 {
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
@@ -248,10 +283,35 @@ static inline int npcm_i3c_send_request(struct i3c_reg *i3c_inst, uint32_t mctrl
 	return 0;
 }
 
+static inline int npcm_i3c_ibi_respond_nack(struct i3c_reg *i3c_inst);
+
+/*
+ * A target won arbitration of the START just emitted (its address is lower
+ * than the one sent). The IBI was NACKed (IBIRESP=NACK) - by hand for a
+ * Hot-Join or controller request, which the hardware cannot NACK - and the
+ * target will raise it again. Clear IBIWON so the START can be re-issued.
+ */
+static bool npcm_i3c_ibi_won_nack(struct i3c_reg *i3c_inst)
+{
+	if (!(i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_IBIWON)) {
+		return false;
+	}
+
+	LOG_DBG("IBI won arbitration, MSTATUS %#x, restart", i3c_inst->MSTATUS);
+
+	if (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IBIACK) {
+		npcm_i3c_ibi_respond_nack(i3c_inst);
+	}
+	i3c_inst->MSTATUS = NPCM_I3C_MSTATUS_IBIWON;
+
+	return true;
+}
+
 /* Start DAA procedure and continue the DAA with a Repeated START */
 static inline int npcm_i3c_request_daa(struct i3c_reg *i3c_inst)
 {
 	uint32_t val = 0;
+	int tries = 0;
 	int ret;
 
 	/* Set IBI response NACK while processing DAA */
@@ -260,11 +320,13 @@ static inline int npcm_i3c_request_daa(struct i3c_reg *i3c_inst)
 	/* Send DAA request */
 	NPCM_SET_REG_FIELD(val, NPCM_I3C_MCTRL_REQUEST, NPCM_I3C_MCTRL_REQUEST_PROCESSDAA);
 
-	ret = npcm_i3c_send_request(i3c_inst, val);
-	if (ret != 0) {
-		LOG_ERR("Request DAA error, %d", ret);
-		return ret;
-	}
+	do {
+		ret = npcm_i3c_send_request(i3c_inst, val);
+		if (ret != 0) {
+			LOG_ERR("Request DAA error, %d", ret);
+			return ret;
+		}
+	} while (npcm_i3c_ibi_won_nack(i3c_inst) && tries++ < I3C_IBIWON_RESTART_MAX);
 
 	return 0;
 }
@@ -312,6 +374,7 @@ static int npcm_i3c_request_emit_start(struct i3c_reg *i3c_inst, uint8_t addr,
 				       enum npcm_i3c_mctrl_type op_type, bool is_rx, size_t read_sz)
 {
 	uint32_t mctrl = 0;
+	int tries = 0;
 	int ret;
 
 	/* Set request and target address*/
@@ -334,11 +397,13 @@ static int npcm_i3c_request_emit_start(struct i3c_reg *i3c_inst, uint8_t addr,
 		mctrl &= ~NPCM_I3C_MCTRL_DIR;
 	}
 
-	ret = npcm_i3c_send_request(i3c_inst, mctrl);
-	if (ret != 0) {
-		LOG_ERR("Request start error, %d", ret);
-		return ret;
-	}
+	do {
+		ret = npcm_i3c_send_request(i3c_inst, mctrl);
+		if (ret != 0) {
+			LOG_ERR("Request start error, %d", ret);
+			return ret;
+		}
+	} while (npcm_i3c_ibi_won_nack(i3c_inst) && tries++ < I3C_IBIWON_RESTART_MAX);
 
 	/* Check NACK after MCTRLDONE is get */
 	if (i3c_inst->MERRWARN & NPCM_I3C_MERRWARN_NACK) {
@@ -526,23 +591,170 @@ static inline void npcm_i3c_xfer_reset(struct i3c_reg *i3c_inst)
 	npcm_i3c_controller_fifo_flush(i3c_inst);
 }
 
+#ifdef CONFIG_I3C_USE_IBI
+static int npcm_i3c_xfer_read_fifo(struct i3c_reg *i3c_inst, uint8_t *buf, size_t rd_sz);
+
 /*
- * Wait for the controller to be IDLE before starting a transfer. If an IBI
- * was not serviced in time (for example a Hot-Join left in IBIACK), recover
- * the bus instead of failing every later transfer.
+ * Win a pending target request and pass an IBI payload to the target's
+ * callback. The caller holds the controller mutex and ibi_lock_sem.
+ * Returns true if a target won arbitration.
+ */
+static bool npcm_i3c_ibi_service(const struct device *dev)
+{
+	uint8_t payload[CONFIG_I3C_IBI_MAX_PAYLOAD_SIZE];
+	size_t payload_sz = 0;
+	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
+	struct i3c_device_desc *target = NULL;
+	uint32_t ibitype, ibiaddr;
+	bool won = false;
+	int ret;
+
+	if (npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_TGTREQ) {
+		/* Already serviced by a transfer that lost arbitration to the IBI */
+		LOG_DBG("IBI: no pending request, MSTATUS 0x%08x MERRWARN 0x%08x",
+			i3c_inst->MSTATUS, i3c_inst->MERRWARN);
+
+		if (npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_IDLE) {
+			npcm_i3c_request_emit_stop(i3c_inst);
+		}
+
+		goto out;
+	};
+
+	/* Emit START + 7Eh so the requesting target can win arbitration */
+	ret = npcm_i3c_request_ibi_start(i3c_inst);
+
+	/*
+	 * MCTRLDONE is set once the address phase ends, so IBIWON (or the
+	 * IBIACK state, which also holds IBITYPE/IBIADDR) is already valid.
+	 * Without it the target released SDA: just end the message.
+	 */
+	if ((ret != 0) || !((i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_IBIWON) ||
+			    (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IBIACK))) {
+		LOG_DBG("IBI: no IBI won, MSTATUS 0x%08x", i3c_inst->MSTATUS);
+		npcm_i3c_request_emit_stop(i3c_inst);
+
+		goto out;
+	}
+
+	won = true;
+	ibitype = NPCM_GET_REG_FIELD(i3c_inst->MSTATUS, NPCM_I3C_MSTATUS_IBITYPE);
+	ibiaddr = NPCM_GET_REG_FIELD(i3c_inst->MSTATUS, NPCM_I3C_MSTATUS_IBIADDR);
+
+	switch (ibitype) {
+	case NPCM_I3C_MSTATUS_IBITYPE_IBI:
+		target = i3c_dev_list_i3c_addr_find(dev, (uint8_t)ibiaddr);
+		if ((target != NULL) && (target->ibi_cb == NULL)) {
+			/* Not hooked up yet (just after DAA): let the target retry */
+			LOG_DBG("IBI: no callback for 0x%02x, NACK", ibiaddr);
+			target = NULL;
+		}
+		if (target != NULL) {
+			ret = npcm_i3c_xfer_read_fifo(i3c_inst, &payload[0], sizeof(payload));
+			if (ret >= 0) {
+				payload_sz = (size_t)ret;
+			} else {
+				LOG_ERR("Error reading IBI payload");
+
+				npcm_i3c_request_emit_stop(i3c_inst);
+
+				goto out;
+			}
+		} else {
+			/* NACK IBI coming from unknown device */
+			npcm_i3c_ibi_respond_nack(i3c_inst);
+		}
+		break;
+
+	case NPCM_I3C_MSTATUS_IBITYPE_HJ:
+		npcm_i3c_ibi_respond_ack(i3c_inst);
+		npcm_i3c_request_emit_stop(i3c_inst);
+		break;
+
+	case NPCM_I3C_MSTATUS_IBITYPE_CR:
+		LOG_DBG("Controller role handoff not supported");
+		npcm_i3c_ibi_respond_nack(i3c_inst);
+		npcm_i3c_request_emit_stop(i3c_inst);
+		break;
+
+	default:
+		/* Intentionally left empty */
+		break;
+	}
+
+	if (npcm_i3c_has_error(i3c_inst)) {
+		/*
+		 * If the controller detects any errors, simply
+		 * emit a STOP to abort the IBI. The target will
+		 * raise IBI again if so desired.
+		 */
+		npcm_i3c_request_emit_stop(i3c_inst);
+
+		goto out;
+	}
+
+	switch (ibitype) {
+	case NPCM_I3C_MSTATUS_IBITYPE_IBI:
+		if (target != NULL) {
+			if (i3c_ibi_work_enqueue_target_irq(target, &payload[0], payload_sz) != 0) {
+				LOG_ERR("Error enqueue IBI IRQ work");
+			}
+		}
+
+		/* Finishing the IBI transaction */
+		npcm_i3c_request_emit_stop(i3c_inst);
+		break;
+
+	case NPCM_I3C_MSTATUS_IBITYPE_HJ:
+		if (i3c_ibi_work_enqueue_hotjoin(dev) != 0) {
+			LOG_ERR("Error enqueue IBI HJ work");
+		}
+		break;
+
+	case NPCM_I3C_MSTATUS_IBITYPE_CR:
+		/* Not supported, for future use. */
+		break;
+
+	default:
+		break;
+	}
+
+out:
+	npcm_i3c_xfer_reset(i3c_inst);
+
+	return won;
+}
+
+#endif /* CONFIG_I3C_USE_IBI */
+
+/*
+ * Wait for the controller to be IDLE before starting a transfer. The caller
+ * holds the controller mutex, so the IBI work cannot run: serve a pending
+ * IBI here instead of letting it time out and be drained by bus recovery,
+ * which would ACK the IBI on the bus but never deliver it. If the bus is
+ * stuck for another reason (for example a Hot-Join left in IBIACK), recover
+ * it instead of failing every later transfer.
  */
 static bool npcm_i3c_wait_idle(const struct device *dev)
 {
 	struct npcm_i3c_data *data = dev->data;
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
 
-	if (WAIT_FOR((npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IDLE),
-		     I3C_CHK_TIMEOUT_US, NULL)) {
+	if (WAIT_FOR((npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IDLE) ||
+		     (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_TGTREQ),
+		     I3C_CHK_TIMEOUT_US, NULL) &&
+	    (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IDLE)) {
 		return true;
 	}
 
 	/* Don't race the IBI work if it is still servicing the request */
 	if (k_sem_take(&data->ibi_lock_sem, K_MSEC(10)) == 0) {
+#ifdef CONFIG_I3C_USE_IBI
+		for (int i = 0; i < 10 && npcm_i3c_state_get(i3c_inst) ==
+						  NPCM_I3C_MSTATUS_STATE_TGTREQ; i++) {
+			(void)npcm_i3c_ibi_service(dev);
+		}
+#endif
 		if (npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_IDLE) {
 			LOG_WRN("bus not idle (state %d, MSTATUS %#x), recovering",
 				npcm_i3c_state_get(i3c_inst), i3c_inst->MSTATUS);
@@ -2096,6 +2308,7 @@ static int npcm_i3c_transfer(const struct device *dev, struct i3c_device_desc *t
 	npcm_i3c_status_clear_all(i3c_inst);
 
 	npcm_i3c_interrupt_enable(i3c_inst, intmask);
+	npcm_i3c_ibi_kick(dev);
 
 	npcm_i3c_mutex_unlock(dev);
 	return ret;
@@ -2322,6 +2535,7 @@ out_do_daa:
 
 	/* Re-Enable I3C IRQ sources. */
 	npcm_i3c_interrupt_enable(i3c_inst, intmask);
+	npcm_i3c_ibi_kick(dev);
 
 	npcm_i3c_controller_fifo_flush(i3c_inst);
 	npcm_i3c_mutex_unlock(dev);
@@ -2457,6 +2671,7 @@ out_do_ccc:
 	npcm_i3c_request_emit_stop(i3c_inst);
 
 	npcm_i3c_interrupt_enable(i3c_inst, intmask);
+	npcm_i3c_ibi_kick(dev);
 
 	npcm_i3c_mutex_unlock(dev);
 
@@ -2471,16 +2686,10 @@ out_do_ccc:
  */
 static void npcm_i3c_ibi_work(struct k_work *work)
 {
-	uint8_t payload[CONFIG_I3C_IBI_MAX_PAYLOAD_SIZE];
-	size_t payload_sz = 0;
-
 	struct i3c_ibi_work *i3c_ibi_work = CONTAINER_OF(work, struct i3c_ibi_work, work);
 	const struct device *dev = i3c_ibi_work->controller;
 	struct npcm_i3c_data *data = dev->data;
 	struct i3c_reg *i3c_inst = HAL_INSTANCE(dev);
-	struct i3c_device_desc *target = NULL;
-	uint32_t ibitype, ibiaddr;
-	int ret;
 
 	/*
 	 * Serialize with CCC/DAA/private transfers: their MCTRL requests must
@@ -2490,112 +2699,7 @@ static void npcm_i3c_ibi_work(struct k_work *work)
 	npcm_i3c_mutex_lock(dev);
 	k_sem_take(&data->ibi_lock_sem, K_FOREVER);
 
-	if (npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_TGTREQ) {
-		/* Already serviced by a transfer that lost arbitration to the IBI */
-		LOG_DBG("IBI work %p: no pending IBI, MSTATUS 0x%08x MERRWARN 0x%08x", work,
-			i3c_inst->MSTATUS, i3c_inst->MERRWARN);
-
-		if (npcm_i3c_state_get(i3c_inst) != NPCM_I3C_MSTATUS_STATE_IDLE) {
-			npcm_i3c_request_emit_stop(i3c_inst);
-		}
-
-		goto out_ibi_work;
-	};
-
-	/* Emit START + 7Eh so the requesting target can win arbitration */
-	ret = npcm_i3c_request_ibi_start(i3c_inst);
-
-	/*
-	 * MCTRLDONE is set once the address phase ends, so IBIWON (or the
-	 * IBIACK state, which also holds IBITYPE/IBIADDR) is already valid.
-	 * Without it the target released SDA: just end the message.
-	 */
-	if ((ret != 0) || !((i3c_inst->MSTATUS & NPCM_I3C_MSTATUS_IBIWON) ||
-			    (npcm_i3c_state_get(i3c_inst) == NPCM_I3C_MSTATUS_STATE_IBIACK))) {
-		LOG_DBG("IBI work: no IBI won, MSTATUS 0x%08x", i3c_inst->MSTATUS);
-		npcm_i3c_request_emit_stop(i3c_inst);
-
-		goto out_ibi_work;
-	}
-
-	ibitype = NPCM_GET_REG_FIELD(i3c_inst->MSTATUS, NPCM_I3C_MSTATUS_IBITYPE);
-	ibiaddr = NPCM_GET_REG_FIELD(i3c_inst->MSTATUS, NPCM_I3C_MSTATUS_IBIADDR);
-
-	switch (ibitype) {
-	case NPCM_I3C_MSTATUS_IBITYPE_IBI:
-		target = i3c_dev_list_i3c_addr_find(dev, (uint8_t)ibiaddr);
-		if (target != NULL) {
-			ret = npcm_i3c_xfer_read_fifo(i3c_inst, &payload[0], sizeof(payload));
-			if (ret >= 0) {
-				payload_sz = (size_t)ret;
-			} else {
-				LOG_ERR("Error reading IBI payload");
-
-				npcm_i3c_request_emit_stop(i3c_inst);
-
-				goto out_ibi_work;
-			}
-		} else {
-			/* NACK IBI coming from unknown device */
-			npcm_i3c_ibi_respond_nack(i3c_inst);
-		}
-		break;
-
-	case NPCM_I3C_MSTATUS_IBITYPE_HJ:
-		npcm_i3c_ibi_respond_ack(i3c_inst);
-		npcm_i3c_request_emit_stop(i3c_inst);
-		break;
-
-	case NPCM_I3C_MSTATUS_IBITYPE_CR:
-		LOG_DBG("Controller role handoff not supported");
-		npcm_i3c_ibi_respond_nack(i3c_inst);
-		npcm_i3c_request_emit_stop(i3c_inst);
-		break;
-
-	default:
-		/* Intentionally left empty */
-		break;
-	}
-
-	if (npcm_i3c_has_error(i3c_inst)) {
-		/*
-		 * If the controller detects any errors, simply
-		 * emit a STOP to abort the IBI. The target will
-		 * raise IBI again if so desired.
-		 */
-		npcm_i3c_request_emit_stop(i3c_inst);
-
-		goto out_ibi_work;
-	}
-
-	switch (ibitype) {
-	case NPCM_I3C_MSTATUS_IBITYPE_IBI:
-		if (target != NULL) {
-			if (i3c_ibi_work_enqueue_target_irq(target, &payload[0], payload_sz) != 0) {
-				LOG_ERR("Error enqueue IBI IRQ work");
-			}
-		}
-
-		/* Finishing the IBI transaction */
-		npcm_i3c_request_emit_stop(i3c_inst);
-		break;
-
-	case NPCM_I3C_MSTATUS_IBITYPE_HJ:
-		if (i3c_ibi_work_enqueue_hotjoin(dev) != 0) {
-			LOG_ERR("Error enqueue IBI HJ work");
-		}
-		break;
-
-	case NPCM_I3C_MSTATUS_IBITYPE_CR:
-		/* Not supported, for future use. */
-		break;
-
-	default:
-		break;
-	}
-
-out_ibi_work:
-	npcm_i3c_xfer_reset(i3c_inst);
+	(void)npcm_i3c_ibi_service(dev);
 
 	k_sem_give(&data->ibi_lock_sem);
 	npcm_i3c_mutex_unlock(dev);
@@ -3992,6 +4096,7 @@ out_xfer_i2c_stop_unlock:
 	npcm_i3c_status_clear_all(i3c_inst);
 
 	npcm_i3c_interrupt_enable(i3c_inst, intmask);
+	npcm_i3c_ibi_kick(dev);
 	npcm_i3c_mutex_unlock(dev);
 
 	return ret;
