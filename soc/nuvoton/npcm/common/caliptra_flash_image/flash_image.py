@@ -15,7 +15,7 @@ partition-table state. The layout file alone decides which slots a variant ships
               (--soc-manifest overrides it with a prebuilt one)
 
 Layouts are chip-neutral. The chip's MCU ROM decides the container format
-(A1: v1, B1: v3): pass it as --format; the npcm5 build derives it from
+(A1: v1, A2: v3): pass it as --format; the npcm5 build derives it from
 CONFIG_NPCM500_REV_*.
 
 The container format is inlined from flash_image_tool.py (only the pieces this

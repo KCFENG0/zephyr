@@ -37,11 +37,11 @@ set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/li
 #                           compatible) | bypass-mcu (MCU fw, no manifest) |
 #                           bypass-soc (SoC fw only; the A1 default when the
 #                           bypass MCU runtime is absent) | caliptra (full
-#                           Caliptra boot; the default on B1) | path to a
+#                           Caliptra boot; the default on A2) | path to a
 #                           project-local layout JSON
 #   -DFLASH_FORMAT=<x>      container version (default: the one the chip's MCU
 #                           ROM parses): v1 (A1, byte-identical to
-#                           flash_image_tool.py gen-test-flash) | v3 (B1 /
+#                           flash_image_tool.py gen-test-flash) | v3 (A2 /
 #                           2.1.2+ ROM, page-aligned)
 #   -DMCU_FW=<path>         MCU firmware (default: the prebuilt runtime under
 #                           mcu-fw/<chip>/<target>/<bypass|caliptra>/)
@@ -52,8 +52,8 @@ set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/li
 #   -DFLASH_CONNECTION=<x>  internal (default) | external-ab | external
 #   -DFLASH_IMAGE_SIZE=<n>  pad to this flash size (default: sized to content)
 #
-# The chip comes from CONFIG_NPCM500_REV_A1/_B1 and the target from
-# CONFIG_NPCM500_FPGA; the layout only names the boot flow.
+# The chip comes from the board revision (CONFIG_NPCM500_REV_A1/_A2) and the
+# target from CONFIG_NPCM500_FPGA; the layout only names the boot flow.
 #
 # ponytail: -D cache vars, promote to Kconfig when a second board needs a
 # different flash geometry.
@@ -65,11 +65,11 @@ set(caliptra_images_dir ${WEST_TOPDIR}/modules/caliptra/caliptra-mcu-sw/platform
 set(CALIPTRA_FW_DEFAULT ${caliptra_images_dir}/caliptra/caliptra-fw.bin)
 
 # The chip decides the container format its MCU ROM parses and the boot flows it
-# has (B1 boots only through Caliptra). The target decides which prebuilt MCU
+# has (A2 boots only through Caliptra). The target decides which prebuilt MCU
 # runtime fits: an npcm500-fpga build fixes the console divisor for the 10 MHz
 # FPGA clock and garbles the MCU log on silicon, and the other way round.
-if(CONFIG_NPCM500_REV_B1)
-  set(npcm500_chip b1)
+if(CONFIG_NPCM500_REV_A2)
+  set(npcm500_chip a2)
   set(chip_format v3)
   set(chip_flows caliptra)
 else()
@@ -86,12 +86,8 @@ set(mcu_fw_dir ${caliptra_images_dir}/mcu-fw/${npcm500_chip}/${npcm500_target})
 
 # Layout names used to carry the chip (<old>:<new>:<chip>). Keep them working
 # where they agree with CONFIG_NPCM500_REV_*, and name the replacement either way.
-if(FLASH_LAYOUT STREQUAL "a2")
-  message(FATAL_ERROR "FLASH_LAYOUT=a2 is gone; use -DFLASH_LAYOUT=caliptra, with "
-                      "CONFIG_NPCM500_REV_B1=y on the B1 FPGA")
-endif()
 set(retired_layouts a1:bypass:a1 a1-mcu:bypass-mcu:a1 a1-soc:bypass-soc:a1
-                    a1-caliptra:caliptra:a1 b1:caliptra:b1)
+                    a1-caliptra:caliptra:a1 a2:caliptra:a2 b1:caliptra:a2)
 foreach(entry ${retired_layouts})
   string(REPLACE ":" ";" entry ${entry})
   list(GET entry 0 old_name)
@@ -101,15 +97,15 @@ foreach(entry ${retired_layouts})
     string(TOUPPER ${old_chip} old_chip_upper)
     if(NOT old_chip STREQUAL npcm500_chip)
       message(FATAL_ERROR "FLASH_LAYOUT=${old_name} is the ${old_chip_upper} ${new_name} layout; "
-                          "set CONFIG_NPCM500_REV_${old_chip_upper}=y and use -DFLASH_LAYOUT=${new_name}")
+                          "build for ${BOARD}@${old_chip} and use -DFLASH_LAYOUT=${new_name}")
     endif()
     message(DEPRECATION "FLASH_LAYOUT=${old_name} is now ${new_name}; the chip comes from "
-                        "CONFIG_NPCM500_REV_${old_chip_upper}")
+                        "the board revision (${BOARD}@${npcm500_chip})")
     set(FLASH_LAYOUT ${new_name})
   endif()
 endforeach()
 
-# B1 has only the Caliptra flow. On A1 the default bypass image packs the bypass
+# A2 has only the Caliptra flow. On A1 the default bypass image packs the bypass
 # MCU runtime from the caliptra-mcu-sw module; without the module, fall back to
 # the SoC-only variant, which the A1 bypass ROM boots directly, instead of failing.
 if(NOT FLASH_LAYOUT)

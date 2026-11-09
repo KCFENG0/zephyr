@@ -1,5 +1,7 @@
 board:
   name: npcm500_evb
   vendor: nuvoton
+  revision:
+    format: custom
   socs:
   - name: npcm500
