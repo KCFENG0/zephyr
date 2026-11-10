@@ -12,45 +12,60 @@
 #include <zephyr/shell/shell.h>
 #include <zephyr/drivers/jtag.h>
 #include <stdlib.h>
+#include <string.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/sys/util.h>
 
 #define JTAG_DEVICE_PREFIX              "jtagm"
 
-static uint8_t tdi_buffer[512];
+#define JTAG_SHELL_BUF_SIZE	512
 
-static int cmd_ir_scan(const struct shell *shell, size_t argc, char **argv)
+/* Word aligned: the driver reads and writes the buffers 32 bits at a time */
+static uint32_t tdo_buffer[JTAG_SHELL_BUF_SIZE / 4];
+static uint32_t tdi_buffer[JTAG_SHELL_BUF_SIZE / 4];
+
+/*
+ * Parse a hex string (optional 0x prefix, any length) into buf, least
+ * significant byte first, so values wider than 32 bits can be scanned.
+ */
+static int parse_hex(const char *str, uint8_t *buf, size_t buf_len)
 {
-	const struct device *dev;
-	uint32_t bit_len, byte_len;
-	uint32_t value;
-	int err, index;
+	size_t len;
 
-	dev = device_get_binding(argv[-1]);
-	if (!dev || !device_is_ready(dev)) {
-		shell_error(shell, "JTAG device not found or not ready");
+	if (str[0] == '0' && (str[1] == 'x' || str[1] == 'X')) {
+		str += 2;
+	}
+	len = strlen(str);
+	if (len == 0 || DIV_ROUND_UP(len, 2) > buf_len) {
 		return -EINVAL;
 	}
 
-	bit_len = strtoul(argv[1], NULL, 0);
-	value = strtoul(argv[2], NULL, 16);
+	memset(buf, 0, buf_len);
+	for (size_t i = 0; i < len; i++) {
+		char c = str[len - 1 - i];
+		uint8_t nibble;
 
-	err = jtag_ir_scan(dev, bit_len, (uint8_t *)&value, tdi_buffer,
-			TAP_IDLE);
-	if (err) {
-		shell_error(shell, "failed to IR scan (err %d)", err);
-		return err;
-	}
-	byte_len = (bit_len + 7) >> 3;
-	for (index = byte_len - 1; index >= 0; index--) {
-		shell_print(shell, "%x", tdi_buffer[index]);
+		if (c >= '0' && c <= '9') {
+			nibble = c - '0';
+		} else if (c >= 'a' && c <= 'f') {
+			nibble = c - 'a' + 10;
+		} else if (c >= 'A' && c <= 'F') {
+			nibble = c - 'A' + 10;
+		} else {
+			return -EINVAL;
+		}
+		buf[i / 2] |= nibble << ((i % 2) * 4);
 	}
 	return 0;
 }
 
-static int cmd_dr_scan(const struct shell *shell, size_t argc, char **argv)
+static int cmd_scan(const struct shell *shell, char **argv, bool ir)
 {
 	const struct device *dev;
+	uint8_t *tdo = (uint8_t *)tdo_buffer;
+	uint8_t *tdi = (uint8_t *)tdi_buffer;
+	static char line[2 * JTAG_SHELL_BUF_SIZE + 1];
 	uint32_t bit_len, byte_len;
-	uint32_t value;
 	int err, index;
 
 	dev = device_get_binding(argv[-1]);
@@ -60,19 +75,45 @@ static int cmd_dr_scan(const struct shell *shell, size_t argc, char **argv)
 	}
 
 	bit_len = strtoul(argv[1], NULL, 0);
-	value = strtoul(argv[2], NULL, 16);
+	if (bit_len == 0 || bit_len > JTAG_SHELL_BUF_SIZE * 8) {
+		shell_error(shell, "length must be 1..%d bits", JTAG_SHELL_BUF_SIZE * 8);
+		return -EINVAL;
+	}
+	if (parse_hex(argv[2], tdo, sizeof(tdo_buffer))) {
+		shell_error(shell, "invalid hex value: %s", argv[2]);
+		return -EINVAL;
+	}
+	memset(tdi, 0, sizeof(tdi_buffer));
 
-	err = jtag_dr_scan(dev, bit_len, (uint8_t *)&value, tdi_buffer,
-			TAP_IDLE);
+	if (ir) {
+		err = jtag_ir_scan(dev, bit_len, tdo, tdi, TAP_IDLE);
+	} else {
+		err = jtag_dr_scan(dev, bit_len, tdo, tdi, TAP_IDLE);
+	}
 	if (err) {
-		shell_error(shell, "failed to DR scan (err %d)", err);
+		shell_error(shell, "failed to %s scan (err %d)", ir ? "IR" : "DR", err);
 		return err;
 	}
-	byte_len = (bit_len + 7) >> 3;
+
+	/* Captured bits as one hex number, most significant byte first */
+	byte_len = DIV_ROUND_UP(bit_len, 8);
 	for (index = byte_len - 1; index >= 0; index--) {
-		shell_print(shell, "%x", tdi_buffer[index]);
+		snprintk(&line[2 * (byte_len - 1 - index)], 3, "%02x", tdi[index]);
 	}
+	shell_print(shell, "%s", line);
 	return 0;
+}
+
+static int cmd_ir_scan(const struct shell *shell, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	return cmd_scan(shell, argv, true);
+}
+
+static int cmd_dr_scan(const struct shell *shell, size_t argc, char **argv)
+{
+	ARG_UNUSED(argc);
+	return cmd_scan(shell, argv, false);
 }
 
 static int cmd_frequency(const struct shell *shell, size_t argc, char **argv)
@@ -188,9 +229,9 @@ SHELL_SUBCMD_DICT_SET_CREATE(sub_pin_cmds, cmd_sw_xfer,
 			sub_jtag_cmds,
 			SHELL_CMD_ARG(frequency, NULL, "<frequency>", cmd_frequency, 2,
 				0),
-			SHELL_CMD_ARG(ir_scan, NULL, "<len> <value>", cmd_ir_scan, 3,
+			SHELL_CMD_ARG(ir_scan, NULL, "<len> <hex value, any width>", cmd_ir_scan, 3,
 				0),
-			SHELL_CMD_ARG(dr_scan, NULL, "<len> <value>", cmd_dr_scan, 3,
+			SHELL_CMD_ARG(dr_scan, NULL, "<len> <hex value, any width>", cmd_dr_scan, 3,
 				0),
 			SHELL_CMD(tap_set, &sub_tap_cmds, "<tap_state>", NULL),
 			SHELL_CMD(sw_xfer, &sub_action_cmds, "<high/low> <pin>", NULL),

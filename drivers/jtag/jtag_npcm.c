@@ -57,7 +57,7 @@ struct jtag_npcm_data {
 
 #define NPCM_JTAGM_CTL_JTAGM_EN		BIT(0)
 #define NPCM_JTAGM_CTL_DONE_IE		BIT(4)
-#define NPCM_JTAGM_CTL_TRST_OUT		BIT(7)
+#define NPCM_JTAGM_CTL_TRST_OUT		BIT(8)
 #define NPCM_JTAGM_CTL_INSMP_EJ		BIT(12)
 #define NPCM_JTAGM_CTL_CKDV_POS		16
 #define NPCM_JTAGM_CTL_CKDV_MASK	GENMASK(23, 16)
@@ -239,45 +239,53 @@ static int jtag_npcm_hw_tms_shift(const struct device *dev,
 	return 0;
 }
 
-static void jtag_npcm_set_tap_state(const struct device *dev,
-				     enum jtag_npcm_tap_states from,
-				     enum jtag_npcm_tap_states to)
+static int jtag_npcm_set_tap_state(const struct device *dev,
+				    enum jtag_npcm_tap_states from,
+				    enum jtag_npcm_tap_states to)
 {
 	/* 9 bits of TMS=1 guarantee reaching Test-Logic Reset from any state */
 	static const uint8_t tms_reset[2] = { 0xFF, 0x01 };
 	uint8_t tmsbuf[2];
 	uint8_t tmsbits;
 	uint8_t count;
+	int ret;
 
 	if (from == to) {
-		return;
+		return 0;
 	}
 	if (from == NPCM_TAP_CURRENT_STATE) {
 		from = gjtag.tap_state;
 	}
 	if (from > NPCM_TAP_CURRENT_STATE || to > NPCM_TAP_CURRENT_STATE) {
-		return;
+		return -EINVAL;
 	}
 
 	if (to == NPCM_TAP_RESET) {
-		jtag_npcm_hw_tms_shift(dev, tms_reset, 9);
+		ret = jtag_npcm_hw_tms_shift(dev, tms_reset, 9);
+		if (ret < 0) {
+			return ret;
+		}
 		gjtag.tap_state = NPCM_TAP_RESET;
-		return;
+		return 0;
 	}
 
 	tmsbits = _tms_cycle_lookup[from][to].tms_bits;
 	count   = _tms_cycle_lookup[from][to].count;
 
 	if (count == 0) {
-		return;
+		return 0;
 	}
 
 	/* Pack tmsbits into a byte buffer for the HW */
 	tmsbuf[0] = tmsbits;
 	tmsbuf[1] = 0;
-	jtag_npcm_hw_tms_shift(dev, tmsbuf, count);
+	ret = jtag_npcm_hw_tms_shift(dev, tmsbuf, count);
+	if (ret < 0) {
+		return ret;
+	}
 
 	gjtag.tap_state = to;
+	return 0;
 }
 
 static enum jtag_npcm_tap_states jtag_npcm_get_tap_state(void)
@@ -351,11 +359,12 @@ static int jtag_npcm_shift(const struct device *dev, uint32_t bits,
 	return 0;
 }
 
-static void jtag_npcm_readwrite_scan(const struct device *dev, int bits_len,
+static int jtag_npcm_readwrite_scan(const struct device *dev, int bits_len,
 		const uint8_t *out_data, uint8_t *in_data,
 		enum jtag_npcm_tap_states end_state)
 {
 	bool end_tms_high = false;
+	int ret;
 
 	/*
 	 * If we need to leave Shift-xR, raise TMS on the last clock edge.
@@ -369,34 +378,48 @@ static void jtag_npcm_readwrite_scan(const struct device *dev, int bits_len,
 				  NPCM_TAP_EXIT1_DR : NPCM_TAP_EXIT1_IR;
 	}
 
-	if (jtag_npcm_shift(dev, bits_len, out_data, in_data, end_tms_high) < 0)
-		return;
-
-	jtag_npcm_set_tap_state(dev, NPCM_TAP_CURRENT_STATE, end_state);
-}
-
-static void jtag_npcm_ir_scan(const struct device *dev, int bits_len, const uint8_t *out_data,
-		uint8_t *in_data, enum jtag_npcm_tap_states end_state)
-{
-	if (bits_len == 0) {
-		return;
+	ret = jtag_npcm_shift(dev, bits_len, out_data, in_data, end_tms_high);
+	if (ret < 0) {
+		/* The TAP state is unknown after a failed shift: force Test-Logic-Reset */
+		jtag_npcm_set_tap_state(dev, NPCM_TAP_CURRENT_STATE, NPCM_TAP_RESET);
+		return ret;
 	}
 
-	jtag_npcm_set_tap_state(dev, NPCM_TAP_CURRENT_STATE, NPCM_TAP_SHIFT_IR);
-
-	jtag_npcm_readwrite_scan(dev, bits_len, out_data, in_data, end_state);
+	return jtag_npcm_set_tap_state(dev, NPCM_TAP_CURRENT_STATE, end_state);
 }
 
-static void jtag_npcm_dr_scan(const struct device *dev, int bits_len, const uint8_t *out_data,
+static int jtag_npcm_ir_scan(const struct device *dev, int bits_len, const uint8_t *out_data,
 		uint8_t *in_data, enum jtag_npcm_tap_states end_state)
 {
-	if (bits_len == 0) {
-		return;
+	int ret;
+
+	if (bits_len <= 0) {
+		return bits_len == 0 ? 0 : -EINVAL;
 	}
 
-	jtag_npcm_set_tap_state(dev, NPCM_TAP_CURRENT_STATE, NPCM_TAP_SHIFT_DR);
+	ret = jtag_npcm_set_tap_state(dev, NPCM_TAP_CURRENT_STATE, NPCM_TAP_SHIFT_IR);
+	if (ret < 0) {
+		return ret;
+	}
 
-	jtag_npcm_readwrite_scan(dev, bits_len, out_data, in_data, end_state);
+	return jtag_npcm_readwrite_scan(dev, bits_len, out_data, in_data, end_state);
+}
+
+static int jtag_npcm_dr_scan(const struct device *dev, int bits_len, const uint8_t *out_data,
+		uint8_t *in_data, enum jtag_npcm_tap_states end_state)
+{
+	int ret;
+
+	if (bits_len <= 0) {
+		return bits_len == 0 ? 0 : -EINVAL;
+	}
+
+	ret = jtag_npcm_set_tap_state(dev, NPCM_TAP_CURRENT_STATE, NPCM_TAP_SHIFT_DR);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return jtag_npcm_readwrite_scan(dev, bits_len, out_data, in_data, end_state);
 }
 
 /* implement general function for device API */
@@ -605,9 +628,7 @@ static int jtag_npcm_tap_set(const struct device *dev, enum tap_state state)
 	if (end_state == NPCM_TAP_CURRENT_STATE)
 		return -EINVAL;
 
-	jtag_npcm_set_tap_state(dev, NPCM_TAP_CURRENT_STATE, end_state);
-
-	return 0;
+	return jtag_npcm_set_tap_state(dev, NPCM_TAP_CURRENT_STATE, end_state);
 }
 
 static int jtag_npcm_tck_run(const struct device *dev, uint32_t run_count)
@@ -634,17 +655,15 @@ static int jtag_npcm_xfer(const struct device *dev, struct scan_command_s *scan)
 	npcm_state = jtag_npcm_covert_tap_state(scan->end_state);
 
 	if (npcm_state == NPCM_TAP_CURRENT_STATE)
-		return -1;
+		return -EINVAL;
 
 	if (scan->ir_scan) {
-		jtag_npcm_ir_scan(dev, fields->num_bits,
-				fields->out_value, fields->in_value, npcm_state);
-	} else {
-		jtag_npcm_dr_scan(dev, fields->num_bits,
+		return jtag_npcm_ir_scan(dev, fields->num_bits,
 				fields->out_value, fields->in_value, npcm_state);
 	}
 
-	return 0;
+	return jtag_npcm_dr_scan(dev, fields->num_bits,
+			fields->out_value, fields->in_value, npcm_state);
 }
 
 static int jtag_npcm_sw_xfer(const struct device *dev, enum jtag_pin pin,
@@ -712,6 +731,12 @@ static int jtag_npcm_init(const struct device *dev)
 		 NPCM_JTAGM_CTL_DONE_IE);
 	/* Deassert TRST for normal operation */
 	ctl |= NPCM_JTAGM_CTL_TRST_OUT;
+	/*
+	 * Sample TDI on the falling edge of TCK to leave the round trip delay
+	 * half a TCK period more; the datasheet requires it for 50 MHz. It may
+	 * only change while JTAGM_EN is 0, which it is here.
+	 */
+	ctl |= NPCM_JTAGM_CTL_INSMP_EJ;
 	jtag_npcm_reg_write(config, NPCM_JTAGM_CTL, ctl);
 
 	/* Clear any stale DONE flag */
