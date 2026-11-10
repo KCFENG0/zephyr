@@ -18,15 +18,3 @@ if(NOT CONFIG_XIP)
   # switch the location counter to flash, corrupting __data_region_end.
   zephyr_linker_sources(DATA_SECTIONS rom_hooks.ld)
 endif()
-
-set(NPCM_BIN_NAME ${CONFIG_KERNEL_BIN_NAME}_signed.bin)
-set(NPCM_ELF_NAME ${CONFIG_KERNEL_BIN_NAME}.elf)
-string(TOUPPER "${SOC_NAME}" soc_name_upper)
-
-set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
-  COMMAND ${PYTHON_EXECUTABLE} ${SOC_${soc_name_upper}_DIR}/common/esiost/esiost.py
-  -i ${KERNEL_BIN_NAME}
-  -elf ${NPCM_ELF_NAME}
-  -o ${NPCM_BIN_NAME}
-  -v
-  )
