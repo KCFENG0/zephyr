@@ -186,9 +186,13 @@ static void jtag_npcm_hw_recv(const struct jtag_npcm_cfg *config,
 	if (bytes) {
 		buf8 = buf32 ? (uint8_t *)&buf32[words] : NULL;
 		val  = jtag_npcm_reg_read(config, NPCM_JTAGM_TDI_IN(n));
-		if (buf8)
+		if (buf8) {
 			for (i = 0; i < bytes; i++)
 				buf8[i] = (val >> (i * 8)) & 0xFFU;
+			/* Clear the bits above cnt in the last byte: they were not clocked */
+			if (cnt % 8U)
+				buf8[bytes - 1] &= BIT_MASK(cnt % 8U);
+		}
 	}
 }
 
@@ -288,16 +292,19 @@ static enum jtag_npcm_tap_states jtag_npcm_get_tap_state(void)
  * TMS is 0 for every bit except the very last one when end_tms_high=true,
  * which causes the TAP to exit Shift-xR on that final clock edge.
  *
+ * bits is the exact number of TCK cycles; it is not rounded up to whole
+ * bytes, so an IR or DR whose length is not a multiple of 8 is shifted
+ * with the right number of clocks.
+ *
  * out_data / in_data may be NULL (send zeros / discard received data).
  */
-static int jtag_npcm_shift(const struct device *dev,
-			       uint32_t out_bytes_len, const uint8_t *out_data,
-			       uint32_t in_byte_len, uint8_t *in_data,
-			       bool end_tms_high)
+static int jtag_npcm_shift(const struct device *dev, uint32_t bits,
+			   const uint8_t *out_data, uint8_t *in_data,
+			   bool end_tms_high)
 {
 	const struct jtag_npcm_cfg *config = DEV_CFG(dev);
 	struct jtag_npcm_data *data = DEV_DATA(dev);
-	uint32_t total_bits = MAX(out_bytes_len, in_byte_len) * 8U;
+	uint32_t total_bits = bits;
 	uint32_t offset = 0U;
 	uint32_t ck_cnt;
 	uint32_t ctl;
@@ -362,10 +369,7 @@ static void jtag_npcm_readwrite_scan(const struct device *dev, int bits_len,
 				  NPCM_TAP_EXIT1_DR : NPCM_TAP_EXIT1_IR;
 	}
 
-	if (jtag_npcm_shift(dev,
-			       DIV_ROUND_UP(bits_len, 8), out_data,
-			       DIV_ROUND_UP(bits_len, 8), in_data,
-			       end_tms_high) < 0)
+	if (jtag_npcm_shift(dev, bits_len, out_data, in_data, end_tms_high) < 0)
 		return;
 
 	jtag_npcm_set_tap_state(dev, NPCM_TAP_CURRENT_STATE, end_state);
