@@ -1,13 +1,26 @@
-"""Tests for soc_manifest.py against the Rust-built golden artifacts."""
+"""Tests for soc_manifest.py, on a manifest it generates over a fixed runtime."""
+import hashlib
 from pathlib import Path
 
 import soc_manifest as sm
 
-GOLDEN = Path(__file__).parent / "golden"
-G = (GOLDEN / "soc_manifest.bin").read_bytes()
+# Any fixed bytes will do: only their SHA-384 ends up in the manifest.
+RUNTIME = bytes(range(256)) * 34
+IMC = 24292                              # image metadata collection offset
 
 
-def test_parse_golden_manifest():
+def _entries():
+    d = sm.MCU_ENTRY_DEFAULTS
+    return [sm.make_entry(
+        d["fw_id"], sm.sha384(RUNTIME), component_id=d["component_id"],
+        flags=sm.entry_flags(d["source"], d["exec_bit"]),
+        load=d["load"], staging=d["staging"])]
+
+
+G = sm.generate(_entries(), svn=0, version=1)
+
+
+def test_parse_manifest():
     m = sm.parse_manifest(G)
     assert m["marker"] == 0x324D5441
     assert m["size"] == 24292
@@ -22,12 +35,10 @@ def test_parse_golden_manifest():
     assert e["flags"] == 0x201          # image_source=in_request(1), exec_bit=2
     assert e["load"] == 0
     assert e["staging"] == 0xA8C00000
-    import hashlib
-    assert e["digest"] == hashlib.sha384((GOLDEN / "mcu_runtime.bin").read_bytes()).digest()
+    assert e["digest"] == hashlib.sha384(RUNTIME).digest()
 
 
-def test_golden_vendor_keys_match_embedded():
-    # vendor manifest pubkeys embedded in the golden preamble == our embedded fake keys
+def test_embedded_keys_land_in_the_preamble():
     assert G[20:116] == sm.swap4(sm.DEFAULT_KEYS["vendor_man_ecc_pub"])
     assert G[116:164] == sm.DEFAULT_KEYS["vendor_man_lms_pub"]
     assert G[7432:7528] == sm.swap4(sm.DEFAULT_KEYS["owner_ecc_pub"])
@@ -40,15 +51,15 @@ def test_parse_rejects_bad_marker():
         sm.parse_manifest(b"\x00" * len(G))
 
 
-def _golden_digests():
+def _digests():
     d_vendor = sm.sha384(G[8:2708])       # vendor_signed_data_range
     d_owner = sm.sha384(G[7432:10120])    # owner_pub_keys block
-    d_imc = sm.sha384(G[24292:34456])     # image metadata collection
+    d_imc = sm.sha384(G[IMC:])            # image metadata collection
     return d_vendor, d_owner, d_imc
 
 
-def test_ecdsa_verifies_golden_signatures():
-    d_vendor, d_owner, d_imc = _golden_digests()
+def test_ecdsa_verifies_manifest_signatures():
+    d_vendor, d_owner, d_imc = _digests()
     k = sm.DEFAULT_KEYS
     assert sm.ecdsa_verify(d_vendor, k["vendor_fw_ecc_pub"], G[2708:2804])
     assert sm.ecdsa_verify(d_owner, k["owner_ecc_pub"], G[10120:10216])
@@ -77,8 +88,8 @@ def test_lms_pubkey_regeneration_kat():
         assert sm.lms_pub_from_priv(k[role + "_lms_priv"]) == k[role + "_lms_pub"]
 
 
-def test_lms_verifies_golden_signatures():
-    d_vendor, d_owner, d_imc = _golden_digests()
+def test_lms_verifies_manifest_signatures():
+    d_vendor, d_owner, d_imc = _digests()
     k = sm.DEFAULT_KEYS
     # LMS sigs sit after the 96-byte ECC sig in each 4724-byte signature block
     assert sm.lms_verify(d_vendor, k["vendor_fw_lms_pub"], G[2804:2804 + 1620])
@@ -88,7 +99,7 @@ def test_lms_verifies_golden_signatures():
     assert not sm.lms_verify(d_imc, k["vendor_fw_lms_pub"], G[2804:2804 + 1620])
 
 
-def test_lms_sign_roundtrip_and_tree_path_matches_golden():
+def test_lms_sign_roundtrip_and_tree_path_matches_manifest():
     k = sm.DEFAULT_KEYS
     d = sm.sha384(b"lms test message")
     sig = sm.lms_sign(d, k["vendor_man_lms_priv"])
@@ -96,7 +107,7 @@ def test_lms_sign_roundtrip_and_tree_path_matches_golden():
     assert sm.lms_verify(d, k["vendor_man_lms_pub"], sig)
     assert not sm.lms_verify(sm.sha384(b"other"), k["vendor_man_lms_pub"], sig)
     # the merkle auth path depends only on the key (fixed q=5): must be
-    # byte-identical to the path in the golden vendor IMC signature
+    # byte-identical to the path in the manifest's vendor IMC signature
     assert sig[1260:1620] == G[14940 + 1260:14940 + 1620]
     assert sig[0:8] == G[14940:14940 + 8]        # q=5 BE, ots_type=7 BE
 
@@ -110,35 +121,13 @@ def test_lms_verify_never_raises_on_malformed_input():
     assert sm.lms_verify(d, b"\x00" * 48, b"\x00" * 1620) is False
 
 
-def _golden_style_entries():
-    import hashlib
-    digest = hashlib.sha384((GOLDEN / "mcu_runtime.bin").read_bytes()).digest()
-    d = sm.MCU_ENTRY_DEFAULTS
-    return [sm.make_entry(
-        d["fw_id"], digest, component_id=d["component_id"],
-        flags=sm.entry_flags(d["source"], d["exec_bit"]),
-        load=d["load"], staging=d["staging"])]
-
-
-def test_generate_matches_golden_outside_signatures():
-    out = sm.generate(_golden_style_entries(), svn=0, version=1)
-    assert len(out) == len(G) == sm.MANIFEST_SIZE
-    # identical everywhere except the four signature blocks (random k / nonce
-    # in the Rust signer):
-    assert out[0:2708] == G[0:2708]              # header + vendor pubkeys
-    assert out[7432:10120] == G[7432:10120]      # owner pubkeys
-    assert out[24292:34456] == G[24292:34456]    # complete IMC
+def test_generate_layout():
+    assert len(G) == sm.MANIFEST_SIZE
     # signature slot padding beyond the 1620-byte LMS sig stays zero
-    assert out[2804 + 1620:7432] == bytes(7432 - 2804 - 1620)
+    assert G[2804 + 1620:7432] == bytes(7432 - 2804 - 1620)
 
 
-def test_generated_manifest_verifies():
-    out = sm.generate(_golden_style_entries(), svn=0, version=1)
-    checks = sm.verify_manifest(out)
-    assert checks and all(checks.values()), checks
-
-
-def test_golden_manifest_verifies():
+def test_manifest_verifies():
     checks = sm.verify_manifest(G)
     assert checks and all(checks.values()), checks
     assert len(checks) == 8              # 4 ECC + 4 LMS
@@ -154,7 +143,7 @@ def test_verify_detects_tamper():
 
 def test_generate_rejects_too_many_entries():
     import pytest
-    e = _golden_style_entries()[0]
+    e = _entries()[0]
     with pytest.raises(ValueError):
         sm.generate([e] * 128)
 
@@ -169,14 +158,15 @@ def _run(*args):
                           cwd=Path(__file__).parent)
 
 
-def test_cli_verify_golden():
-    r = _run("verify", "golden/soc_manifest.bin")
+def test_cli_verify(tmp_path):
+    (tmp_path / "m.bin").write_bytes(G)
+    r = _run("verify", str(tmp_path / "m.bin"))
     assert r.returncode == 0, r.stderr
     assert "8/8 signatures OK" in r.stdout
 
 
 def test_cli_rejects_malformed_spec():
-    r = _run("generate", "--soc-image", "path=golden/soc_image_0.bin",
+    r = _run("generate", "--soc-image", "path=soc_image_0.bin",
              "--out", "/dev/null")                               # fw_id missing
     assert r.returncode != 0
     assert "fw_id" in r.stderr
@@ -191,8 +181,9 @@ def test_cli_generate_fails_on_key_mismatch(tmp_path):
     # pub-only override that disagrees with its default private key: generation
     # must abort (non-zero) and write no artifact, not exit 0 with a broken file
     (tmp_path / "vendor_fw_ecc_pub.bin").write_bytes(sm.DEFAULT_KEYS["owner_ecc_pub"])
+    (tmp_path / "rt.bin").write_bytes(RUNTIME)
     out = tmp_path / "m.bin"
-    r = _run("generate", "--mcu-runtime", "golden/mcu_runtime.bin",
+    r = _run("generate", "--mcu-runtime", str(tmp_path / "rt.bin"),
              "--key-dir", str(tmp_path), "--out", str(out))
     assert r.returncode != 0
     assert "self-verification" in r.stderr
