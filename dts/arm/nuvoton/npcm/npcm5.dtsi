@@ -53,11 +53,11 @@
 		};
 
 		qspi_fiu1: quad-fiu@40022000 {
-			clocks = <&pcc NPCM_CLOCK_FIU>;
+			clocks = <&pcc NPCM_CLOCK_FIU1>;
 		};
 
 		qspi_fiu2: quad-fiu@40023000 {
-			clocks = <&pcc NPCM_CLOCK_FIU>;
+			clocks = <&pcc NPCM_CLOCK_FIU2>;
 		};
 
 		spip1: spi@40016000 {

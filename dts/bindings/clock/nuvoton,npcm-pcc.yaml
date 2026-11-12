@@ -222,6 +222,30 @@ properties:
       - 2
       - 4
 
+  fiu1-prescaler:
+    type: int
+    description: |
+      NPCM500 FIU1 prescaler. FIU1CLK = CORE_CLK / fiu1-prescaler, set by the
+      FIU1DIV field in HFCBCD4. Defaults to fiu-prescaler when absent.
+    enum:
+      - 1
+      - 2
+      - 4
+      - 8
+      - 16
+
+  fiu2-prescaler:
+    type: int
+    description: |
+      NPCM500 FIU2 prescaler. FIU2CLK = CORE_CLK / fiu2-prescaler, set by the
+      FIU2DIV field in HFCBCD4. Defaults to fiu-prescaler when absent.
+    enum:
+      - 1
+      - 2
+      - 4
+      - 8
+      - 16
+
   i3c-tc-prescaler:
     type: int
     required: true

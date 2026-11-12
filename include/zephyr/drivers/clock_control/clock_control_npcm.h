@@ -34,7 +34,10 @@ struct cdcg_reg {
 	volatile uint8_t reserved7;
 	/* 0x014: HFCG Bus Clock Dividers */
 	volatile uint8_t hfcbcd2;
-	volatile uint8_t reserved12[8];
+	volatile uint8_t reserved12[3];
+	/* 0x018: HFCG Bus Clock Dividers */
+	volatile uint8_t hfcbcd4;
+	volatile uint8_t reserved13[4];
 	/* 0x01d: HFCG Bus Clock Dividers */
 	volatile uint8_t hfcbcd3;
 };
@@ -60,6 +63,11 @@ struct cdcg_reg {
 #define AHB6DIV_VAL (DT_PROP(NPCM_NODE_PCC_LABEL, ahb6_prescaler) - 1)
 /* FIU clock divider */
 #define FIUDIV_VAL  (DT_PROP(NPCM_NODE_PCC_LABEL, fiu_prescaler) - 1)
+/* FIU1/FIU2 clock dividers, default to the FIU divider */
+#define FIU1DIV_VAL (DT_PROP_OR(NPCM_NODE_PCC_LABEL, fiu1_prescaler, \
+				DT_PROP(NPCM_NODE_PCC_LABEL, fiu_prescaler)) - 1)
+#define FIU2DIV_VAL (DT_PROP_OR(NPCM_NODE_PCC_LABEL, fiu2_prescaler, \
+				DT_PROP(NPCM_NODE_PCC_LABEL, fiu_prescaler)) - 1)
 /* I3C clock divider */
 #define I3C_TC_DIV_VAL  (DT_PROP(NPCM_NODE_PCC_LABEL, i3c_tc_prescaler) - 1)
 /* M7 fast clock divider (NPCM5) */

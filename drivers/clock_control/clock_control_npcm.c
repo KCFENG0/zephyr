@@ -128,6 +128,12 @@ static int npcm_clock_control_get_subsys_rate(const struct device *dev,
 	case NPCM_CLOCK_BUS_FIU:
 		*rate = CORE_CLK / (FIUDIV_VAL + 1);
 		break;
+	case NPCM_CLOCK_BUS_FIU1:
+		*rate = CORE_CLK / (FIU1DIV_VAL + 1);
+		break;
+	case NPCM_CLOCK_BUS_FIU2:
+		*rate = CORE_CLK / (FIU2DIV_VAL + 1);
+		break;
 	case NPCM_CLOCK_BUS_I3C_TC:
 		*rate = NPCM_APB_CLOCK(3) / (I3C_TC_DIV_VAL + 1);
 		break;
@@ -170,6 +176,8 @@ static struct clock_control_driver_api npcm_clock_control_api = {
 BUILD_ASSERT(CORE_CLK <= MHZ(200), "PERIPH_CLK exceeds 200 MHz, raise core-prescaler");
 BUILD_ASSERT(CORE_CLK / (AHB6DIV_VAL + 1) <= MHZ(200), "AHB6_CLK exceeds 200 MHz");
 BUILD_ASSERT(CORE_CLK / (FIUDIV_VAL + 1) <= MHZ(100), "FIUCLK exceeds 100 MHz");
+BUILD_ASSERT(CORE_CLK / (FIU1DIV_VAL + 1) <= MHZ(100), "FIU1CLK exceeds 100 MHz");
+BUILD_ASSERT(CORE_CLK / (FIU2DIV_VAL + 1) <= MHZ(100), "FIU2CLK exceeds 100 MHz");
 BUILD_ASSERT(NPCM_APB_CLOCK(1) <= MHZ(100), "APB1_CLK exceeds 100 MHz");
 BUILD_ASSERT(NPCM_APB_CLOCK(2) <= MHZ(100), "APB2_CLK exceeds 100 MHz");
 BUILD_ASSERT(NPCM_APB_CLOCK(3) <= MHZ(100), "APB3_CLK exceeds 100 MHz");
@@ -177,6 +185,20 @@ BUILD_ASSERT(MCLK / (M7DIV_VAL + 1) <= MHZ(400), "M7_FCLK exceeds 400 MHz");
 BUILD_ASSERT(MCLK / (MRAMDIV_VAL + 1) <= MIN(MCLK / 2, MHZ(200)),
 	     "MRAM_CLK exceeds MCLK / 2 or 200 MHz");
 BUILD_ASSERT(OFMCLK / (CSSDIV_VAL + 1) <= MHZ(50), "CSS_FCLK exceeds 50 MHz");
+#endif
+
+#if defined(CONFIG_SOC_SERIES_NPCM5) && !defined(CONFIG_NPCM500_REV_A2)
+BUILD_ASSERT(FIU1DIV_VAL == FIUDIV_VAL && FIU2DIV_VAL == FIUDIV_VAL,
+	     "fiu1/fiu2-prescaler need CONFIG_NPCM500_REV_A2");
+#endif
+
+#if defined(CONFIG_NPCM500_REV_A2) && defined(CONFIG_CLOCK_CONTROL_NPCM_FPGA)
+/* FIU0 uses FIUDIV in HFCBCD1, FIU1 and FIU2 use FIU1DIV/FIU2DIV in HFCBCD4 */
+static void npcm_hfcg_set_fiu_dividers(struct cdcg_reg *priv)
+{
+	priv->hfcbcd1 = (priv->hfcbcd1 & 0x0F) | (FIUDIV_VAL << 4);
+	priv->hfcbcd4 = (FIU2DIV_VAL << 4) | FIU1DIV_VAL;
+}
 #endif
 
 #ifndef CONFIG_CLOCK_CONTROL_NPCM_FPGA
@@ -188,6 +210,9 @@ static void npcm_hfcg_set_dividers(struct cdcg_reg *priv)
 	priv->hfcbcd = APB1DIV_VAL | (APB2DIV_VAL << 4);
 	priv->hfcbcd1 = (FIUDIV_VAL << 4) | APB3DIV_VAL;
 	priv->hfcbcd2 = (CSSDIV_VAL << 4) | (MRAMDIV_VAL << 2) | M7DIV_VAL;
+#ifdef CONFIG_NPCM500_REV_A2
+	priv->hfcbcd4 = (FIU2DIV_VAL << 4) | FIU1DIV_VAL;
+#endif
 #else
 	priv->hfcgp = (FPRED_VAL << 4) | AHB6DIV_VAL;
 	priv->hfcbcd = APB1DIV_VAL | (APB2DIV_VAL << 4);
@@ -224,8 +249,12 @@ static uint32_t npcm_hfcg_cur_ofmclk(const struct cdcg_reg *priv)
 static int npcm_clock_control_init(const struct device *dev)
 {
 #ifdef CONFIG_CLOCK_CONTROL_NPCM_FPGA
-	/* FPGA mode: bypass all clock configuration, use fixed clocks */
+	/* FPGA mode: use fixed clocks, only the FIU dividers are programmed */
+#ifdef CONFIG_NPCM500_REV_A2
+	npcm_hfcg_set_fiu_dividers((struct cdcg_reg *)(DRV_CONFIG(dev)->base_cdcg));
+#else
 	ARG_UNUSED(dev);
+#endif
 	return 0;
 #else
 	struct cdcg_reg *const priv = (struct cdcg_reg *)(DRV_CONFIG(dev)->base_cdcg);
