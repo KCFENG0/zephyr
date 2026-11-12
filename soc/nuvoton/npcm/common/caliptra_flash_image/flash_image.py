@@ -6,13 +6,12 @@ The slot table lives in a layout JSON (layouts/, default bypass.json): identifie
 and source per slot, plus the flash-image container offset and the
 partition-table state. The layout file alone decides which slots a variant ships:
 
-  bypass-soc  SoC firmware only; MCU ROM boots it directly
-  bypass      adds MCU firmware and a signed SoC manifest binding just the MCU
-              runtime (flash_image_tool.py gen-test-flash compatible)
-  bypass-mcu  adds MCU firmware without a manifest; MCU ROM loads and jumps to it
-  caliptra    full Caliptra boot; fills the reserved Caliptra FMC+RT bundle slot
-              from --caliptra-fw and generates and signs the SoC manifest slot
-              (--soc-manifest overrides it with a prebuilt one)
+  bypass      SoC firmware and its NPCM header only (A1 only): the A1 ROM's
+              bypass SoC path loads the SoC firmware itself, so the image needs
+              nothing from caliptra-mcu-sw
+  caliptra    full Caliptra boot (A1 and A2); fills the reserved Caliptra
+              FMC+RT bundle slot from --caliptra-fw and generates and signs the
+              SoC manifest slot (--soc-manifest overrides it with a prebuilt one)
 
 Layouts are chip-neutral. The chip's MCU ROM decides the container format
 (A1: v1, A2: v3): pass it as --format; the npcm5 build derives it from
@@ -128,7 +127,7 @@ def needs_source(layout: dict, name: str) -> bool:
 
 
 def build_soc_manifest(sources: dict, svn: int, key_dir: Optional[str],
-                       bind_soc_fw: bool = True) -> bytes:
+                       max_entries: int, bind_soc_fw: bool = True) -> bytes:
     """Sign an authorization manifest binding the MCU runtime and SoC firmware."""
     import hashlib
 
@@ -152,8 +151,8 @@ def build_soc_manifest(sources: dict, svn: int, key_dir: Optional[str],
             component_id=SOC_FW_FW_ID,
             flags=soc_manifest.entry_flags("load", exec_bit=SOC_FW_EXEC_BIT),
             load=SOC_FW_LOAD, staging=SOC_FW_LOAD))
-    data = soc_manifest.generate(entries, svn=svn, keys=keys)
-    checks = soc_manifest.verify_manifest(data, keys=keys)
+    data = soc_manifest.generate(entries, svn=svn, keys=keys, max_entries=max_entries)
+    checks = soc_manifest.verify_manifest(data, keys=keys, max_entries=max_entries)
     if not all(checks.values()):
         bad = sorted(name for name, ok in checks.items() if not ok)
         raise ValueError(f"generated SoC manifest fails self-verification: {bad}; "
@@ -161,7 +160,8 @@ def build_soc_manifest(sources: dict, svn: int, key_dir: Optional[str],
     return data
 
 
-def verify_manifest_rows(images_by_id: dict, key_dir: Optional[str]) -> list:
+def verify_manifest_rows(images_by_id: dict, key_dir: Optional[str],
+                         max_entries: int) -> list:
     """Check manifest signatures and that packed images match their entries.
 
     Returns (label, ok) rows; empty when the image carries no manifest slot.
@@ -178,19 +178,23 @@ def verify_manifest_rows(images_by_id: dict, key_dir: Optional[str]) -> list:
 
     keys = soc_manifest.load_key_dir(key_dir) if key_dir else None
     try:
-        checks = soc_manifest.verify_manifest(manifest, keys=keys)
+        checks = soc_manifest.verify_manifest(manifest, keys=keys,
+                                              max_entries=max_entries)
         entries = {e["fw_id"]: e
-                   for e in soc_manifest.parse_manifest(manifest)["entries"]}
+                   for e in soc_manifest.parse_manifest(manifest, max_entries)["entries"]}
     except ValueError as exc:
         return [(f"manifest structure: {exc}", False)]
 
-    rows = [(f"manifest {name}", ok) for name, ok in sorted(checks.items())]
+    # Passing signature checks are one row; only the failing ones are named.
+    bad = sorted(name for name, ok in checks.items() if not ok)
+    rows = ([(f"manifest {name}", False) for name in bad]
+            or [(f"manifest signatures {len(checks)}/{len(checks)}", True)])
     for fw_id, ident, label in ((MCU_RT_FW_ID, MCU_RT_IDENTIFIER, "mcu_runtime"),
                                 (SOC_FW_FW_ID, SOC_IMAGES_BASE_IDENTIFIER, "soc_fw")):
         entry, data = entries.get(fw_id), images_by_id.get(ident)
         if data is None or (entry is None and fw_id == SOC_FW_FW_ID
                             and CALIPTRA_FMC_RT_IDENTIFIER not in images_by_id):
-            continue              # slot not in this layout / bypass binds only the MCU runtime
+            continue              # slot not in layout / no Caliptra: binds only the MCU runtime
         rows.append((f"manifest digest {label} (fw_id={fw_id})",
                      entry is not None and hashlib.sha384(data).digest() == entry["digest"]))
     return rows
@@ -413,9 +417,9 @@ def build_layout_images(layout: dict,
 
     A row with no "source" is a reserved slot and never emitted; every sourced
     row is required. Which variant ships which slots is decided entirely by the
-    layout file (bypass-soc / bypass / bypass-mcu / caliptra), never by flags. The
-    three soc_image_* rows are independent peers, not nested: soc_fw is the
-    firmware payload; npcm_header is the NPCM boot-config header (UART baud, FIU
+    layout file (bypass / caliptra), never by flags. The three soc_image_* rows
+    are independent peers, not nested: soc_fw is the firmware payload;
+    npcm_header is the NPCM boot-config header (UART baud, FIU
     flash clocks, board type -- NOT a descriptor of the firmware); flash_otp is
     the flash OTP. The in-tree layouts ship soc_fw (the M7 image) and npcm_header,
     which the MCU ROM's SoC path requires, and keep flash_otp reserved, which the
@@ -434,19 +438,27 @@ def build_layout_images(layout: dict,
     return images
 
 
+# Mirrors soc_manifest.MAX_ENTRIES; that module is imported lazily.
+MANIFEST_ENTRIES_ARG = dict(
+    type=int, choices=(80, 127), default=80,
+    help="SoC manifest metadata capacity of the Caliptra runtime: 127 before "
+         "caliptra-sw #3824 (A1), 80 since (A2)")
+
+
 def cmd_build(argv):
     parser = argparse.ArgumentParser(prog="flash_image.py", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--soc-fw", required=True,
                         help="SoC firmware loaded by MCU ROM or MCU firmware")
     parser.add_argument("--mcu-fw",
-                        help="MCU firmware (bypass, bypass-mcu and caliptra layouts)")
+                        help="MCU firmware (layouts with an mcu-fw slot, e.g. caliptra)")
     parser.add_argument("--caliptra-fw",
                         help="signed Caliptra FMC+RT bundle (caliptra layout)")
     parser.add_argument("--soc-manifest",
                         help="SoC manifest (caliptra layout)")
     parser.add_argument("--manifest-svn", type=lambda x: int(x, 0), default=0,
                         help="security version number of the generated manifest")
+    parser.add_argument("--manifest-entries", **MANIFEST_ENTRIES_ARG)
     parser.add_argument("--key-dir",
                         help="directory of <key>.bin signing-key overrides "
                              "(default: embedded caliptra development keys)")
@@ -464,6 +476,9 @@ def cmd_build(argv):
                              "page-aligned) or v1 (legacy-ROM boards, "
                              "flash_image_tool.py compatible) -- no default")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--record", type=Path,
+                        help="write a JSON record of what each slot was packed "
+                             "from (source path, size, SHA-512)")
     args = parser.parse_args(argv)
 
     layout = load_layout(args.layout)
@@ -485,14 +500,15 @@ def cmd_build(argv):
         else soc_otp_bytes(args.flash_connection, args.dis_mcp),
     }
     # Synthesized like soc-header/soc-otp, but gated: signing is ~1s of LMS work
-    # and only the bypass and caliptra layouts have a manifest slot. Only a full-Caliptra layout
+    # and only a layout with a manifest slot needs it. A full-Caliptra layout
     # (one that packs the Caliptra FMC+RT bundle) has the MCU ask Caliptra to
-    # authorize the SoC firmware, so only it binds fw_id=3; without that entry
-    # Caliptra answers IMAGE_NOT_AUTHORIZED and holds the M7 in reset. bypass keeps
-    # the gen-test-flash manifest that binds just the MCU runtime.
+    # authorize the SoC firmware, so it binds fw_id=3; without that entry
+    # Caliptra answers IMAGE_NOT_AUTHORIZED and holds the M7 in reset. A
+    # project-local layout with a manifest but no Caliptra bundle binds just the
+    # MCU runtime (the gen-test-flash manifest).
     if needs_source(layout, "soc-manifest") and not args.soc_manifest:
         sources["soc-manifest"] = build_soc_manifest(
-            sources, args.manifest_svn, args.key_dir,
+            sources, args.manifest_svn, args.key_dir, args.manifest_entries,
             bind_soc_fw=needs_source(layout, "caliptra-fw"))
     images = build_layout_images(layout, sources)
     part = layout["partition"]
@@ -502,8 +518,37 @@ def cmd_build(argv):
             build_flash_image(images, FORMAT_VERSIONS[args.format], align))
     write_at(output, 0, build_partition_table(
         part["active"], part["a"], part["b"], part["rollback"]))
-    print(f"Wrote {layout['version']} {args.format} flash image ({len(images)} image(s), "
-          f"{output.stat().st_size} bytes) -> {output}")
+    print(f"Wrote flash image ({output.stat().st_size} bytes) -> {output}")
+    if args.record:
+        write_record(args, layout, sources)
+
+
+def write_record(args, layout: dict, sources: dict):
+    """Record which file each slot came from, so a flashed or UART-staged image
+    can be traced back to its prebuilts. Hashes cover the slot bytes, i.e. the
+    files `extract` writes."""
+    import hashlib
+
+    given = {"soc-fw": args.soc_fw, "mcu-fw": args.mcu_fw, "caliptra-fw": args.caliptra_fw,
+             "soc-manifest": args.soc_manifest, "soc-header": args.soc_header,
+             "soc-otp": args.soc_otp}
+    record = {
+        "output": str(Path(args.output).resolve()),
+        "layout": str(args.layout.resolve()),
+        "format": args.format,
+        "manifest_entries": args.manifest_entries,
+        "images": [
+            {"name": image_name(int(e["id"], 0)), "id": e["id"],
+             "source": str(Path(given[e["source"]]).resolve()) if given[e["source"]]
+             else "generated",
+             "size": len(sources[e["source"]]),
+             "sha512": hashlib.sha512(sources[e["source"]]).hexdigest()}
+            for e in layout["images"] if e.get("source")
+        ],
+    }
+    args.record.parent.mkdir(parents=True, exist_ok=True)
+    args.record.write_text(json.dumps(record, indent=2) + "\n")
+    print(f"Wrote source record -> {args.record}")
 
 
 def cmd_verify(argv):
@@ -518,6 +563,7 @@ def cmd_verify(argv):
     parser.add_argument("--key-dir",
                         help="signing keys used to check manifest signatures "
                              "(default: embedded caliptra development keys)")
+    parser.add_argument("--manifest-entries", **MANIFEST_ENTRIES_ARG)
     args = parser.parse_args(argv)
 
     raw = Path(args.file).read_bytes()
@@ -525,8 +571,8 @@ def cmd_verify(argv):
     if offset is None and args.layout:
         offset = load_layout(args.layout)["slot_base_offset"]
     off = resolve_offset(raw, offset)
-    version, count, _, _ = parse_header(raw, off)
-    print(f"Verify v{version} flash image @ {off:#x}: {count} image(s)")
+    version, _, _, _ = parse_header(raw, off)
+    print(f"Verify v{version} flash image @ {off:#x}:")
     ok = True
     images_by_id = {}
     for ident, ioff, size, fname, icsum, _ihcsum, data in iter_images(raw, off):
@@ -539,7 +585,8 @@ def cmd_verify(argv):
               f"{'OK' if good else 'BAD'}" + (f"  ({note})" if note else "")
               + (f"  {shown}" if shown else ""))
 
-    for label, good in verify_manifest_rows(images_by_id, args.key_dir):
+    for label, good in verify_manifest_rows(images_by_id, args.key_dir,
+                                            args.manifest_entries):
         ok = ok and good
         print(f"  {label:<44} {'OK' if good else 'BAD'}")
 
@@ -571,12 +618,11 @@ def cmd_extract(argv):
             sys.exit(f"error: image {ident:#010x} truncated ({len(data)} < {size})")
         if checksum(data) != icsum:
             print(f"warning: image {ident:#010x} checksum mismatch", file=sys.stderr)
-        p = out_dir / f"{image_name(ident)}.bin"
-        p.write_bytes(data)
-        print(f"Extracted {image_name(ident):<12} id={ident:#010x} {size:>8} bytes -> {p}")
+        (out_dir / f"{image_name(ident)}.bin").write_bytes(data)
         n += 1
     if n == 0:
         sys.exit("error: no images found")
+    print(f"Extracted {n} images -> {out_dir}/")
 
 
 def main(argv=None):

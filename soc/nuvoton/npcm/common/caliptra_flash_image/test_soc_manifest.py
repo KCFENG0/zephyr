@@ -122,7 +122,7 @@ def test_lms_verify_never_raises_on_malformed_input():
 
 
 def test_generate_layout():
-    assert len(G) == sm.MANIFEST_SIZE
+    assert len(G) == sm.manifest_size(80)
     # signature slot padding beyond the 1620-byte LMS sig stays zero
     assert G[2804 + 1620:7432] == bytes(7432 - 2804 - 1620)
 
@@ -145,7 +145,23 @@ def test_generate_rejects_too_many_entries():
     import pytest
     e = _entries()[0]
     with pytest.raises(ValueError):
-        sm.generate([e] * 128)
+        sm.generate([e] * 128, max_entries=127)
+    with pytest.raises(ValueError):
+        sm.generate([e] * 81)
+
+
+def test_a1_runtime_manifest_size():
+    """127 entries for the pre-#3824 A1 runtime; checked at the wrong size,
+    the IMC signature breaks or the manifest is too short."""
+    import pytest
+    out = sm.generate(_entries(), max_entries=127)
+    assert len(out) == sm.manifest_size(127) == 34456
+    assert all(sm.verify_manifest(out, max_entries=127).values())
+    assert not sm.verify_manifest(out, max_entries=80)["vendor_imc_ecc"]
+    with pytest.raises(ValueError):
+        sm.verify_manifest(G, max_entries=127)
+    with pytest.raises(ValueError):
+        sm.manifest_size(100)
 
 
 import subprocess

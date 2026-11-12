@@ -21,10 +21,20 @@ from pathlib import Path
 # --------------------------------------------------------------------- layout
 MARKER = 0x324D5441                     # "ATM2"
 PREAMBLE_SIZE = 24292
-MAX_ENTRIES = 127
+# AUTH_MANIFEST_IMAGE_METADATA_MAX_COUNT: 127 before caliptra-sw b27bc179
+# (#3824), 80 since. The runtime signs/hashes the whole collection, so the
+# manifest must be sized for the runtime that checks it or the IMC signature
+# fails (0x000E0047). The A1 Caliptra runtime predates #3824; A2's has it.
+MAX_ENTRIES = (80, 127)
+DEFAULT_MAX_ENTRIES = 80
 ENTRY_SIZE = 80
-IMC_SIZE = 4 + MAX_ENTRIES * ENTRY_SIZE
-MANIFEST_SIZE = PREAMBLE_SIZE + IMC_SIZE          # 34456
+
+
+def manifest_size(max_entries):
+    """30696 bytes for 80 entries, 34456 for 127."""
+    if max_entries not in MAX_ENTRIES:
+        raise ValueError(f"max_entries {max_entries} not one of {MAX_ENTRIES}")
+    return PREAMBLE_SIZE + 4 + max_entries * ENTRY_SIZE
 
 ECC_PUB_LEN = 96
 ECC_SIG_LEN = 96
@@ -120,18 +130,20 @@ KEY_SIZES = {"ecc_priv": 48, "ecc_pub": 96, "lms_priv": 48, "lms_pub": 48}
 
 
 # ------------------------------------------------------------------- parsing
-def parse_manifest(data):
+def parse_manifest(data, max_entries=DEFAULT_MAX_ENTRIES):
     """Parse an authorization manifest into a dict (no signature checks)."""
-    if len(data) < MANIFEST_SIZE:
-        raise ValueError(f"manifest too short: {len(data)} < {MANIFEST_SIZE}")
+    size = manifest_size(max_entries)
+    if len(data) < size:
+        raise ValueError(f"manifest too short: {len(data)} < {size} "
+                         f"({max_entries} entries)")
     marker, size, version, svn, flags = struct.unpack_from("<IIIII", data, 0)
     if marker != MARKER:
         raise ValueError(f"bad marker {marker:#010x} (want {MARKER:#010x})")
     if size != PREAMBLE_SIZE:
         raise ValueError(f"bad preamble size {size} (want {PREAMBLE_SIZE})")
     entry_count = struct.unpack_from("<I", data, O_IMC)[0]
-    if entry_count > MAX_ENTRIES:
-        raise ValueError(f"entry_count {entry_count} > {MAX_ENTRIES}")
+    if entry_count > max_entries:
+        raise ValueError(f"entry_count {entry_count} > {max_entries}")
     entries = []
     for i in range(entry_count):
         off = O_IMC + 4 + i * ENTRY_SIZE
@@ -438,10 +450,11 @@ def make_entry(fw_id, digest, *, component_id, classification=0, flags,
 _UNUSED_ENTRY = struct.pack("<II", 0xFFFFFFFF, 0xFFFFFFFF) + bytes(ENTRY_SIZE - 8)
 
 
-def _pack_imc(entries):
-    if len(entries) > MAX_ENTRIES:
-        raise ValueError(f"{len(entries)} entries > max {MAX_ENTRIES}")
-    body = b"".join(entries) + _UNUSED_ENTRY * (MAX_ENTRIES - len(entries))
+def _pack_imc(entries, max_entries):
+    manifest_size(max_entries)
+    if len(entries) > max_entries:
+        raise ValueError(f"{len(entries)} entries > max {max_entries}")
+    body = b"".join(entries) + _UNUSED_ENTRY * (max_entries - len(entries))
     return struct.pack("<I", len(entries)) + body
 
 
@@ -451,10 +464,11 @@ def _sign_pair(digest, ecc_priv, lms_priv):
     return ecdsa_sign(digest, ecc_priv) + lms + bytes(PQC_SIG_LEN - len(lms))
 
 
-def generate(entries, svn=0, version=1, keys=None):
+def generate(entries, svn=0, version=1, keys=None,
+             max_entries=DEFAULT_MAX_ENTRIES):
     """Build and sign an authorization manifest (AuthManifestGenerator port)."""
     k = DEFAULT_KEYS if keys is None else keys
-    imc = _pack_imc(entries)
+    imc = _pack_imc(entries, max_entries)
     pre = bytearray(PREAMBLE_SIZE)
     struct.pack_into("<IIIII", pre, 0, MARKER, PREAMBLE_SIZE, version, svn,
                      FLAG_VENDOR_SIGNATURE_REQUIRED)
@@ -479,16 +493,16 @@ def generate(entries, svn=0, version=1, keys=None):
     return bytes(pre) + imc
 
 
-def verify_manifest(data, keys=None):
+def verify_manifest(data, keys=None, max_entries=DEFAULT_MAX_ENTRIES):
     """Check all 8 signatures. Vendor-FW and owner sigs verify against the
     configured keys (the runtime checks them against the FW bundle / fuses);
     IMC sigs verify against the pubkeys embedded in the manifest itself,
     mirroring caliptra runtime SET_AUTH_MANIFEST."""
     k = DEFAULT_KEYS if keys is None else keys
-    m = parse_manifest(data)             # raises on structural problems
+    m = parse_manifest(data, max_entries)  # raises on structural problems
     d_vendor = sha384(data[R_VENDOR_SIGNED[0]:R_VENDOR_SIGNED[1]])
     d_owner = sha384(data[O_OWNER_KEYS:O_OWNER_SIGS])
-    d_imc = sha384(data[O_IMC:MANIFEST_SIZE])
+    d_imc = sha384(data[O_IMC:manifest_size(max_entries)])
 
     def block(off):
         return data[off:off + 96], data[off + 96:off + 96 + LMS_SIG_LEN]
@@ -589,8 +603,9 @@ def cmd_generate(a):
     if not entries:
         sys.exit("error: nothing to sign (give --mcu-runtime and/or --soc-image)")
     keys = load_key_dir(a.key_dir) if a.key_dir else None
-    data = generate(entries, svn=a.svn, version=a.version, keys=keys)
-    checks = verify_manifest(data, keys=keys)
+    data = generate(entries, svn=a.svn, version=a.version, keys=keys,
+                    max_entries=a.max_entries)
+    checks = verify_manifest(data, keys=keys, max_entries=a.max_entries)
     if not all(checks.values()):
         bad = [n for n, ok in sorted(checks.items()) if not ok]
         sys.exit(f"error: generated manifest fails self-verification: {bad}\n"
@@ -603,8 +618,8 @@ def cmd_generate(a):
 def cmd_verify(a):
     data = Path(a.file).read_bytes()
     keys = load_key_dir(a.key_dir) if a.key_dir else None
-    m = parse_manifest(data)
-    checks = verify_manifest(data, keys=keys)
+    m = parse_manifest(data, a.max_entries)
+    checks = verify_manifest(data, keys=keys, max_entries=a.max_entries)
     for e in m["entries"]:
         print(f"  fw_id={e['fw_id']} flags={e['flags']:#x} "
               f"load={e['load']:#x} staging={e['staging']:#x} "
@@ -634,6 +649,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    max_entries_arg = dict(
+        type=int, choices=MAX_ENTRIES, default=DEFAULT_MAX_ENTRIES,
+        help="image metadata collection capacity of the Caliptra runtime that "
+             "checks the manifest: 127 before caliptra-sw #3824 (A1), 80 since (A2)")
 
     g = sub.add_parser("generate", help="build and sign a SoC manifest")
     g.add_argument("--mcu-runtime",
@@ -646,12 +665,14 @@ def main(argv=None):
     g.add_argument("--svn", type=lambda x: int(x, 0), default=0)
     g.add_argument("--version", type=lambda x: int(x, 0), default=1)
     g.add_argument("--key-dir", help="directory of <key>.bin overrides")
+    g.add_argument("--max-entries", **max_entries_arg)
     g.add_argument("--out", default="soc_manifest.bin")
     g.set_defaults(func=cmd_generate)
 
     v = sub.add_parser("verify", help="parse a manifest and check all signatures")
     v.add_argument("file")
     v.add_argument("--key-dir")
+    v.add_argument("--max-entries", **max_entries_arg)
     v.set_defaults(func=cmd_verify)
 
     sub.add_parser("selftest", help="key KATs + sign/verify round-trip") \

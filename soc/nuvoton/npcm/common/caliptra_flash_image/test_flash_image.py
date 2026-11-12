@@ -18,20 +18,18 @@ def _slot(image: bytes, offset: int, identifier: int) -> bytes:
 
 
 def _build_bypass(tmp_path, soc_fw: bytes, format: str = "v3") -> tuple[bytes, int]:
-    """Build a bypass image from `soc_fw`; return (raw image, slot offset)."""
+    """Build a bypass image from `soc_fw` alone; return (raw image, slot offset)."""
     soc = tmp_path / "soc.bin"
     soc.write_bytes(soc_fw)
-    mcu = tmp_path / "mcu.bin"
-    mcu.write_bytes(b"\x5a" * 64)
     out = tmp_path / "flash.bin"
-    fi.main(["--soc-fw", str(soc), "--mcu-fw", str(mcu),
+    fi.main(["--soc-fw", str(soc),
              "--layout", str(LAYOUTS / "bypass.json"),
              "--format", format, "--output", str(out)])
     return out.read_bytes(), fi.load_layout(LAYOUTS / "bypass.json")["slot_base_offset"]
 
 
 def _build_caliptra(tmp_path, soc_fw: bytes, mcu_fw: bytes = b"\x5a" * 64,
-              format: str = "v3") -> tuple[bytes, int]:
+              format: str = "v3", manifest_entries: int = 80) -> tuple[bytes, int]:
     """Build a caliptra image; return (raw image, slot offset)."""
     soc = tmp_path / "soc.bin"
     soc.write_bytes(soc_fw)
@@ -41,7 +39,8 @@ def _build_caliptra(tmp_path, soc_fw: bytes, mcu_fw: bytes = b"\x5a" * 64,
     cal.write_bytes(b"\xc1" * 128)
     out = tmp_path / "flash.bin"
     fi.main(["--soc-fw", str(soc), "--mcu-fw", str(mcu), "--caliptra-fw", str(cal),
-             "--layout", str(LAYOUTS / "caliptra.json"), "--format", format, "--output", str(out)])
+             "--layout", str(LAYOUTS / "caliptra.json"), "--format", format,
+             "--manifest-entries", str(manifest_entries), "--output", str(out)])
     return out.read_bytes(), fi.load_layout(LAYOUTS / "caliptra.json")["slot_base_offset"]
 
 
@@ -72,13 +71,28 @@ def test_caliptra_manifest_binds_mcu_runtime_and_signs(tmp_path):
     manifest = _slot(raw, off, fi.SOC_MANIFEST_IDENTIFIER)
 
     # the slot is page-padded, so the manifest is a prefix of it, not all of it
-    assert len(manifest) == len(fi.pad_to_page(bytes(sm.MANIFEST_SIZE)))
+    assert len(manifest) == len(fi.pad_to_page(bytes(sm.manifest_size(80))))
     entries = {e["fw_id"]: e for e in sm.parse_manifest(manifest)["entries"]}
     assert entries[fi.MCU_RT_FW_ID]["digest"] == \
         hashlib.sha384(fi.pad_to_page(b"\x5a" * 64)).digest()
     assert entries[fi.MCU_RT_FW_ID]["staging"] == fi.MCU_RT_STAGING
     assert entries[fi.SOC_FW_FW_ID]["load"] == fi.SOC_FW_LOAD
     assert all(sm.verify_manifest(manifest).values())
+
+
+def test_a1_manifest_size_round_trips_through_verify(tmp_path):
+    """A 127-entry (A1 runtime) image verifies only at 127 entries."""
+    import pytest
+    import soc_manifest as sm
+
+    assert fi.MANIFEST_ENTRIES_ARG["choices"] == sm.MAX_ENTRIES
+    _build_caliptra(tmp_path, b"\xa5" * 16, format="v1", manifest_entries=127)
+    verify = ["verify", str(tmp_path / "flash.bin"),
+              "--layout", str(LAYOUTS / "caliptra.json"), "--manifest-entries"]
+    for entries, code in (("127", 0), ("80", 1)):
+        with pytest.raises(SystemExit) as exc:
+            fi.main(verify + [entries])
+        assert exc.value.code == code
 
 
 def test_caliptra_manifest_digest_matches_padded_mcu_fw(tmp_path):
@@ -100,18 +114,6 @@ def test_caliptra_manifest_digest_matches_padded_mcu_fw(tmp_path):
     assert entries[fi.MCU_RT_FW_ID]["digest"] == hashlib.sha384(packed_mcu).digest()
 
 
-def test_bypass_mcu_build_does_not_generate_a_manifest(tmp_path):
-    """bypass-mcu has no manifest slot and must not pay for LMS signing."""
-    soc, mcu = tmp_path / "soc.bin", tmp_path / "mcu.bin"
-    soc.write_bytes(b"\xa5" * 16)
-    mcu.write_bytes(b"\x5a" * 16)
-    out = tmp_path / "flash.bin"
-    fi.main(["--soc-fw", str(soc), "--mcu-fw", str(mcu), "--format", "v3",
-             "--layout", str(LAYOUTS / "bypass-mcu.json"), "--output", str(out)])
-    idents = [ident for ident, *_ in fi.iter_images(out.read_bytes(), 0x10000)]
-    assert fi.SOC_MANIFEST_IDENTIFIER not in idents
-
-
 def test_layouts_are_chip_neutral():
     """The chip, and with it the container format, comes from the npcm5 build's
     CONFIG_NPCM500_REV_*, so a layout names only its boot flow."""
@@ -128,29 +130,18 @@ def test_layouts_ship_the_npcm_header():
         assert rows["npcm_header"].get("source") == "soc-header", path.name
 
 
-def test_bypass_soc_builds_from_soc_fw_alone(tmp_path):
-    """bypass-soc is the fallback when caliptra-mcu-sw is absent, so it must pack
-    with no MCU firmware and ship only the slots the ROM SoC path reads."""
-    soc = tmp_path / "soc.bin"
-    soc.write_bytes(b"\xa5" * 16)
-    out = tmp_path / "flash.bin"
-    fi.main(["--soc-fw", str(soc), "--format", "v1",
-             "--layout", str(LAYOUTS / "bypass-soc.json"), "--output", str(out)])
-    idents = [ident for ident, *_ in fi.iter_images(out.read_bytes(), 0x10000)]
-    assert idents == [fi.SOC_IMAGES_BASE_IDENTIFIER + i for i in range(2)]
-
-
-def test_v1_packs_on_4_byte_boundaries_and_binds_only_mcu(tmp_path):
-    """v1 is flash_image_tool.py compatible: FLSH header, no page alignment, and a
-    manifest that authorizes just the MCU runtime."""
-    import soc_manifest as sm
+def test_v1_bypass_packs_only_the_soc_path_on_4_byte_boundaries(tmp_path):
+    """v1 is flash_image_tool.py compatible: FLSH header, no page alignment. The A1
+    ROM's bypass SoC path reads only the SoC firmware and its NPCM header, so the
+    image carries nothing from caliptra-mcu-sw: no manifest, MCU or Caliptra fw."""
     raw, off = _build_bypass(tmp_path, b"\xa5" * 5, format="v1")
     assert raw[off:off + 4] == b"FLSH"
+    idents = []
     for ident, ioff, size, *_ in fi.iter_images(raw, off):
         assert size % 4 == 0
+        idents.append(ident)
+    assert idents == [fi.SOC_IMAGES_BASE_IDENTIFIER, fi.SOC_IMAGES_BASE_IDENTIFIER + 1]
     assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == b"\xa5" * 5 + b"\x00" * 3
-    entries = sm.parse_manifest(_slot(raw, off, fi.SOC_MANIFEST_IDENTIFIER))["entries"]
-    assert [e["fw_id"] for e in entries] == [fi.MCU_RT_FW_ID]
 
 
 def test_v1_caliptra_manifest_binds_soc_fw(tmp_path):
@@ -200,7 +191,7 @@ def test_v1_and_v3_round_trip(tmp_path):
         assert raw[off:off + len(magic)] == magic if magic else True
         version, count, *_ = fi.parse_header(raw, off)
         assert version == fi.FORMAT_VERSIONS[fmt]
-        assert count == 4  # manifest, mcu_runtime, soc_fw, npcm_header
+        assert count == 2  # soc_fw, npcm_header
         assert _slot(raw, off, fi.SOC_IMAGES_BASE_IDENTIFIER) == fi.pad_to(b"\xa5" * 8, fi.FORMAT_ALIGN[fmt] or fi.FLASH_PAGE_SIZE)
 
 
@@ -259,7 +250,7 @@ def _corrupt_slot_byte(image: Path, identifier: int, delta: int) -> None:
 def test_verify_accepts_a_good_caliptra_image(tmp_path):
     result = _run_verify(_write_caliptra(tmp_path, b"\xa5" * 16), "caliptra.json")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "manifest vendor_imc_ecc" in result.stdout
+    assert "manifest signatures 8/8" in result.stdout
     assert "manifest digest soc_fw" in result.stdout
     assert "Image is valid!" in result.stdout
 
