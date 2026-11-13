@@ -3062,6 +3062,14 @@ static int npcm_i3c_target_ibi_raise(const struct device *dev, struct i3c_ibi *r
 			 */
 			npcm_i3c_reset_module(dev);
 			npcm_i3c_target_init(dev);
+#ifdef CONFIG_I3C_NPCM_DMA
+			/* The module reset cleared DMACTRL; re-arm RX DMA like target_register() */
+			if (data->target_config != NULL) {
+				npcm_i3c_pdma_stop(dev, true);
+				data->dma_rx_buf_idx = 0;
+				(void)npcm_i3c_target_prearm_rx_dma(dev);
+			}
+#endif
 			set_oper_state(dev, I3C_OP_STATE_IDLE);
 			k_sem_give(&data->target_event_lock_sem);
 			return -ETIMEDOUT;
