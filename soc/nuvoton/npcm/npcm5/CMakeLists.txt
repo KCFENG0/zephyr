@@ -43,7 +43,8 @@ set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/li
 #                           2.1.2+ ROM, page-aligned)
 #   -DMCU_FW=<path>         MCU firmware for a layout with an mcu-fw slot
 #                           (default: the prebuilt runtime under
-#                           mcu-fw/<chip>/<target>/caliptra/); bypass has none
+#                           mcu-fw/a2/caliptra/ or mcu-fw/a1/<target>/caliptra/);
+#                           bypass has none
 #   -DCALIPTRA_FW=<path>    signed Caliptra FMC+RT bundle (caliptra layout;
 #                           default: the prebuilt one under
 #                           caliptra/<chip>/<target>/)
@@ -64,9 +65,17 @@ set(FLASH_IMAGE_DIR  ${SOC_${soc_name_upper}_DIR}/common/caliptra_flash_image)
 set(FLASH_IMAGE_TOOL ${FLASH_IMAGE_DIR}/flash_image.py)
 set(caliptra_images_dir ${WEST_TOPDIR}/modules/caliptra/caliptra-mcu-sw/platforms/nuvoton/npcm500/images)
 
+if(CONFIG_NPCM500_FPGA)
+  set(npcm500_target fpga)
+else()
+  set(npcm500_target evb)
+endif()
+
 # The chip decides the container format its MCU ROM parses and the boot flows it
-# has (A2 boots only through Caliptra). The target decides which prebuilt MCU
-# runtime fits: an npcm500-fpga build fixes the console divisor for the 10 MHz
+# has (A2 boots only through Caliptra). The A2 MCU ROM tells the MCU runtime
+# whether it runs on the FPGA through the handoff table, so one A2 MCU runtime
+# serves both targets. The A1 ROM is frozen and reports nothing, so A1 keeps an
+# npcm500-fpga runtime per target: it fixes the console divisor for the 10 MHz
 # FPGA clock and garbles the MCU log on silicon, and the other way round.
 # Each chip has its own Caliptra runtime, and the SoC manifest must be sized
 # for it: A1's predates caliptra-sw #3824 (127 metadata entries), A2's has it
@@ -76,18 +85,14 @@ if(CONFIG_NPCM500_REV_A2)
   set(chip_format v3)
   set(chip_flows caliptra)
   set(chip_manifest_entries 80)
+  set(mcu_fw_dir ${caliptra_images_dir}/mcu-fw/a2)
 else()
   set(npcm500_chip a1)
   set(chip_format v1)
   set(chip_flows bypass caliptra)
   set(chip_manifest_entries 127)
+  set(mcu_fw_dir ${caliptra_images_dir}/mcu-fw/a1/${npcm500_target})
 endif()
-if(CONFIG_NPCM500_FPGA)
-  set(npcm500_target fpga)
-else()
-  set(npcm500_target evb)
-endif()
-set(mcu_fw_dir ${caliptra_images_dir}/mcu-fw/${npcm500_chip}/${npcm500_target})
 # Per target: the FPGA needs a Caliptra RT built with fpga_realtime (no
 # fixed-address DMA bursts), silicon the regular one.
 set(CALIPTRA_FW_DEFAULT
@@ -142,10 +147,10 @@ if(NOT layout_flow IN_LIST chip_flows)
                       "${npcm500_chip} boots only through: ${chip_flows}")
 endif()
 
-# One MCU runtime per chip and target serves every boot mode: it reads the boot
-# strap at startup the same way the ROM does, so the image does not depend on
-# how the board will boot. Only a layout with an mcu-fw slot packs it: bypass
-# does not, since the A1 ROM's bypass SoC path loads the SoC firmware itself.
+# One MCU runtime serves every boot mode: it reads the boot strap at startup the
+# same way the ROM does, so the image does not depend on how the board will
+# boot. Only a layout with an mcu-fw slot packs it: bypass does not, since the
+# A1 ROM's bypass SoC path loads the SoC firmware itself.
 set(MCU_FW_DEFAULT ${mcu_fw_dir}/caliptra/npcm-mcu-fw.bin)
 
 if(NOT FLASH_FORMAT)
