@@ -147,6 +147,8 @@ struct scfg_reg {
 	volatile uint8_t reserved7[92];
 	/* 0x088: CORST Reset Control */
 	volatile uint32_t CORST_CTL;
+	/* 0x08C: Watchdog Reset Control */
+	volatile uint32_t WDTRST_CTL;
 #endif
 };
 
@@ -184,6 +186,7 @@ struct scfg_reg {
 #define NPCM_CORST_CTL_SIOX2                  25
 #define NPCM_CORST_CTL_SIOX1                  26
 #define NPCM_CORST_CTL_SPER                   28
+#define NPCM_WDTRST_CTL_CM7                   0
 #define NPCM_DEV_CTL3_WP_INT_FL               0
 #define NPCM_DEV_CTL3_WP_GPIO55               1
 #define NPCM_DEV_CTL3_WP_GPIO76               2

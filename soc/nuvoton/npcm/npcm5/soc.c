@@ -57,6 +57,13 @@ void soc_reset_hook(void)
 	 * mask to avoid stale ROM/boot routing surviving into the next reset.
 	 */
 	npcm_route_corst_reset(inst_scfg);
+
+	/*
+	 * Route the TWD watchdog reset to the Cortex-M7 core. WDTRST_CTL powers
+	 * up as 0 (VSB reset only), so set it here instead of in the watchdog
+	 * driver, which is shared with NPCM4 where this register does not exist.
+	 */
+	inst_scfg->WDTRST_CTL |= BIT(NPCM_WDTRST_CTL_CM7);
 }
 #endif
 
