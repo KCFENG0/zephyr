@@ -16,8 +16,10 @@ config WDT_NPCM_WARNING_LEADING_TIME_MS
 	int "Milliseconds before generating watchdog reset"
 	depends on WDT_NPCM
 	default 500
+	range 0 3750
 	help
 	  When a timeout callback is installed, this option defines the window
 	  between the watchdog event (callback) and the SoC reset. The window
 	  is rounded up to the watchdog clock period of the selected timeout
-	  range.
+	  range. The 8-bit watchdog counter limits it to 3750 ms for timeouts
+	  just below 60 sec.

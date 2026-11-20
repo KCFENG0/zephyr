@@ -47,6 +47,13 @@ LOG_MODULE_REGISTER(wdt_npcm, CONFIG_WDT_LOG_LEVEL);
 #define NPCM_WDT_MAX_WND_TIME_MS 250000000UL
 
 /*
+ * Maximum timeout with a callback. TWDT0 is 16 bits, so with the largest
+ * T0 prescaler the T0OUT event occurs at most every
+ * 65536 * 1024 / 32768 = 2048 sec.
+ */
+#define NPCM_WDT_MAX_CB_TIME_MS 2048000UL
+
+/*
  * Minimum time between touching and stopping the watchdog. The stop
  * sequence is not accepted right after the watchdog is configured or fed.
  */
@@ -208,6 +215,10 @@ static int wdt_npcm_install_timeout(const struct device *dev, const struct wdt_t
 	}
 
 	if (cfg->window.max > NPCM_WDT_MAX_WND_TIME_MS || cfg->window.max == 0) {
+		return -EINVAL;
+	}
+
+	if (cfg->callback != NULL && cfg->window.max > NPCM_WDT_MAX_CB_TIME_MS) {
 		return -EINVAL;
 	}
 
