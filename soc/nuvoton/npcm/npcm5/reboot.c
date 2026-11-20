@@ -46,8 +46,11 @@ static inline void npcm_write_reset_route(volatile uint32_t *reg,
 	*reg = (*reg & ~NPCM_RESET_ROUTE_MASK) | (route & NPCM_RESET_ROUTE_MASK);
 }
 
-/* TWCFG bit 6 (WDCT0I_SEL) — required for the watchdog reset to propagate. */
-#define NPCM_TWCFG_WDCT0I_SEL BIT(6)
+/*
+ * TWCFG bit 6 (reserved, reset value 1) selects the watchdog warm reset
+ * mode. It must be kept 1, otherwise the watchdog does not reset the SoC.
+ */
+#define NPCM5_TWCFG_WDT_WARM_RST BIT(6)
 
 /*
  * CR_GLUE scratchpad register 1 (SPAD1). Survives the watchdog/core reset
@@ -75,11 +78,11 @@ FUNC_NORETURN void npcm_soc_reset(void)
 
 	const bool wd_running = (twd->T0CSR & BIT(NPCM_T0CSR_WD_RUN)) != 0;
 
-	/* TWCFG = 0x70: WDCT0I_SEL (reset propagation) | WDSDME (service
+	/* TWCFG = 0x70: WDT_WARM_RST (warm reset mode) | WDSDME (service
 	 * only via WDSDM=0x5C, so the watchdog cannot be accidentally fed)
 	 * | WDCT0I (T0IN as watchdog prescaler clock). No lock bits.
 	 */
-	twd->TWCFG = NPCM_TWCFG_WDCT0I_SEL | BIT(NPCM_TWCFG_WDSDME) |
+	twd->TWCFG = NPCM5_TWCFG_WDT_WARM_RST | BIT(NPCM_TWCFG_WDSDME) |
 		     BIT(NPCM_TWCFG_WDCT0I);
 
 	/* T0CSR = 0x90: TESDIS disables early-touch, so loading WDCNT below
