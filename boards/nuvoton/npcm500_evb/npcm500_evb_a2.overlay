@@ -12,3 +12,27 @@
 &caliptra_mci_mbox1 {
 	interrupts = <19 3>;
 };
+
+/*
+ * A2 moves the FIU0 flash windows: shared 0xB800_0000, private 0xC000_0000,
+ * and adds the backup flash at 0xC800_0000 with BACK_CS on GPIO21.
+ */
+&ext_flash_shd {
+	mapped-addr = <0xB8000000>;
+};
+
+&ext_flash_back {
+	mapped-addr = <0xC0000000>;
+};
+
+&ext_flash_pvt {
+	status = "okay";
+	mapped-addr = <0xC8000000>;
+	pinctrl-0 = <&fiu0_back_cs_io0_io1_clk_gpio21_45_46_47
+		     &fiu0_shd_quad_io2_io3_clk_gpio55_56>;
+};
+
+/* GPIO21 is BACK_CS, so I3C1 (I3C1_SCL on GPIO21) is not available */
+&i3c1 {
+	status = "disabled";
+};
